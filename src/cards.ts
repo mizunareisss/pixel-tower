@@ -847,7 +847,7 @@ const IT_ELIXIR: CardDef = {
 // Epic 武器 1：王者之剑 — 顶级输出，无视护甲，全攻击 +30%
 const EXCALIBUR: CardDef = {
   id: "excalibur", name: "王者之剑", category: "equipment",
-  desc: "武器：基础 10，无视全部护甲，攻击 +30%。",
+  desc: "基础 10，无视全部护甲，攻击 +30%。",
   equipKind: "weapon",
   equipSuit: "heart",
   baseDmg: 10,
@@ -867,7 +867,7 @@ const EXCALIBUR: CardDef = {
 // Epic 武器 2：天命之刃 — 把濒死敌人秒杀的门槛抬到 30%
 const DIVINE_BLADE: CardDef = {
   id: "divine_blade", name: "天命之刃", category: "equipment",
-  desc: "武器：基础 8，敌人 HP ≤ 30% 时直接斩杀。",
+  desc: "基础 8，敌人 HP ≤ 30% 时直接斩杀。",
   equipKind: "weapon",
   equipSuit: "spade",
   baseDmg: 8,
@@ -907,7 +907,7 @@ const DIVINE_BLADE: CardDef = {
 // Epic 防具：不灭之心 — 整局只能复活 1 次（无论叠多少层都是 1 次）
 const UNDYING_HEART: CardDef = {
   id: "undying_heart", name: "不灭之心", category: "equipment",
-  desc: "防具：受击 -2。HP 归 0 时复活到 50%（整局 1 次）。",
+  desc: "受击 -2。HP 归 0 时复活到 50%（整局 1 次）。",
   equipKind: "armor",
   equipSuit: "heart",
   baseReduce: 2,
@@ -926,7 +926,7 @@ const UNDYING_HEART: CardDef = {
 // Epic 群攻技能：众神之怒 — 全敌当前 HP 50% 直伤
 const SK_WRATH: CardDef = {
   id: "sk_wrath", name: "众神之怒", category: "skill", target: "all",
-  desc: "群攻：所有存活敌人受到当前 HP 50% 直伤。",
+  desc: "所有存活敌人受到当前 HP 50% 直伤。",
   onPlay: (c) => {
     for (const e of c.enemies) {
       if (!e.alive) continue;
@@ -940,7 +940,7 @@ const SK_WRATH: CardDef = {
 // Epic 道具：复读机 — 本场战斗每出 1 张非攻击牌复制 1 份到手牌
 const IT_ECHO: CardDef = {
   id: "it_echo", name: "复读机", category: "item", target: "self",
-  desc: "本场战斗：每出 1 张非攻击牌，复制一份回手牌。",
+  desc: "每出 1 张非攻击牌，复制一份回手牌。",
   onPlay: (c) => {
     addStatus(c.player, "echo", "复读", 1, -1);
     c.log("复读机：时间在打嗝。", "player");
