@@ -220,6 +220,14 @@ export function drawCards(player: PlayerState, n: number, log: (m: string, k?: L
       log(`手牌已满，${CARD_DB[c.defId].name} 进入弃牌堆。`, "system");
       continue;
     }
+    // 持咒本场已用过 → 摸到的同名副本自动跳过（弃到弃牌堆继续摸下一张，本次不计 drawn）
+    const top = player.deck[player.deck.length - 1];
+    if (top?.defId === "sk_chant" && player.statuses.find(s => s.id === "chanted_used")) {
+      const c = player.deck.pop()!;
+      player.discard.push(c);
+      i--;  // 不算这次摸牌，再摸一次
+      continue;
+    }
     player.hand.push(player.deck.pop()!);
     drawn++;
   }
@@ -426,10 +434,6 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     if (aEff.postAttack) dmg = aEff.postAttack(ctx, dmg);
   }
 
-  // rend：永久增加目标受到的伤害
-  const rend = ctx.target.statuses.find(s => s.id === "rend");
-  if (rend) dmg += rend.stacks;
-
   // 敌人易伤：受击 ×1.5
   if (ctx.target.statuses.find(s => s.id === "vulnerable")) {
     dmg = dmg * 1.5;
@@ -540,6 +544,11 @@ export function playCard(state: BattleState, cardUid: string, log: (m: string, k
   // 史诗卡使用次数耗尽 → 不能打出（提示玩家）
   if (isEpicCard(card) && (card.usesRemaining ?? 0) <= 0) {
     log(`${def.name} 本场已耗尽（史诗每场限 ${EPIC_USES_PER_BATTLE} 次），下场再来。`, "system");
+    return false;
+  }
+  // 持咒本场限 1 次
+  if (card.defId === "sk_chant" && state.player.statuses.find(s => s.id === "chanted_used")) {
+    log(`${def.name} 本场已经触发过，不能再用。`, "system");
     return false;
   }
 
@@ -1169,7 +1178,15 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
   for (const enemy of state.enemies) {
     enemy.statuses = enemy.statuses
       .map(s => s.duration > 0 ? { ...s, duration: s.duration - 1 } : s)
-      .filter(s => s.duration !== 0);
+      .filter(s => {
+        // 共鸣咒到期：恢复敌人原花色
+        if (s.id === "attuned" && s.duration === 0 && enemy.originalSuit !== undefined) {
+          enemy.suit = enemy.originalSuit;
+          enemy.originalSuit = undefined;
+          log(`${enemy.name} 共鸣消散，花色恢复为 ${SUIT_SYMBOLS[enemy.suit]}。`, "system");
+        }
+        return s.duration !== 0;
+      });
   }
   state.player.statuses = state.player.statuses
     .map(s => s.duration > 0 ? { ...s, duration: s.duration - 1 } : s)

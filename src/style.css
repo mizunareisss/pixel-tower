@@ -3008,6 +3008,24 @@ body.is-touch button:hover:not(:disabled) {
   font-weight: 900;
   pointer-events: none;
 }
+.hand-card.chant-spent {
+  opacity: 0.40;
+  filter: grayscale(0.7);
+  cursor: not-allowed;
+}
+.hand-card.chant-spent::after {
+  content: "本场已持咒";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.55);
+  color: var(--gray);
+  font-size: 11px;
+  font-weight: 900;
+  pointer-events: none;
+}
 
 .epic-rep-modal {
   width: min(720px, 100%);
@@ -3433,6 +3451,63 @@ body.is-touch button:hover:not(:disabled) {
 .loadout-frag-pill.loadout-frag-zero b {
   color: var(--gray-dim);
 }
+
+/* 商店混搭支付 modal */
+.mxpay-modal {
+  width: min(440px, 100%);
+}
+.mxpay-tip {
+  font-size: 12px;
+  color: var(--gray);
+  margin: 4px 0 10px;
+}
+.mxpay-tip b { color: var(--yellow); }
+.mxpay-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0;
+}
+.mxpay-row {
+  display: grid;
+  grid-template-columns: 22px 70px 1fr 28px 32px 28px;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.04);
+  border-left: 2px solid var(--border);
+  font-size: 12px;
+}
+.mxpay-row.rare {
+  border-left-color: rgba(255,140,40,0.50);
+}
+.mxpay-icon { font-size: 14px; text-align: center; }
+.mxpay-name { color: var(--white); }
+.mxpay-have { color: var(--gray); font-size: 11px; text-align: right; }
+.mxpay-cur { text-align: center; font-weight: 900; color: var(--yellow); }
+.mxpay-plus, .mxpay-minus {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--white);
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  clip-path: none !important;
+  padding: 0 !important;
+  height: 24px;
+}
+.mxpay-plus:disabled, .mxpay-minus:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.mxpay-total {
+  text-align: center;
+  font-size: 13px;
+  margin: 8px 0 4px;
+  color: var(--white);
+}
+.mxpay-total .mxpay-ok { color: var(--green); }
+.mxpay-total .mxpay-mismatch { color: var(--red); }
 
 /* 图鉴 · 附魔分组 */
 .codex-enchant-branch {

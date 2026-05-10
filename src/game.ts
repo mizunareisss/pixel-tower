@@ -50,7 +50,7 @@ import {
 // makeEnemyGroupsForFloor 现在被 map.ts 调用
 import {
   generateMerchantStock,
-  tryPurchaseMerchantCard,
+  tryPurchaseMerchantCardMixed,
   tradeFragments,
   GAMBLER_OPTIONS,
   SHRINE_OPTIONS,
@@ -94,6 +94,7 @@ export function newGame(): GameState {
     fragments: { beast: 0, humanoid: 0, undead: 0, giant: 0, dark: 0 },
     revivesUsed: 0,
     suitPlayedTotal: { spade: 0, diamond: 0, heart: 0, club: 0 },
+    battlesSinceEquipReward: 0,
   };
   // 起始装备：1 把短剑放在常驻区
   player.weapons.push(makeInstance("short_sword", undefined, 0));
@@ -258,20 +259,29 @@ export function gameSuitPicked(state: GameState, suit: Suit) {
     else p.statuses.push({ id, name, stacks: 1, duration: 1 });
     log(`染色术：本回合攻击视为 ${SUIT_SYMBOLS[suit]}。`, "player");
   } else if (action === "chant") {
-    // 持咒：整场战斗持续，duration -1
+    // 持咒：整场战斗持续，每场限 1 次
     const id = `chanted_${suit}`;
     const name = `持咒${SUIT_SYMBOLS[suit]}`;
     const p = state.battle.player;
     // 如果已有不同花色的持咒，先清掉（避免多重）
     p.statuses = p.statuses.filter(s => !s.id.startsWith("chanted_"));
     p.statuses.push({ id, name, stacks: 1, duration: -1 });
-    log(`持咒：整场战斗攻击视为 ${SUIT_SYMBOLS[suit]}。`, "player");
+    // 标记本场已持咒：drawCards 跳过同名副本 + playCard 拒绝再触发
+    p.statuses.push({ id: "chanted_used", name: "本场已持咒", stacks: 1, duration: -1 });
+    log(`持咒：整场战斗攻击视为 ${SUIT_SYMBOLS[suit]}（本场仅此一次）。`, "player");
   } else if (action === "resonance") {
     const target = state.battle.enemies[state.battle.targetIndex]
       ?? state.battle.enemies.find(e => e.alive);
     if (target) {
+      // 第一次共鸣：记原色；后续 reapply：刷新持续时间
+      if (target.originalSuit === undefined) target.originalSuit = target.suit;
       target.suit = suit;
-      log(`共鸣咒：${target.name} 花色变为 ${SUIT_SYMBOLS[suit]}。`, "player");
+      // 加 status，duration 4，stacks 编码花色 index 用于 UI 显示
+      const suitIdx = ["spade", "diamond", "heart", "club"].indexOf(suit) + 1;  // 1-4
+      const ex = target.statuses.find(s => s.id === "attuned");
+      if (ex) { ex.duration = 4; ex.stacks = suitIdx; }
+      else target.statuses.push({ id: "attuned", name: "已共鸣", stacks: suitIdx, duration: 4 });
+      log(`共鸣咒：${target.name} 花色变为 ${SUIT_SYMBOLS[suit]}（4 回合后回归）。`, "player");
     }
   }
 
@@ -341,21 +351,26 @@ function onBattleWon(state: GameState) {
       state.pendingFloorClear = true;
     }
   }
-  state.phase = "battle_victory";
-  pushLog(state, "点击「领取战利品」继续。", "system");
+  // 直接进入选牌界面（取消"领取战利品"中转按钮）
+  enterRewardCard(state);
 }
 
-export function continueFromVictory(state: GameState) {
-  if (state.phase !== "battle_victory") return;
+// 内部：roll 奖励候选 + 进 reward_card 阶段
+function enterRewardCard(state: GameState) {
   state.phase = "reward_card";
-  // 第 3 关后开放群攻技能池
   const pool = state.floor >= 3
     ? [...REWARD_CARD_POOL_BASE, ...REWARD_CARD_POOL_AOE]
     : REWARD_CARD_POOL_BASE;
-  state.choices = rollRewardChoices(pool, REWARD_CHOICE_COUNT, state.floor);
+  // 玩家牌库已有的 defId（用于花色操作牌去重）
+  const owned = new Set<string>();
+  for (const c of state.player.deck) owned.add(c.defId);
+  for (const c of state.player.hand) owned.add(c.defId);
+  for (const c of state.player.discard) owned.add(c.defId);
+  // 装备保底：连续 3 场无装备奖励 → 下场强制
+  const forceEquip = (state.player.battlesSinceEquipReward ?? 0) >= 3;
+  state.choices = rollRewardChoices(pool, REWARD_CHOICE_COUNT, state.floor, owned, forceEquip);
 
-  // Boss 战胜利 epic 保底：仅第 6 关及以后的 Boss 触发（前 3 关 Boss 按正常概率走）
-  // 判定刚结束的战斗是否为本关末场（pendingFloorClear 为 true 时表示）
+  // Boss 战胜利 epic 保底：仅第 6 关及以后的 Boss 触发
   if (state.pendingFloorClear && state.floor >= 6) {
     const lastEnemies = state.battleGroups[state.battleGroups.length - 1];
     const wasBoss = lastEnemies?.some(e => e.tier === "boss");
@@ -370,7 +385,12 @@ export function continueFromVictory(state: GameState) {
     }
   }
 
-  pushLog(state, `战利品：从 3 张牌中选 1 张加入牌库。`, "system");
+  pushLog(state, `战利品：从 ${REWARD_CHOICE_COUNT} 张牌中选 1 张加入牌库。`, "system");
+}
+
+// 兼容旧入口（保留 export 防 main.ts 直接调用，但 onBattleWon 已不再走它）
+export function continueFromVictory(state: GameState) {
+  if (state.phase === "battle_victory") enterRewardCard(state);
 }
 
 export function pickRewardCard(state: GameState, uid: string) {
@@ -381,12 +401,19 @@ export function pickRewardCard(state: GameState, uid: string) {
   picked.acquiredAtFloor = state.floor;
   state.player.deck.push(picked);
   pushLog(state, `获得：${CARD_DB[picked.defId].name}（已进入牌库）。`, "player");
+  // 装备保底计数：拿到装备 → 重置；否则 +1
+  if (CARD_DB[picked.defId]?.category === "equipment") {
+    state.player.battlesSinceEquipReward = 0;
+  } else {
+    state.player.battlesSinceEquipReward = (state.player.battlesSinceEquipReward ?? 0) + 1;
+  }
   goAfterCardReward(state);
 }
 
 export function skipRewardCard(state: GameState) {
   if (state.phase !== "reward_card") return;
   pushLog(state, "跳过本轮战利品。");
+  state.player.battlesSinceEquipReward = (state.player.battlesSinceEquipReward ?? 0) + 1;
   goAfterCardReward(state);
 }
 
@@ -542,19 +569,24 @@ export function skipFloorEvent(state: GameState) {
   goAfterFloorEvent(state);
 }
 
-// 商人购买
-export function merchantBuyCard(state: GameState, cardUid: string, payRace: EnemyRace): boolean {
+// 商人购买（混搭支付：5 种族任意搭配，总和 = 价格）
+export function merchantBuyCardMixed(
+  state: GameState,
+  cardUid: string,
+  spend: Partial<Record<EnemyRace, number>>,
+): boolean {
   if (state.phase !== "floor_event" || state.activeEventId !== "merchant") return false;
   const card = state.merchantStock?.find(c => c.uid === cardUid);
   if (!card) return false;
-  const result = tryPurchaseMerchantCard(state, card, payRace);
+  const result = tryPurchaseMerchantCardMixed(state, card, spend);
   if (!result.ok) {
     pushLog(state, `购买失败：${result.reason}`, "system");
     return false;
   }
-  // 移出库存（一张卡只能买一次）
   state.merchantStock = state.merchantStock!.filter(c => c.uid !== cardUid);
-  pushLog(state, `购入 ${CARD_DB[card.defId].name}，消耗 ${payRace} 碎片。`, "player");
+  const summary = Object.entries(spend).filter(([, n]) => (n ?? 0) > 0)
+    .map(([r, n]) => `${r} ×${n}`).join(" + ");
+  pushLog(state, `购入 ${CARD_DB[card.defId].name}（${summary}）。`, "player");
   return true;
 }
 

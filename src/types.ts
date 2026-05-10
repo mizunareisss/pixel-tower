@@ -131,6 +131,7 @@ export const STATUS_META: Record<string, StatusMeta> = {
   chanted_diamond: { name: "持咒♦", desc: "本场战斗内攻击牌视为方块。", kind: "buff" },
   chanted_heart:   { name: "持咒♥", desc: "本场战斗内攻击牌视为红心。", kind: "buff" },
   chanted_club:    { name: "持咒♣", desc: "本场战斗内攻击牌视为梅花。", kind: "buff" },
+  chanted_used:    { name: "本场已持咒", desc: "本场战斗内已经触发过持咒，所有持咒副本灰显不可用，下场战斗自动恢复。", kind: "neutral" },
 
   // 花色专精大招触发的临时 buff
   dodge_full_round: { name: "影舞步", desc: "本回合敌人攻击全部闪避。", kind: "buff" },
@@ -138,10 +139,11 @@ export const STATUS_META: Record<string, StatusMeta> = {
 
   // 敌人 debuff（玩家身上也可能有）
   burn:       { name: "燃烧", desc: "每回合 -stacks HP，持续 duration 回合（纯扣血）。", kind: "debuff" },
-  rend:       { name: "撕裂", desc: "受到的伤害永久 +stacks。", kind: "debuff" },
+  rend:       { name: "撕裂", desc: "（已废弃）现在撕裂直接扣 armor。", kind: "debuff" },
   frozen:     { name: "冰冻", desc: "下回合行动伤害减半。", kind: "debuff" },
   silenced:   { name: "沉默", desc: "下回合无法 buff。", kind: "debuff" },
   bleed:      { name: "出血", desc: "每回合扣当前 HP × stacks × 5%。施加在玩家身上时副作用：闪避率 -stacks × 5%（cap -50%）。", kind: "debuff" },
+  attuned:    { name: "已共鸣", desc: "花色被共鸣咒改变，剩余 duration 回合后回归原色。", kind: "neutral" },
 
   // 持续/延时类玩家 buff
   frenzy:        { name: "激奋", desc: "每打出 1 张攻击牌后 stacks +1，下次攻击 +stacks × 5 伤。", kind: "buff" },
@@ -412,6 +414,9 @@ export interface PlayerState {
 
   // 花色专精：累积打过的同花色攻击牌总数（跨战斗保留；染色/持咒后按视为色累积；cap 30/色）
   suitPlayedTotal?: Record<Suit, number>;
+
+  // 装备保底：连续未在 reward_card 拿到装备的场次，达 3 次下场必出装备
+  battlesSinceEquipReward?: number;
 }
 
 // ── 敌人 ──────────────────────────────────────────────────
@@ -441,6 +446,8 @@ export interface EnemyState {
   weaponMult?: number;     // 武器倍率（第 4 关起显示）
   tier?: "normal" | "elite" | "boss";  // 战斗强度档：精英/Boss 在 UI 上特殊呈现
   eliteAbility?: string;    // 精英特能名称（显示用）
+  // 共鸣咒：保存原始花色，4 回合后回归
+  originalSuit?: Suit;
 }
 
 // ── 战斗状态 ──────────────────────────────────────────────

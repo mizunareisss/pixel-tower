@@ -67,19 +67,31 @@ export function generateMerchantStock(floor: number): CardInstance[] {
   return rollRewardChoices(pool, 5, floor);
 }
 
-// 玩家购买：消耗指定种族的灵魂碎片
-export function tryPurchaseMerchantCard(
+// 玩家购买（混搭支付）：spend = 5 种族任意搭配，总和必须等于价格
+export function tryPurchaseMerchantCardMixed(
   state: GameState,
   card: CardInstance,
-  payRace: EnemyRace,
+  spend: Partial<Record<EnemyRace, number>>,
 ): { ok: boolean; reason?: string } {
   const def = CARD_DB[card.defId];
   const price = MERCHANT_PRICES[(def.rarity ?? "common") as CardRarity];
-  const have = state.player.fragments[payRace] ?? 0;
-  if (have < price) {
-    return { ok: false, reason: `${FRAGMENT_NAMES[payRace]} 库存 ${have}，需要 ${price}` };
+  let total = 0;
+  for (const r in spend) total += spend[r as EnemyRace] ?? 0;
+  if (total !== price) {
+    return { ok: false, reason: `需要总共 ${price} 个碎片（当前选 ${total}）` };
   }
-  state.player.fragments[payRace] = have - price;
+  // 校验库存
+  for (const r in spend) {
+    const need = spend[r as EnemyRace] ?? 0;
+    if ((state.player.fragments[r as EnemyRace] ?? 0) < need) {
+      return { ok: false, reason: `${FRAGMENT_NAMES[r as EnemyRace]} 库存不足` };
+    }
+  }
+  // 扣
+  for (const r in spend) {
+    const need = spend[r as EnemyRace] ?? 0;
+    state.player.fragments[r as EnemyRace] -= need;
+  }
   card.acquiredAtFloor = state.floor;
   state.player.deck.push(card);
   return { ok: true };

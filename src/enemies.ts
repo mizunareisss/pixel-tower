@@ -182,15 +182,15 @@ function pickRaceWeighted(whitelist: EnemyRace[], tier: "normal" | "elite" | "bo
 // 数值公式
 // ─────────────────────────────────────────────────────────
 
-// 楼层 1 标准 HP；每关 +25%
+// 楼层 1 标准 HP；每关 +18%（之前 +25% 后期数值爆炸）
 function baseHpForFloor(floor: number): number {
-  return 22 * Math.pow(1.25, floor - 1);
+  return 22 * Math.pow(1.18, floor - 1);
 }
-// 攻击数值随楼层 +18% 每关
+// 攻击数值随楼层 +13% 每关（之前 +18% 第 9 关玩家无解）
 function scaleAttack(baseValue: number, floor: number, tier: "normal" | "elite" | "boss"): number {
-  let v = baseValue * (1 + (floor - 1) * 0.18);
-  if (tier === "elite") v *= 1.20;
-  if (tier === "boss")  v *= 1.45;
+  let v = baseValue * (1 + (floor - 1) * 0.13);
+  if (tier === "elite") v *= 1.15;  // 之前 ×1.20
+  if (tier === "boss")  v *= 1.30;  // 之前 ×1.45
   return Math.max(1, Math.round(v));
 }
 // 楼层防具：第 5 关起 +1，每关 +1
@@ -203,10 +203,10 @@ function armorForFloor(floor: number, tier: "normal" | "elite" | "boss", race: E
   if (tier === "boss")  armor += 2;
   return armor;
 }
-// 武器倍率（第 4 关起敌人"装备武器"）
-function weaponMultForFloor(floor: number): number | undefined {
-  if (floor < 4) return undefined;
-  return 1.0 + (floor - 4) * 0.10 + (floor >= 6 ? 0.20 : 0);
+// 武器倍率：已删除（之前在 scaleAttack 之上额外乘 1.0~1.6+ 的系数，让中后期数值爆炸）
+// 现在敌人攻击纯粹由 scaleAttack 控制
+function weaponMultForFloor(_floor: number): number | undefined {
+  return undefined;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -269,8 +269,8 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
 
   // HP
   let hp = baseHpForFloor(opts.floor) * RACE_HP_MULT[race];
-  if (tier === "elite") hp *= 1.6;
-  if (tier === "boss")  hp *= 3.2;
+  if (tier === "elite") hp *= 1.40;  // 之前 ×1.6
+  if (tier === "boss")  hp *= 2.60;  // 之前 ×3.2
   if (opts.groupSize && opts.groupSize > 1) {
     hp = hp / (1 + (opts.groupSize - 1) * 0.5);
   }
