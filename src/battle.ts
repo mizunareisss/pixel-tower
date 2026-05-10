@@ -541,17 +541,16 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     state.player.vita -= dmg;
     log(`你受到 ${dmg} 点伤害。`, "enemy");
 
-    // 不灭之心：HP 即将归 0 时复活到 50% maxHP（整局触发次数 = 装备叠加层数）
-    if (state.player.vita <= 0 && state.player.armors[0]?.defId === "undying_heart") {
-      const used = state.player.statuses.find(s => s.id === "undying_used");
-      const allowed = state.player.armors.length;
-      const usedCount = used?.stacks ?? 0;
-      if (usedCount < allowed) {
-        state.player.vita = Math.round(state.player.vitaMax * 0.5);
-        if (used) used.stacks += 1;
-        else state.player.statuses.push({ id: "undying_used", name: "不灭已用", stacks: 1, duration: -1 });
-        log(`★ 不灭之心：复活到 ${state.player.vita} HP（剩 ${allowed - usedCount - 1} 次）。`, "win");
-      }
+    // 不灭之心：HP 即将归 0 时复活，整局仅 1 次（用 player.revivesUsed 持久化）
+    // 叠加层数决定复活后的 HP 比例：×1=50%, ×2=65%, ×3=80%, ×4=100%
+    if (state.player.vita <= 0
+        && state.player.armors[0]?.defId === "undying_heart"
+        && (state.player.revivesUsed ?? 0) < 1) {
+      const stacks = Math.min(state.player.armors.length, 4);
+      const ratio = [0.50, 0.65, 0.80, 1.00][stacks - 1];
+      state.player.vita = Math.round(state.player.vitaMax * ratio);
+      state.player.revivesUsed = (state.player.revivesUsed ?? 0) + 1;
+      log(`★ 不灭之心：整局唯一一次复活，恢复到 ${state.player.vita} HP（${Math.round(ratio * 100)}%）。`, "win");
     }
 
     // 反击姿态：反弹 50%

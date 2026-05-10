@@ -268,6 +268,9 @@ export interface PlayerState {
 
   // 武器槽附魔（绑定武器槽，换武器时保留）
   weaponEnchant?: EnchantId;
+
+  // 整局 1 次的复活机制（不灭之心）已使用次数；不在 statuses 里因为状态会战斗间清空
+  revivesUsed?: number;
 }
 
 // ── 敌人 ──────────────────────────────────────────────────

@@ -75,6 +75,7 @@ export function newGame(): GameState {
     statuses: [],
     turnsElapsed: 0,
     fragments: { beast: 0, humanoid: 0, undead: 0, giant: 0, dark: 0 },
+    revivesUsed: 0,
   };
   // 起始装备：1 把短剑放在常驻区
   player.weapons.push(makeInstance("short_sword", undefined, 0));

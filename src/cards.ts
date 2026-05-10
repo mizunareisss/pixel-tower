@@ -833,7 +833,7 @@ const IT_ELIXIR: CardDef = {
 // Epic 武器 1：王者之剑 — 顶级输出，无视护甲，全攻击 +30%
 const EXCALIBUR: CardDef = {
   id: "excalibur", name: "王者之剑", category: "equipment",
-  desc: "装备：基础伤害 10，无视全部护甲，所有攻击牌伤害 +30%。",
+  desc: "装备·武器（持续整局，最多叠 4）：基础伤害 10，无视全部护甲，所有攻击牌伤害 +30%。",
   equipKind: "weapon",
   equipSuit: "heart",
   baseDmg: 10,
@@ -853,7 +853,7 @@ const EXCALIBUR: CardDef = {
 // Epic 武器 2：天命之刃 — 把濒死敌人秒杀的门槛抬到 30%
 const DIVINE_BLADE: CardDef = {
   id: "divine_blade", name: "天命之刃", category: "equipment",
-  desc: "装备：基础伤害 8，命中后若敌人 HP ≤ 30% 直接斩杀。",
+  desc: "装备·武器（持续整局，最多叠 4）：基础伤害 8，命中后若敌人 HP ≤ 30% 直接斩杀。",
   equipKind: "weapon",
   equipSuit: "spade",
   baseDmg: 8,
@@ -890,21 +890,21 @@ const DIVINE_BLADE: CardDef = {
   ],
 };
 
-// Epic 防具：不灭之心 — HP 归 0 时复活，整局 1 次
+// Epic 防具：不灭之心 — 整局只能复活 1 次（无论叠多少层都是 1 次）
 const UNDYING_HEART: CardDef = {
   id: "undying_heart", name: "不灭之心", category: "equipment",
-  desc: "装备：受击 -2。HP 即将归 0 时复活到 50%（整局 1 次）。叠加增加触发次数。",
+  desc: "装备·防具（持续整局，整局仅触发 1 次）：受击 -2。HP 即将归 0 时复活到 50%。叠加提升复活后的 HP 比例。",
   equipKind: "armor",
   equipSuit: "heart",
   baseReduce: 2,
   equipEffects: [
-    { desc: "受击 -2 + 整局 1 次复活。", stat: "-2 受击 复活×1",
+    { desc: "受击 -2，整局 1 次复活到 50% HP。", stat: "-2 受击 复活50%",
       onTakeDamage: (_c, d) => Math.max(0, d - 2) },
-    { desc: "叠加：复活 ×2。", stat: "-2 受击 复活×2",
+    { desc: "叠加：复活到 65% HP。", stat: "-2 受击 复活65%",
       onTakeDamage: (_c, d) => Math.max(0, d - 2) },
-    { desc: "叠加：复活 ×3。", stat: "-2 受击 复活×3",
+    { desc: "叠加：复活到 80% HP。", stat: "-2 受击 复活80%",
       onTakeDamage: (_c, d) => Math.max(0, d - 2) },
-    { desc: "叠加：复活 ×4。", stat: "-2 受击 复活×4",
+    { desc: "叠加：复活到 100% HP。", stat: "-2 受击 复活100%",
       onTakeDamage: (_c, d) => Math.max(0, d - 2) },
   ],
 };
@@ -912,7 +912,7 @@ const UNDYING_HEART: CardDef = {
 // Epic 群攻技能：众神之怒 — 全敌当前 HP 50% 直伤
 const SK_WRATH: CardDef = {
   id: "sk_wrath", name: "众神之怒", category: "skill", target: "all",
-  desc: "对所有存活敌人造成其当前 HP 的 50% 直接伤害。",
+  desc: "技能·群攻（一次性·打出后入弃牌堆）：对所有存活敌人造成其当前 HP 的 50% 直接伤害。",
   onPlay: (c) => {
     for (const e of c.enemies) {
       if (!e.alive) continue;
@@ -926,7 +926,7 @@ const SK_WRATH: CardDef = {
 // Epic 道具：复读机 — 本场战斗每出 1 张非攻击牌复制 1 份到手牌
 const IT_ECHO: CardDef = {
   id: "it_echo", name: "复读机", category: "item", target: "self",
-  desc: "本场战斗内：每打出 1 张非攻击牌后立即复制一份回手牌。",
+  desc: "道具（一次性激活·持续到本场战斗结束）：每打出 1 张非攻击牌后立即复制一份回手牌。",
   onPlay: (c) => {
     addStatus(c.player, "echo", "复读", 1, -1);
     c.log("复读机：时间在打嗝。", "player");

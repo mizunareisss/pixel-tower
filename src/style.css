@@ -331,7 +331,7 @@ section {
   font-weight: 700;
   clip-path: none;
 }
-#perma-toggle-btn:hover { border-color: var(--yellow); color: var(--yellow); transform: none; }
+/* perma-toggle-btn hover at line 1682 inside @media (hover: hover) */
 
 /* ═══════════════════════════════════════
    HAMBURGER MENU
@@ -350,7 +350,7 @@ section {
   line-height: 1.4;
 }
 #hamburger-btn { font-size: 16px; }
-#log-btn:hover, #hamburger-btn:hover { background: rgba(255,255,255,0.12); transform: none; }
+/* hover at line 1683 inside @media (hover: hover) */
 
 #hamburger-backdrop {
   position: fixed;
@@ -389,7 +389,7 @@ section {
   cursor: pointer;
 }
 .hmenu-item:last-child { border-bottom: none; }
-.hmenu-item:hover { background: rgba(255,255,255,0.06); transform: none; }
+/* hmenu-item:hover at line 1684 inside @media (hover: hover) */
 .hmenu-item:active { background: rgba(255,255,255,0.12); transform: none; }
 .hmenu-item.danger { color: var(--red); }
 
@@ -424,7 +424,7 @@ button {
   transition: background 0.1s, transform 0.1s;
   clip-path: polygon(0 0, 100% 0, 96% 100%, 0 100%);
 }
-button:hover:not(:disabled) { background: var(--red-dark); transform: translateX(-1px); }
+/* button:hover at line 1681 inside @media (hover: hover) */
 button:active:not(:disabled) { transform: scale(0.97); }
 button:disabled { background: var(--gray-dim); cursor: not-allowed; clip-path: none; }
 
@@ -451,12 +451,7 @@ button:disabled { background: var(--gray-dim); cursor: not-allowed; clip-path: n
   display: block;
   margin: 6px auto 0;
 }
-.skip-btn:hover:not(:disabled) {
-  background: var(--bg-elev);
-  color: var(--white);
-  border-color: var(--white);
-  transform: none;
-}
+/* skip-btn:hover at line 1685 inside @media (hover: hover) */
 
 #restart-btn {
   background: transparent;
@@ -469,7 +464,7 @@ button:disabled { background: var(--gray-dim); cursor: not-allowed; clip-path: n
   letter-spacing: 0;
   text-transform: none;
 }
-#restart-btn:hover { border-color: var(--red); color: var(--red); transform: none; }
+/* restart-btn:hover at line 1693 inside @media (hover: hover) */
 
 /* ═══════════════════════════════════════
    HEADINGS
@@ -974,7 +969,7 @@ h2.lose::before { display: none; }
   letter-spacing: 0.04em;
   font-weight: 700;
 }
-.status-tag:hover { transform: scale(1.06); }
+/* status-tag:hover at line 1695 inside @media (hover: hover) */
 .status-tag.k-buff    { background: rgba(77,184,77,0.15);  border-color: var(--green);  color: var(--green); }
 .status-tag.k-debuff  { background: rgba(230,51,41,0.15);  border-color: var(--red);    color: var(--red); }
 .status-tag.k-neutral { background: rgba(136,136,136,0.1); border-color: #555;          color: var(--gray); }
@@ -1026,7 +1021,7 @@ h2.lose::before { display: none; }
   letter-spacing: 0;
   font-weight: 400;
 }
-.log-btn:hover { border-color: var(--yellow); color: var(--yellow); transform: none; }
+/* log-btn:hover at line 1686 inside @media (hover: hover) */
 
 #deck-info {
   text-align: center;
@@ -1100,7 +1095,7 @@ h2.lose::before { display: none; }
   clip-path: none;
   text-transform: none;
 }
-.small-btn:hover { background: var(--red); border-color: var(--red); color: white; transform: none; }
+/* small-btn:hover at line 1687 inside @media (hover: hover) */
 
 /* ═══════════════════════════════════════
    STATS PANEL
@@ -1234,7 +1229,7 @@ h2.lose::before { display: none; }
   border: 1px solid var(--border); color: var(--gray);
   clip-path: none; font-weight: 400; letter-spacing: 0; text-transform: none;
 }
-#forge-skip-btn:hover { background: var(--bg-elev); color: var(--white); transform: none; }
+/* forge-skip-btn:hover at line 1688 inside @media (hover: hover) */
 
 /* ═══════════════════════════════════════
    LOG OVERLAY (full battle history)
@@ -1293,7 +1288,7 @@ h2.lose::before { display: none; }
   padding: 2px 10px; font-size: 13px; clip-path: none;
   letter-spacing: 0; text-transform: none; font-weight: 400;
 }
-#log-close:hover { background: var(--red); border-color: var(--red); transform: none; }
+/* log-close:hover at line 1694 inside @media (hover: hover) */
 
 /* ═══════════════════════════════════════
    FLOATING OVERLAY (damage numbers, phase text)
@@ -1441,7 +1436,7 @@ h2.lose::before { display: none; }
   padding: 2px 10px; font-size: 13px; clip-path: none;
   letter-spacing: 0; text-transform: none; font-weight: 400;
 }
-#status-info-close:hover { background: var(--red); border-color: var(--red); transform: none; }
+/* status-info-close:hover at line 1689 inside @media (hover: hover) */
 
 .status-info-body { padding: 14px; }
 .status-info-desc { color: var(--white); font-size: 13px; line-height: 1.6; margin-bottom: 10px; }
@@ -1481,7 +1476,7 @@ h2.lose::before { display: none; }
   padding: 4px 12px; font-size: 13px; clip-path: none;
   letter-spacing: 0; text-transform: none; font-weight: 400;
 }
-#codex-close:hover { background: var(--red); border-color: var(--red); transform: none; }
+/* codex-close:hover at line 1690 inside @media (hover: hover) */
 
 #codex-tabs {
   display: flex; gap: 2px; padding: 6px 8px;
@@ -1494,7 +1489,7 @@ h2.lose::before { display: none; }
   padding: 4px 8px; font-size: 10px; letter-spacing: 0;
   font-weight: 400; clip-path: none; text-transform: none;
 }
-.codex-tab:hover { color: var(--white); border-color: var(--yellow); transform: none; }
+/* codex-tab:hover at line 1691 inside @media (hover: hover) */
 .codex-tab.active { background: var(--red); color: var(--white); border-color: var(--red); font-weight: 900; }
 
 #codex-content {
@@ -1618,7 +1613,7 @@ h2.lose::before { display: none; }
   color: var(--gray); font-size: 11px; padding: 5px 10px;
   clip-path: none; text-transform: none; letter-spacing: 0; font-weight: 400;
 }
-#codex-btn:hover { border-color: var(--yellow); color: var(--yellow); transform: none; }
+/* codex-btn:hover at line 1687 inside @media (hover: hover) */
 
 /* ═══════════════════════════════════════
    MISC COMPATIBILITY
@@ -1709,8 +1704,8 @@ footer { display: none; }
 
 /* ═══════════════════════════════════════
    JS-DETECTED TOUCH (.is-touch on body)
-   Absolute override for hybrid devices
-   that may report hover:hover incorrectly
+   触摸设备：仅压平 transform/box-shadow 抖动，不动 border-color/background
+   （之前的版本用 !important 覆盖 border-color 和 background，导致基础样式被吃掉）
 ═══════════════════════════════════════ */
 
 body.is-touch .card:hover:not(.disabled),
@@ -1721,10 +1716,12 @@ body.is-touch .perma-card:hover,
 body.is-touch .discard-card:hover,
 body.is-touch .forge-card:hover {
   transform: none !important;
-  border-color: var(--border) !important;
+  box-shadow: none !important;
 }
-body.is-touch .enemy-card.selected { border-color: var(--yellow) !important; }
-body.is-touch button:hover:not(:disabled) { transform: none !important; background: initial !important; }
+body.is-touch button:hover:not(:disabled) {
+  transform: none !important;
+  /* 不动 background，让基础 var(--red) 透下来 */
+}
 
 /* ═══════════════════════════════════════
    ONBOARDING GUIDE MODAL
