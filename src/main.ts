@@ -1796,14 +1796,7 @@ function openCodex() {
         <button id="codex-close">✕</button>
       </div>
       <div id="codex-tabs">
-        <button class="codex-tab active" data-cat="weapon">武器（10）</button>
-        <button class="codex-tab" data-cat="armor">防具（8）</button>
-        <button class="codex-tab" data-cat="skill_single">单体技能（22）</button>
-        <button class="codex-tab" data-cat="skill_aoe">群攻 · 3关解锁（9）</button>
-        <button class="codex-tab" data-cat="item">道具（6）</button>
-        <button class="codex-tab" data-cat="perk">特性（13）</button>
-        <button class="codex-tab" data-cat="enchant">武器附魔（5）</button>
-        <button class="codex-tab" data-cat="attack">攻击牌</button>
+        ${renderCodexTabs()}
       </div>
       <div id="codex-content"></div>
     </div>
@@ -1813,11 +1806,7 @@ function openCodex() {
   function renderTab(cat: string) {
     const content = document.getElementById("codex-content");
     if (!content) return;
-    const aoeIds = new Set(["sk_chain_bolt", "sk_fire_wall", "sk_shockwave", "sk_group_curse",
-                             "sk_sonic", "sk_mass_weak", "sk_lightning", "sk_curse_vortex",
-                             "sk_chroma_wave"]);
     if (cat === "enchant") {
-      // 渲染 5 种附魔
       content.innerHTML = ENCHANTS.map(eid => {
         const race = ENCHANT_RACE[eid];
         return `
@@ -1832,15 +1821,14 @@ function openCodex() {
       }).join("");
       return;
     }
-    const defs = Object.values(CARD_DB).filter(d => {
-      if (cat === "weapon") return d.category === "equipment" && d.equipKind === "weapon";
-      if (cat === "armor") return d.category === "equipment" && d.equipKind === "armor";
-      if (cat === "skill_single") return d.category === "skill" && !aoeIds.has(d.id);
-      if (cat === "skill_aoe") return d.category === "skill" && aoeIds.has(d.id);
-      if (cat === "item") return d.category === "item";
-      if (cat === "perk") return d.category === "perk";
-      if (cat === "attack") return d.category === "attack";
-      return false;
+    const defs = Object.values(CARD_DB).filter(d => filterByCodexTab(d, cat));
+    // 按稀有度排序：epic → super_rare → rare → common（让 epic/SR 排在最前一目了然）
+    const rarityOrder: Record<string, number> = { epic: 0, super_rare: 1, rare: 2, common: 3 };
+    defs.sort((a, b) => {
+      const ra = rarityOrder[a.rarity ?? "common"];
+      const rb = rarityOrder[b.rarity ?? "common"];
+      if (ra !== rb) return ra - rb;
+      return a.name.localeCompare(b.name, "zh");
     });
     content.innerHTML = defs.map(renderCodexCard).join("") || '<p class="empty">无</p>';
   }
@@ -1861,6 +1849,50 @@ function openCodex() {
 
 // short_sword 在 newGame() 里直接加入 weapons，不在 STARTING_DECK_IDS 内
 const _startingDeckSet = new Set([...STARTING_DECK_IDS, "short_sword"]);
+
+// 群攻技能的固定 id 集合（影响 codex 分类 + 数字统计）
+const _AOE_SKILL_IDS = new Set([
+  "sk_chain_bolt", "sk_fire_wall", "sk_shockwave", "sk_group_curse",
+  "sk_sonic", "sk_mass_weak", "sk_lightning", "sk_curse_vortex",
+  "sk_chroma_wave", "sk_wrath",
+]);
+
+// 图鉴 tab 过滤逻辑
+function filterByCodexTab(d: import("./types.ts").CardDef, cat: string): boolean {
+  if (cat === "weapon")       return d.category === "equipment" && d.equipKind === "weapon";
+  if (cat === "armor")        return d.category === "equipment" && d.equipKind === "armor";
+  if (cat === "skill_single") return d.category === "skill" && !_AOE_SKILL_IDS.has(d.id);
+  if (cat === "skill_aoe")    return d.category === "skill" && _AOE_SKILL_IDS.has(d.id);
+  if (cat === "item")         return d.category === "item";
+  if (cat === "perk")         return d.category === "perk";
+  if (cat === "attack")       return d.category === "attack";
+  return false;
+}
+
+// 动态生成 tab 列表（数字根据 CARD_DB 实时计算）
+function renderCodexTabs(): string {
+  const all = Object.values(CARD_DB);
+  const counts = {
+    weapon:       all.filter(d => filterByCodexTab(d, "weapon")).length,
+    armor:        all.filter(d => filterByCodexTab(d, "armor")).length,
+    skill_single: all.filter(d => filterByCodexTab(d, "skill_single")).length,
+    skill_aoe:    all.filter(d => filterByCodexTab(d, "skill_aoe")).length,
+    item:         all.filter(d => filterByCodexTab(d, "item")).length,
+    perk:         all.filter(d => filterByCodexTab(d, "perk")).length,
+    enchant:      ENCHANTS.length,
+    attack:       all.filter(d => filterByCodexTab(d, "attack")).length,
+  };
+  return [
+    `<button class="codex-tab active" data-cat="weapon">武器（${counts.weapon}）</button>`,
+    `<button class="codex-tab" data-cat="armor">防具（${counts.armor}）</button>`,
+    `<button class="codex-tab" data-cat="skill_single">单体技能（${counts.skill_single}）</button>`,
+    `<button class="codex-tab" data-cat="skill_aoe">群攻（${counts.skill_aoe}）</button>`,
+    `<button class="codex-tab" data-cat="item">道具（${counts.item}）</button>`,
+    `<button class="codex-tab" data-cat="perk">特性（${counts.perk}）</button>`,
+    `<button class="codex-tab" data-cat="enchant">武器附魔（${counts.enchant}）</button>`,
+    `<button class="codex-tab" data-cat="attack">攻击牌（${counts.attack}）</button>`,
+  ].join("");
+}
 
 function renderCodexCard(d: import("./types.ts").CardDef): string {
   let suit = "";
