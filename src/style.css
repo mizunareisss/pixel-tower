@@ -596,6 +596,17 @@ h2.lose::before { display: none; }
   padding: 0 4px;
 }
 
+/* 手牌限高：长描述自动 ellipsis，不会撑出边框 */
+.hand-card .card-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* 给底部 cat-tag 留出 16px 空间 */
+  max-height: 56px;
+}
+
 .card-suit-corner {
   position: absolute;
   top: 4px;

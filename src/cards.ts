@@ -186,10 +186,10 @@ const TWIN_BLADES: CardDef = {
   baseDmg: 4,
   hits: 2,
   equipEffects: [
-    { desc: "基础 4 × 2 hits。", stat: "4×2 伤" },
-    { desc: "叠加 ×1.4 × 2 hits。", stat: "5.6×2 伤" },
-    { desc: "叠加 ×1.8 × 2 hits。", stat: "7.2×2 伤" },
-    { desc: "叠加 ×2.2 × 2 hits。", stat: "8.8×2 伤" },
+    { desc: "基础 4 × 2 次。", stat: "4×2 伤" },
+    { desc: "叠加 ×1.4 × 2 次。", stat: "5.6×2 伤" },
+    { desc: "叠加 ×1.8 × 2 次。", stat: "7.2×2 伤" },
+    { desc: "叠加 ×2.2 × 2 次。", stat: "8.8×2 伤" },
   ],
 };
 
@@ -523,7 +523,7 @@ function removeOneDebuff(c: BattleContext) {
 
 const SK_POISON_BLADE: CardDef = {
   id: "sk_poison_blade", name: "毒刃", category: "skill", target: "single",
-  desc: "对目标 +3 层中毒（每回合开始扣 stacks HP，并 -1 stack）。",
+  desc: "目标 +3 层中毒：每回合扣等同层数的 HP，每回合自动 -1 层。",
   onPlay: (c) => { addStatus(c.target, "poison", "中毒", 3); c.log(`${c.target.name} 中毒 +3。`, "player"); },
 };
 
@@ -535,7 +535,7 @@ const SK_BATTLE_CRY: CardDef = {
 
 const SK_FRENZY: CardDef = {
   id: "sk_frenzy", name: "激奋", category: "skill", target: "self",
-  desc: "激活激奋。每打出 1 张攻击牌后 stacks +1，下次攻击 +stacks×5 伤（持续整场战斗）。",
+  desc: "激活激奋：每打出一张攻击牌后层数 +1，下次攻击额外 +5 × 层数伤害（整场战斗持续）。",
   onPlay: (c) => {
     if (!c.player.statuses.find(s => s.id === "frenzy")) {
       addStatus(c.player, "frenzy", "激奋", 1, -1);
@@ -554,7 +554,7 @@ const SK_EVASIVE: CardDef = {
 
 const SK_SILENCE: CardDef = {
   id: "sk_silence", name: "沉默", category: "skill", target: "single",
-  desc: "目标下回合无法 buff（buff 行动跳过）。",
+  desc: "目标下回合的增益类行动被跳过。",
   onPlay: (c) => { addStatus(c.target, "silenced", "沉默", 1, 1); c.log(`${c.target.name} 被沉默。`, "player"); },
 };
 
@@ -566,7 +566,7 @@ const SK_FREEZE: CardDef = {
 
 const SK_REND: CardDef = {
   id: "sk_rend", name: "撕裂", category: "skill", target: "single",
-  desc: "永久降低目标 2 防御（rend 状态参与减伤）。",
+  desc: "永久降低目标 2 点护甲。",
   onPlay: (c) => { addStatus(c.target, "rend", "撕裂", 2, -1); c.log(`${c.target.name} 防御 -2。`, "player"); },
 };
 
@@ -847,7 +847,7 @@ const IT_ELIXIR: CardDef = {
 // Epic 武器 1：王者之剑 — 顶级输出，无视护甲，全攻击 +30%
 const EXCALIBUR: CardDef = {
   id: "excalibur", name: "王者之剑", category: "equipment",
-  desc: "装备·武器（持续整局，最多叠 4）：基础伤害 10，无视全部护甲，所有攻击牌伤害 +30%。",
+  desc: "武器：基础 10，无视全部护甲，攻击 +30%。",
   equipKind: "weapon",
   equipSuit: "heart",
   baseDmg: 10,
@@ -867,7 +867,7 @@ const EXCALIBUR: CardDef = {
 // Epic 武器 2：天命之刃 — 把濒死敌人秒杀的门槛抬到 30%
 const DIVINE_BLADE: CardDef = {
   id: "divine_blade", name: "天命之刃", category: "equipment",
-  desc: "装备·武器（持续整局，最多叠 4）：基础伤害 8，命中后若敌人 HP ≤ 30% 直接斩杀。",
+  desc: "武器：基础 8，敌人 HP ≤ 30% 时直接斩杀。",
   equipKind: "weapon",
   equipSuit: "spade",
   baseDmg: 8,
@@ -907,7 +907,7 @@ const DIVINE_BLADE: CardDef = {
 // Epic 防具：不灭之心 — 整局只能复活 1 次（无论叠多少层都是 1 次）
 const UNDYING_HEART: CardDef = {
   id: "undying_heart", name: "不灭之心", category: "equipment",
-  desc: "装备·防具（持续整局，整局仅触发 1 次）：受击 -2。HP 即将归 0 时复活到 50%。叠加提升复活后的 HP 比例。",
+  desc: "防具：受击 -2。HP 归 0 时复活到 50%（整局 1 次）。",
   equipKind: "armor",
   equipSuit: "heart",
   baseReduce: 2,
@@ -926,7 +926,7 @@ const UNDYING_HEART: CardDef = {
 // Epic 群攻技能：众神之怒 — 全敌当前 HP 50% 直伤
 const SK_WRATH: CardDef = {
   id: "sk_wrath", name: "众神之怒", category: "skill", target: "all",
-  desc: "技能·群攻（一次性·打出后入弃牌堆）：对所有存活敌人造成其当前 HP 的 50% 直接伤害。",
+  desc: "群攻：所有存活敌人受到当前 HP 50% 直伤。",
   onPlay: (c) => {
     for (const e of c.enemies) {
       if (!e.alive) continue;
@@ -940,7 +940,7 @@ const SK_WRATH: CardDef = {
 // Epic 道具：复读机 — 本场战斗每出 1 张非攻击牌复制 1 份到手牌
 const IT_ECHO: CardDef = {
   id: "it_echo", name: "复读机", category: "item", target: "self",
-  desc: "道具（一次性激活·持续到本场战斗结束）：每打出 1 张非攻击牌后立即复制一份回手牌。",
+  desc: "本场战斗：每出 1 张非攻击牌，复制一份回手牌。",
   onPlay: (c) => {
     addStatus(c.player, "echo", "复读", 1, -1);
     c.log("复读机：时间在打嗝。", "player");
@@ -968,7 +968,7 @@ const PERK_BLEED: CardDef = {
 
 const PERK_DODGE: CardDef = {
   id: "p_dodge", name: "闪避", category: "perk",
-  desc: "每张：受击 -3% + 完全闪避概率 +3%（全闪 cap 50%）。",
+  desc: "每张：受击 -3%、完全闪避概率 +3%（全闪上限 50%）。",
   defaultSuit: "diamond",
   perkEffect: {
     unitDesc: "受击 -3% + 全闪 +3%（每张，全闪 cap 50%）",
@@ -1045,7 +1045,7 @@ const PERK_VAMPIRE: CardDef = {
 
 const PERK_THORNS: CardDef = {
   id: "p_thorns", name: "荆棘", category: "perk",
-  desc: "每张：反伤 = 受到伤害的 10%（cap 80%）。",
+  desc: "每张：反伤 = 受到伤害的 10%（上限 80%）。",
   defaultSuit: "club",
   perkEffect: {
     unitDesc: "反伤 = 受到伤害的 10%（每张，cap 80%）",
@@ -1095,7 +1095,7 @@ const PERK_LIFETAP: CardDef = {
 
 const PERK_OVERLOAD: CardDef = {
   id: "p_overload", name: "过载", category: "perk",
-  desc: "每张：每回合额外摸 1 张牌（cap 4 张/回）。",
+  desc: "每张：每回合额外摸 1 张牌（上限每回合 4 张）。",
   defaultSuit: "diamond",
   perkEffect: {
     unitDesc: "每回合额外摸 1 张（每张，cap 4）",
@@ -1134,7 +1134,7 @@ const PERK_RESONANCE: CardDef = {
 
 const PERK_COLDBLOOD: CardDef = {
   id: "p_coldblood", name: "冷血", category: "perk",
-  desc: "每张：无 debuff 时攻击 +3%。",
+  desc: "每张：无负面状态时攻击 +3%。",
   defaultSuit: "club",
   perkEffect: {
     unitDesc: "无 debuff 时攻击 +3%（每张）",
@@ -1315,8 +1315,11 @@ export const STARTING_DECK_IDS: string[] = [
 ];
 
 // 关卡奖励池（牌库新卡，短剑不在内——仅作起始过渡）
-// 战斗胜利奖励池（含 build 装备 + Epic 卡）
+// 战斗胜利奖励池（含基础装备 + build 装备 + Epic 卡）
 export const REWARD_CARD_POOL_BASE = [
+  // 基础装备（common 档，可用来叠加副本到 ×2/×3/×4）
+  "long_sword", "dagger", "war_bow",
+  "round_shield", "leather_armor", "heavy_armor", "cloak",
   // build 武器（7）
   "twin_blades", "warhammer", "battle_staff", "chain_whip",
   "berserker_blade", "wizard_staff", "repeating_bow",
