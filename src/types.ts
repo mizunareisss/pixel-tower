@@ -337,16 +337,51 @@ export interface BattleState {
 // ── 游戏阶段 ──────────────────────────────────────────────
 export type GamePhase =
   | "starter_perk_picks"
+  | "floor_map"           // 楼层全貌 / 路径选择
   | "battle"
   | "suit_pick"           // 手选花色（染色术 / 共鸣咒）
   | "battle_victory"
   | "reward_card"          // 战利品（1 张卡进牌库）
   | "reward_perk"          // 通关额外特性
-  | "floor_event"          // 楼层间随机事件（70% 概率，每关末）
+  | "floor_event"          // 触发某事件（从 map node 进入）
   | "discard"
-  | "forge"                // 铁匠铺（每 2 关一次，附魔武器）
+  | "forge"                // 铁匠铺（map node）
   | "game_over"
   | "victory";
+
+// ── 楼层地图（Slay the Spire 式分支节点图） ───────────────
+export type MapNodeType = "start" | "battle" | "elite" | "boss" | "event" | "forge" | "shop";
+
+export interface MapNode {
+  id: string;
+  type: MapNodeType;
+  layer: number;             // 层（深度，0 = start）
+  col: number;               // 该层第几个节点（用于布局）
+  next: string[];            // 通向的下一层节点 id
+  // 渲染坐标（map.ts 计算后填充）
+  x: number;                 // 0-1 normalized
+  y: number;                 // 0-1 normalized
+  completed: boolean;
+  // 类型相关 payload（生成时预 roll，进入时使用）
+  enemies?: EnemyState[];    // battle/elite/boss
+  eventId?: string;          // event 节点
+}
+
+export interface FloorTheme {
+  name: string;              // 关卡名
+  flavor: string;            // 一句话氛围
+  bgClass: string;           // CSS 类名（决定背景渐变）
+  accentColor: string;       // 主调色（hex）
+}
+
+export interface FloorMap {
+  floor: number;
+  theme: FloorTheme;
+  nodes: MapNode[];
+  startNodeId: string;
+  bossNodeId: string;
+  currentNodeId: string;     // 玩家当前所在节点（初始 = start）
+}
 
 export interface GameState {
   phase: GamePhase;
@@ -365,4 +400,7 @@ export interface GameState {
   activeEventId?: string;
   // 商人事件的子界面状态（由 main.ts 渲染时使用）
   merchantStock?: CardInstance[];
+
+  // 楼层地图（floor_map 阶段时由 map.ts 设置）
+  floorMap?: FloorMap;
 }

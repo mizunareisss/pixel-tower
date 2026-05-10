@@ -2438,3 +2438,206 @@ body.is-touch button:hover:not(:disabled) {
   clip-path: none; text-transform: none; letter-spacing: 0; font-weight: 400;
 }
 #discard-hand-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ═══════════════════════════════════════
+   楼层地图 v1
+   - SVG 边 + HTML 节点
+   - 4 个楼层主题（plains/cavern/altar/void）
+   - 节点形状菱形（rotate 45 + clip-path）
+═══════════════════════════════════════ */
+
+.floor-map-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 70vh;
+  padding: 14px 12px 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 主题：每关一个独特背景渐变 */
+.theme-plains {
+  background:
+    radial-gradient(ellipse 800px 400px at 50% 100%, rgba(212,166,74,0.12), transparent 70%),
+    linear-gradient(180deg, #1a1410 0%, #221c14 100%);
+}
+.theme-cavern {
+  background:
+    radial-gradient(ellipse 600px 400px at 30% 80%, rgba(184,127,208,0.15), transparent 70%),
+    radial-gradient(ellipse 500px 300px at 70% 30%, rgba(155,89,182,0.10), transparent 70%),
+    linear-gradient(180deg, #14101a 0%, #1a141f 100%);
+}
+.theme-altar {
+  background:
+    radial-gradient(ellipse 700px 400px at 50% 50%, rgba(91,159,216,0.10), transparent 70%),
+    radial-gradient(ellipse 400px 300px at 20% 20%, rgba(255,80,80,0.06), transparent 70%),
+    linear-gradient(180deg, #0e1018 0%, #181a26 100%);
+}
+.theme-void {
+  background:
+    radial-gradient(ellipse 600px 300px at 50% 100%, rgba(255,80,40,0.10), transparent 70%),
+    radial-gradient(ellipse 400px 600px at 30% 50%, rgba(155,40,180,0.08), transparent 70%),
+    radial-gradient(circle 2px at 15% 20%, #fff, transparent),
+    radial-gradient(circle 2px at 75% 35%, #fff, transparent),
+    radial-gradient(circle 1px at 50% 60%, rgba(255,255,255,0.6), transparent),
+    radial-gradient(circle 1px at 25% 80%, rgba(255,255,255,0.4), transparent),
+    radial-gradient(circle 2px at 88% 75%, #fff, transparent),
+    linear-gradient(180deg, #050008 0%, #0a0510 100%);
+}
+
+.floor-map-header {
+  text-align: center;
+  margin-bottom: 12px;
+  z-index: 2;
+}
+.floor-map-title {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.floor-map-floor {
+  font-size: 11px;
+  color: var(--gray);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.floor-map-name {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--white);
+  letter-spacing: 0.08em;
+}
+.floor-map-flavor {
+  font-size: 11px;
+  color: var(--gray);
+  font-style: italic;
+  letter-spacing: 0.04em;
+  max-width: 480px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+/* 地图画布 — SVG 边 + HTML 节点叠层 */
+.floor-map-canvas {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  height: 56vh;
+  margin: 0 auto;
+  max-width: 600px;
+}
+.floor-map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+.floor-map-nodes {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+/* 节点 — 菱形（rotate 45） */
+.map-node {
+  position: absolute;
+  transform: translate(-50%, -50%) rotate(45deg);
+  width: 38px;
+  height: 38px;
+  background: var(--bg-card);
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: not-allowed;
+  transition: transform 0.15s, box-shadow 0.2s;
+  opacity: 0.4;
+}
+.map-node-icon {
+  display: block;
+  transform: rotate(-45deg);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.map-node.is-current {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(45deg) scale(1.25);
+  box-shadow: 0 0 18px currentColor, inset 0 0 8px currentColor;
+  animation: nodePulseCurrent 1.6s ease-in-out infinite;
+  z-index: 5;
+}
+@keyframes nodePulseCurrent {
+  0%, 100% { box-shadow: 0 0 14px currentColor, inset 0 0 6px currentColor; }
+  50%      { box-shadow: 0 0 24px currentColor, inset 0 0 12px currentColor; }
+}
+
+.map-node.is-reachable {
+  opacity: 1;
+  cursor: pointer;
+  box-shadow: 0 0 12px currentColor;
+  animation: nodePulseReachable 2.2s ease-in-out infinite;
+}
+@keyframes nodePulseReachable {
+  0%, 100% { box-shadow: 0 0 8px currentColor; }
+  50%      { box-shadow: 0 0 16px currentColor, 0 0 28px currentColor; transform: translate(-50%, -50%) rotate(45deg) scale(1.10); }
+}
+
+.map-node.is-completed {
+  opacity: 0.4;
+  filter: grayscale(0.7);
+  border-color: var(--gray-dim) !important;
+  color: var(--gray-dim) !important;
+}
+.map-node.is-completed .map-node-icon { opacity: 0.6; }
+
+/* boss 节点放大 + 持续光环 */
+.map-node.node-boss {
+  width: 52px;
+  height: 52px;
+}
+.map-node.node-boss .map-node-icon { font-size: 24px; }
+
+/* SVG 边样式 */
+.map-edge {
+  stroke-width: 2;
+  fill: none;
+}
+.map-edge.edge-locked {
+  stroke: rgba(160,160,160,0.20);
+  stroke-dasharray: 4 6;
+}
+.map-edge.edge-completed {
+  stroke: rgba(160,160,160,0.45);
+}
+.map-edge.edge-available {
+  stroke: rgba(245,197,24,0.85);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 3px rgba(245,197,24,0.7));
+  stroke-dasharray: 8 6;
+  animation: edgeFlow 1.2s linear infinite;
+}
+@keyframes edgeFlow {
+  to { stroke-dashoffset: -14; }
+}
+
+/* 图例 */
+.floor-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 10px;
+  font-size: 10px;
+  color: var(--gray);
+  margin-top: 8px;
+  padding: 6px 4px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  z-index: 2;
+}
+.map-legend-chip {
+  white-space: nowrap;
+}

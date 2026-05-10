@@ -20,7 +20,6 @@ import { ENCHANT_RACE, ENCHANT_COST, ENCHANT_NAMES, SUIT_SYMBOLS } from "./types
 import {
   STARTING_VITA,
   STARTING_HAND,
-  FIGHTS_PER_FLOOR,
   STARTER_PERK_COUNT,
   STARTER_PERK_POOL_SIZE,
   REWARD_CHOICE_COUNT,
@@ -45,9 +44,8 @@ import {
   discardArmors,
   applyNextBattlePenalty,
 } from "./battle.ts";
-import { makeEnemyGroupsForFloor } from "./enemies.ts";
+// makeEnemyGroupsForFloor 现在被 map.ts 调用
 import {
-  rollFloorEvent,
   generateMerchantStock,
   tryPurchaseMerchantCard,
   tradeFragments,
@@ -59,7 +57,8 @@ import {
   EVENT_META,
 } from "./events.ts";
 import type { EventId } from "./events.ts";
-import type { CardInstance, EnemyRace } from "./types.ts";
+import type { CardInstance, EnemyRace, MapNode } from "./types.ts";
+import { generateFloorMap, getReachableNodes, getNode } from "./map.ts";
 
 // ─────────────────────────────────────────────────────────
 // 工具
@@ -142,27 +141,80 @@ export function pickStarterPerk(state: GameState, uid: string) {
 
 function startNextFloor(state: GameState) {
   state.floor += 1;
-  state.battleGroups = makeEnemyGroupsForFloor(state.floor);
+  state.battleGroups = [];
   state.battleIndex = 0;
-  pushLog(state, `──── 第 ${state.floor} 关开始 ────`, "system");
-  startCurrentBattle(state);
+  // 生成楼层地图，进入 floor_map 阶段
+  state.floorMap = generateFloorMap(state.floor);
+  state.phase = "floor_map";
+  pushLog(state, `──── 第 ${state.floor} 关 · ${state.floorMap.theme.name} ────`, "system");
 }
 
-function startCurrentBattle(state: GameState) {
-  const enemies = state.battleGroups[state.battleIndex];
-  if (!enemies) return;
-  state.battle = newBattle(state.player, enemies, state.floor);
+// 玩家在地图上选了一个节点
+export function enterMapNode(state: GameState, nodeId: string): boolean {
+  if (state.phase !== "floor_map" || !state.floorMap) return false;
+  const reachable = getReachableNodes(state.floorMap);
+  if (!reachable.find(n => n.id === nodeId)) return false;  // 不可达
+  const node = getNode(state.floorMap, nodeId);
+  if (!node) return false;
+  // 推进玩家位置（节点完成由内容消费后标记，不在进入时）
+  state.floorMap.currentNodeId = nodeId;
+  // 根据节点类型进入对应阶段
+  if (node.type === "battle" || node.type === "elite" || node.type === "boss") {
+    startNodeBattle(state, node);
+  } else if (node.type === "event") {
+    startNodeEvent(state, node);
+  } else if (node.type === "forge") {
+    startNodeForge(state);
+  } else if (node.type === "shop") {
+    startNodeShop(state);
+  }
+  return true;
+}
+
+function startNodeBattle(state: GameState, node: MapNode) {
+  if (!node.enemies || node.enemies.length === 0) return;
+  state.battle = newBattle(state.player, node.enemies, state.floor);
   state.phase = "battle";
   state.choices = [];
-  pushLog(state, `── 战斗 ${state.battleIndex + 1}/${FIGHTS_PER_FLOOR} ──`, "system");
-  for (const e of enemies) pushLog(state, `${e.name}（HP ${e.hp}）出现！`, "enemy");
-
+  const tierLabel = node.type === "boss" ? "BOSS" : node.type === "elite" ? "精英战" : "战斗";
+  pushLog(state, `── ${tierLabel} ──`, "system");
+  for (const e of node.enemies) pushLog(state, `${e.name}（HP ${e.hp}）出现！`, "enemy");
   // 起手摸 6
   drawCards(state.player, STARTING_HAND, logFn(state));
   // 应用跨场战斗惩罚（神秘宝箱陷阱）
   applyNextBattlePenalty(state.battle, logFn(state));
   pushLog(state, `回合 1（你的回合）`, "system");
 }
+
+function startNodeEvent(state: GameState, node: MapNode) {
+  const eventId = node.eventId ?? "wizard";
+  state.activeEventId = eventId;
+  state.phase = "floor_event";
+  if (eventId === "merchant") {
+    state.merchantStock = generateMerchantStock(state.floor);
+  }
+  if (eventId === "wizard") {
+    state.choices = generateWizardChoices(state.floor);
+  }
+  const meta = EVENT_META[eventId as EventId];
+  pushLog(state, `${meta.icon} 楼层事件：${meta.name}。`, "system");
+}
+
+function startNodeForge(state: GameState) {
+  state.phase = "forge";
+  pushLog(state, `⚒ 铁匠铺：使用灵魂碎片为武器附魔，或跳过。`, "system");
+}
+
+function startNodeShop(state: GameState) {
+  // shop = 永远是商人事件
+  state.activeEventId = "merchant";
+  state.phase = "floor_event";
+  state.merchantStock = generateMerchantStock(state.floor);
+  pushLog(state, `🛒 商店：流浪商人在等你。`, "system");
+}
+
+// 节点完成后回到地图
+// 注：returnToMap 逻辑已合并进 onBattleWon / goAfterCardReward / goAfterFloorEvent
 
 // ─────────────────────────────────────────────────────────
 // 战斗：出牌 / 选目标 / 结束回合
@@ -252,15 +304,14 @@ export function gameDiscardArmors(state: GameState) {
 
 function onBattleWon(state: GameState) {
   state.battle = null;
-  const isLast = state.battleIndex >= FIGHTS_PER_FLOOR - 1;
-  if (isLast) {
-    pushLog(state, `第 ${state.floor} 关全部通过！`, "win");
+  // 检查是否打了 boss → 标记关卡完成
+  const cur = state.floorMap ? getNode(state.floorMap, state.floorMap.currentNodeId) : undefined;
+  if (cur?.type === "boss") {
+    pushLog(state, `第 ${state.floor} 关 BOSS 击败！`, "win");
     state.pendingFloorClear = true;
-  } else {
-    state.battleIndex += 1;
   }
   state.phase = "battle_victory";
-  pushLog(state, "点击「领取奖励」继续。", "system");
+  pushLog(state, "点击「领取战利品」继续。", "system");
 }
 
 export function continueFromVictory(state: GameState) {
@@ -315,7 +366,13 @@ function goAfterCardReward(state: GameState) {
     state.choices = rollChoices(PERK_POOL, REWARD_CHOICE_COUNT, state.floor);
     pushLog(state, `特性升级：从 3 张特性里选 1 张。`, "system");
   } else {
-    startCurrentBattle(state);
+    // 普通战 / 精英战奖励完 → 标记当前节点完成 → 回地图
+    state.choices = [];
+    if (state.floorMap) {
+      const cur = getNode(state.floorMap, state.floorMap.currentNodeId);
+      if (cur) cur.completed = true;
+    }
+    state.phase = "floor_map";
   }
 }
 
@@ -359,40 +416,21 @@ function afterPerkReward(state: GameState) {
   state.player.vita = state.player.vitaMax;
   pushLog(state, "完成一关，HP 补满。", "win");
   state.choices = [];
-  // 70% 概率触发楼层事件
-  const eventId = rollFloorEvent();
-  if (eventId) {
-    enterFloorEvent(state, eventId);
-    return;
-  }
-  goAfterFloorEvent(state);
+  // 直接进入下一关的地图（铁匠铺/事件都已经是 map 节点了）
+  startNextFloor(state);
 }
 
-function enterFloorEvent(state: GameState, eventId: string) {
-  state.activeEventId = eventId;
-  state.phase = "floor_event";
-  if (eventId === "merchant") {
-    state.merchantStock = generateMerchantStock(state.floor);
-  }
-  if (eventId === "wizard") {
-    state.choices = generateWizardChoices(state.floor);
-  }
-  const meta = EVENT_META[eventId as EventId];
-  pushLog(state, `${meta.icon} 楼层事件：${meta.name}。`, "system");
-}
-
-// 事件结束后进入下一阶段（铁匠铺或下一关）
+// 事件结束后回地图选下一节点（map 节点流程）
 function goAfterFloorEvent(state: GameState) {
   state.activeEventId = undefined;
   state.merchantStock = undefined;
   state.choices = [];
-  // 每 2 关后进铁匠铺（即将进入 3 / 5 / 7...）
-  if (state.floor > 0 && state.floor % 2 === 0) {
-    state.phase = "forge";
-    pushLog(state, `⚒ 铁匠铺：使用灵魂碎片为武器附魔，或跳过。`, "system");
-  } else {
-    startNextFloor(state);
+  // 标记当前 map 节点完成
+  if (state.floorMap) {
+    const cur = getNode(state.floorMap, state.floorMap.currentNodeId);
+    if (cur) cur.completed = true;
   }
+  state.phase = "floor_map";
 }
 
 // ─────────────────────────────────────────────────────────
@@ -431,14 +469,23 @@ export function applyEnchant(state: GameState, enchantId: EnchantId): boolean {
   state.player.fragments[race] -= ENCHANT_COST;
   state.player.weaponEnchant = enchantId;
   pushLog(state, `武器附魔：${ENCHANT_NAMES[enchantId]}（消耗 ${ENCHANT_COST} ${race} 碎片）。`, "win");
-  startNextFloor(state);
+  // 铁匠铺是 map 节点，完成后回地图
+  if (state.floorMap) {
+    const cur = getNode(state.floorMap, state.floorMap.currentNodeId);
+    if (cur) cur.completed = true;
+  }
+  state.phase = "floor_map";
   return true;
 }
 
 export function skipForge(state: GameState) {
   if (state.phase !== "forge") return;
   pushLog(state, "跳过铁匠铺。");
-  startNextFloor(state);
+  if (state.floorMap) {
+    const cur = getNode(state.floorMap, state.floorMap.currentNodeId);
+    if (cur) cur.completed = true;
+  }
+  state.phase = "floor_map";
 }
 
 // ─────────────────────────────────────────────────────────

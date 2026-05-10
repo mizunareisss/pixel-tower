@@ -31,6 +31,7 @@ import {
   wizardPick,
   chestOpen,
   discardHandCards,
+  enterMapNode,
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
 import { ABILITY_DESCS } from "./enemies.ts";
@@ -39,6 +40,7 @@ import {
   EVENT_META, MERCHANT_PRICES, GAMBLER_OPTIONS, SHRINE_OPTIONS, CHEST_TRAP_DESCS,
 } from "./events.ts";
 import type { EventId } from "./events.ts";
+import { NODE_TYPE_META, getReachableNodes } from "./map.ts";
 import { SUIT_SYMBOLS, SUITS, isRedSuit, FIGHTS_PER_FLOOR, STATUS_META, RACES, FRAGMENT_NAMES, FRAGMENT_ICONS,
   ENCHANTS, ENCHANT_NAMES, ENCHANT_DESCS, ENCHANT_RACE, ENCHANT_COST, RACE_NAMES } from "./types.ts";
 import type { EnemyRace, EnchantId, Suit } from "./types.ts";
@@ -134,6 +136,7 @@ function render() {
   else if (state.phase === "discard") renderDiscard();
   else if (state.phase === "forge") renderForge();
   else if (state.phase === "floor_event") renderFloorEvent();
+  else if (state.phase === "floor_map") renderFloorMap();
   else if (state.phase === "game_over") renderGameOver();
 
   renderHand();
@@ -365,6 +368,7 @@ function phaseLabel(p: GameState["phase"]) {
     discard: "整理卡组",
     forge: "⚒ 铁匠铺",
     floor_event: "✨ 楼层事件",
+    floor_map: state.floorMap ? `第 ${state.floor} 关 · ${state.floorMap.theme.name}` : "塔层地图",
     game_over: "✗ 失败",
     victory: "★ 通关胜利",
   } as Record<string, string>)[p] || p;
@@ -1091,6 +1095,97 @@ function renderChest(parent: HTMLElement) {
   parent.querySelector(".open-chest-btn")!.addEventListener("click", () => {
     chestOpen(state);
     render();
+  });
+}
+
+// ─────────────────────────────────────────────────────────
+// 楼层地图渲染（SVG 边 + HTML 节点）
+// ─────────────────────────────────────────────────────────
+
+function renderFloorMap() {
+  const map = state.floorMap;
+  if (!map) return;
+  const reachable = getReachableNodes(map);
+  const reachableIds = new Set(reachable.map(n => n.id));
+
+  // 容器宽高（用 viewBox 系统：1000 × 700，CSS 缩放）
+  const W = 1000;
+  const H = 700;
+
+  // 生成 SVG 边
+  const edgesSvg = map.nodes.flatMap(node => {
+    return node.next.map(targetId => {
+      const target = map.nodes.find(n => n.id === targetId);
+      if (!target) return "";
+      const x1 = node.x * W;
+      const y1 = node.y * H;
+      const x2 = target.x * W;
+      const y2 = target.y * H;
+      // 状态：completed (双方都完成) / available (从 current 出发到 reachable) / locked
+      const fromCurrent = node.id === map.currentNodeId;
+      const isAvailable = fromCurrent && reachableIds.has(targetId);
+      const isCompleted = node.completed && target.completed;
+      const cls = isCompleted ? "edge-completed" : isAvailable ? "edge-available" : "edge-locked";
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="map-edge ${cls}" />`;
+    }).join("");
+  }).join("");
+
+  // 生成节点 div（可点击）
+  const nodesHtml = map.nodes.map(node => {
+    const meta = NODE_TYPE_META[node.type];
+    const isCurrent = node.id === map.currentNodeId;
+    const isReachable = reachableIds.has(node.id);
+    const isCompleted = node.completed;
+    let cls = `map-node node-${node.type}`;
+    if (isCurrent) cls += " is-current";
+    if (isReachable) cls += " is-reachable";
+    if (isCompleted) cls += " is-completed";
+    const title = meta.label + (isCurrent ? "（当前）" : isReachable ? "（可前往）" : "");
+    return `
+      <div class="${cls}"
+           data-node-id="${node.id}"
+           style="left:${node.x * 100}%;top:${node.y * 100}%;border-color:${meta.color};color:${meta.color}"
+           title="${title}">
+        <span class="map-node-icon">${meta.icon}</span>
+      </div>
+    `;
+  }).join("");
+
+  stageEl.innerHTML = `
+    <div class="floor-map-container ${map.theme.bgClass}">
+      <div class="floor-map-header">
+        <div class="floor-map-title">
+          <span class="floor-map-floor">第 ${map.floor} 关</span>
+          <span class="floor-map-name">${escapeHTML(map.theme.name)}</span>
+        </div>
+        <div class="floor-map-flavor">"${escapeHTML(map.theme.flavor)}"</div>
+      </div>
+      <div class="floor-map-canvas">
+        <svg class="floor-map-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+          ${edgesSvg}
+        </svg>
+        <div class="floor-map-nodes">
+          ${nodesHtml}
+        </div>
+      </div>
+      <div class="floor-map-legend">
+        ${(["battle", "elite", "boss", "event", "forge", "shop"] as const).map(t => {
+          const m = NODE_TYPE_META[t];
+          return `<span class="map-legend-chip"><span style="color:${m.color}">${m.icon}</span> ${m.label}</span>`;
+        }).join("")}
+      </div>
+    </div>
+  `;
+
+  // 绑定节点 click（仅可达节点）
+  const nodeEls = stageEl.querySelectorAll<HTMLDivElement>(".map-node");
+  nodeEls.forEach(el => {
+    const nodeId = el.dataset.nodeId!;
+    if (reachableIds.has(nodeId)) {
+      el.addEventListener("click", () => {
+        if (enterMapNode(state, nodeId)) render();
+      });
+    }
   });
 }
 
