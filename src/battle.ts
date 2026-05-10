@@ -16,12 +16,71 @@ import type {
 import { HAND_LIMIT, DRAW_PER_TURN, SUIT_SYMBOLS, SUITS } from "./types.ts";
 import { CARD_DB, suitMultiplier, damageEnemy, ENCHANT_EFFECTS } from "./cards.ts";
 
-// 检查玩家是否有染色 buff，返回强制使用的花色（覆盖攻击牌原本花色）
+// 检查玩家是否有染色/持咒 buff，返回强制使用的花色
+// 优先级：持咒（整场） > 染色（本回合）
 function getDyedSuit(player: PlayerState): Suit | null {
+  for (const suit of SUITS) {
+    if (player.statuses.some(s => s.id === `chanted_${suit}`)) return suit;
+  }
   for (const suit of SUITS) {
     if (player.statuses.some(s => s.id === `dyed_${suit}`)) return suit;
   }
   return null;
+}
+
+// ─────────────────────────────────────────────────────────
+// 花色专精 · 亲和度系统
+// ─────────────────────────────────────────────────────────
+
+// 每个花色 4 类来源累计
+export function getSuitAffinity(state: BattleState, suit: Suit): number {
+  let aff = 0;
+  // 装备同花色：每件 +1
+  for (const w of state.player.weapons) {
+    if (CARD_DB[w.defId]?.equipSuit === suit) aff += 1;
+  }
+  for (const a of state.player.armors) {
+    if (CARD_DB[a.defId]?.equipSuit === suit) aff += 1;
+  }
+  // 特性同花色：每张 +0.5
+  for (const p of state.player.perks) {
+    if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 0.5;
+  }
+  // 染色术 +3 / 持咒 +3
+  if (state.player.statuses.some(s => s.id === `dyed_${suit}`)) aff += 3;
+  if (state.player.statuses.some(s => s.id === `chanted_${suit}`)) aff += 3;
+  // 出过的同花色攻击牌：每张 +0.1（累积）
+  const played = state.player.statuses.find(s => s.id === `suit_played_${suit}`);
+  if (played) aff += played.stacks * 0.1;
+  // Tier 3 大招消耗：扣减
+  const consumed = state.player.statuses.find(s => s.id === `suit_consumed_${suit}`);
+  if (consumed) aff -= consumed.stacks;
+  return Math.max(0, Math.min(20, aff));
+}
+
+// 当前花色档位：0 / 1（≥5）/ 2（≥10）/ 3（≥15，可释放大招）
+export function suitTier(state: BattleState, suit: Suit): 0 | 1 | 2 | 3 {
+  const aff = getSuitAffinity(state, suit);
+  if (aff >= 15) return 3;
+  if (aff >= 10) return 2;
+  if (aff >= 5) return 1;
+  return 0;
+}
+
+// Tier 3 大招消耗 10 亲和（通过 suit_consumed_X 状态记录"已扣"）
+export function consumeSuitAffinity(state: BattleState, suit: Suit, amount: number): void {
+  const id = `suit_consumed_${suit}`;
+  const existing = state.player.statuses.find(s => s.id === id);
+  if (existing) existing.stacks += amount;
+  else state.player.statuses.push({ id, name: `${suit}-已耗`, stacks: amount, duration: -1 });
+}
+
+// 出过同花色攻击牌时累积（在 playAttack 调用）
+function trackSuitPlayed(state: BattleState, suit: Suit): void {
+  const id = `suit_played_${suit}`;
+  const existing = state.player.statuses.find(s => s.id === id);
+  if (existing) existing.stacks += 1;
+  else state.player.statuses.push({ id, name: `${suit}-击次数`, stacks: 1, duration: -1 });
 }
 
 // ─────────────────────────────────────────────────────────
@@ -275,6 +334,30 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     if (enchant?.bypassArmor?.(ctx, dmg)) bypassArmor = true;
   }
 
+  // ★ 花色专精 · 黑桃 Tier 1（≥5）：攻击 +5% + 5% 暴击 ×2
+  const sTier = suitTier(state, "spade");
+  if (sTier >= 1) {
+    dmg *= 1.05;
+    if (Math.random() < 0.05) {
+      dmg *= 2;
+      log("♠ 黑桃专精·暴击！伤害 ×2", "player");
+    }
+  }
+  // ★ 花色专精 · 红心 Tier 1（≥5）：攻击吸血 5%
+  const hTier = suitTier(state, "heart");
+  if (hTier >= 1) {
+    const heal = Math.max(0, Math.floor(dmg * 0.05));
+    if (heal > 0) {
+      player.vita = Math.min(player.vitaMax, player.vita + heal);
+      log(`♥ 红心专精·吸血 ${heal}。`, "player");
+    }
+  }
+  // ★ 花色专精 · 红心 Tier 2（≥10）：HP <25% 攻击 +25%
+  if (hTier >= 2 && player.vita < player.vitaMax * 0.25) {
+    dmg *= 1.25;
+    log("♥ 红心专精·绝境：攻击 +25%", "player");
+  }
+
   // ★ 穿甲射状态：本次攻击无视全部 armor（一次性）
   const pierceNext = player.statuses.find(s => s.id === "pierce_next");
   if (pierceNext) {
@@ -287,7 +370,7 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
   if (!bypassArmor) {
     const enemyArmor = ctx.target.armor ?? 0;
     if (enemyArmor > 0) {
-      // pierce 来源汇总：武器 + 洞察特性（每张 +1）+ 锐利附魔（+floor）+ 破军（动态 50%-70%）
+      // pierce 来源汇总：武器 + 洞察特性 + 锐利附魔 + 破军 + ♠ Tier 2 (+楼层)
       let pierce = wDef.pierce ?? 0;
       const insightStacks = player.perks.filter(p => p.defId === "p_insight").length;
       pierce += insightStacks;
@@ -296,6 +379,10 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
         const stacks = Math.min(player.weapons.length, 4);
         const ratio = [0.50, 0.50, 0.60, 0.70][stacks - 1];
         pierce += Math.ceil(enemyArmor * ratio);
+      }
+      // ♠ Tier 2：pierce += 楼层数
+      if (sTier >= 2) {
+        pierce += state.floor;
       }
       const effective = Math.max(0, enemyArmor - pierce);
       const actualPierce = Math.min(pierce, enemyArmor);
@@ -342,6 +429,12 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
 
   state.attackedThisTurn = true;
 
+  // 花色追踪：本攻击牌的实际花色
+  // 优先级：持咒/染色 > attackSuitOverride（铁匠铺染色） > def.attackSuit
+  const baseSuit = card.attackSuitOverride ?? def.attackSuit!;
+  const dyedActual = getDyedSuit(state.player) ?? baseSuit;
+  trackSuitPlayed(state, dyedActual);
+
   // 武器 hits（双刀 hits=2）+ 影袭额外 +1 hit
   const weaponDef = state.player.weapons[0] ? CARD_DB[state.player.weapons[0].defId] : null;
   const weaponHits = weaponDef?.hits ?? 1;
@@ -351,13 +444,27 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
     log("影袭：本次攻击 +1 hit。", "player");
     state.player.statuses = state.player.statuses.filter(s => s.id !== "shadow_double");
   }
-  const hits = weaponHits + shadowBonus;
+  // 方块 Tier 2：25% 概率额外 +1 hit
+  let diamondBonus = 0;
+  if (suitTier(state, "diamond") >= 2 && Math.random() < 0.25) {
+    diamondBonus = 1;
+    log("方块·灵巧：额外触发 +1 hit。", "player");
+  }
+  // ♦ 大招 影舞步：本次攻击 hits ×3（一次性）
+  let tripleMult = 1;
+  const triple = state.player.statuses.find(s => s.id === "triple_strike");
+  if (triple) {
+    tripleMult = 3;
+    state.player.statuses = state.player.statuses.filter(s => s.id !== "triple_strike");
+    log("♦ 影舞步：本次攻击三连击！", "player");
+  }
+  const hits = (weaponHits + shadowBonus + diamondBonus) * tripleMult;
   if (weaponHits > 1) log(`${weaponDef?.name} hits ×${weaponHits}。`, "player");
 
   const weaponId = state.player.weapons[0]?.defId;
   for (let i = 0; i < hits; i++) {
     if (!target.alive) break;
-    const dmg = calcAttackDamage(state, def.attackSuit!, log);
+    const dmg = calcAttackDamage(state, baseSuit, log);
     log(`▶ 攻击 ${SUIT_SYMBOLS[def.attackSuit!]} → ${target.name} -${dmg}。`, "player");
     target.hp = Math.max(0, target.hp - dmg);
     if (target.hp <= 0) {
@@ -562,6 +669,12 @@ export function getCurrentDodgeChance(player: PlayerState): number {
 }
 
 function damagePlayer(state: BattleState, base: number, log: (m: string, k?: LogKind) => void, attackerEnemy?: EnemyState) {
+  // ★ 闪避优先级 0：影舞步（本回合 100% 闪避）
+  if (state.player.statuses.find(s => s.id === "dodge_full_round")) {
+    log("★♦ 影舞步：本回合闪避！", "player");
+    state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
+    return;
+  }
   // ★ 闪避优先级 1：风步（必定闪避，一次性）
   const guarantee = state.player.statuses.find(s => s.id === "guaranteed_dodge");
   if (guarantee) {
@@ -573,8 +686,10 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
     return;
   }
-  // ★ 闪避优先级 2：闪避概率 roll
-  const dodgeChance = getCurrentDodgeChance(state.player);
+  // ★ 闪避优先级 2：闪避概率 roll（含 ♦ Tier 1 +5%）
+  let dodgeChance = getCurrentDodgeChance(state.player);
+  const dTier = suitTier(state, "diamond");
+  if (dTier >= 1) dodgeChance += 5;
   if (dodgeChance > 0 && Math.random() * 100 < dodgeChance) {
     log(`★ 闪避！（${dodgeChance}%）`, "player");
     if (state.player.weaponEnchant === "phantom") {
@@ -592,6 +707,18 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     dmg = Math.floor(dmg * 1.5);
     log("易伤：伤害 ×1.5。", "enemy");
   }
+
+  // ★ 花色专精 · 红心 Tier 2（≥10）：HP <50% 时受击 -30%
+  const hTierD = suitTier(state, "heart");
+  if (hTierD >= 2 && state.player.vita < state.player.vitaMax * 0.5) {
+    const before = dmg;
+    dmg = Math.floor(dmg * 0.7);
+    log(`♥ 红心专精·生存：受击 ${before}→${dmg}。`, "player");
+  }
+  // ★ 花色专精 · 梅花 Tier 1（≥5）：受击 -1；Tier 2（≥10）：再 -2
+  const cTier = suitTier(state, "club");
+  if (cTier >= 1) dmg = Math.max(0, dmg - 1);
+  if (cTier >= 2) dmg = Math.max(0, dmg - 2);
 
   // 防具 onTakeDamage
   if (state.player.armors.length > 0) {
@@ -631,6 +758,11 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   if (dmg > 0) {
     state.player.vita -= dmg;
     log(`你受到 ${dmg} 点伤害。`, "enemy");
+
+    // ★ 花色专精 · 方块 Tier 1（≥5）：受击反弹 +2
+    if (suitTier(state, "diamond") >= 1 && attackerEnemy?.alive) {
+      damageEnemy(attackerEnemy, 2, log, `♦ 方块专精反伤 → ${attackerEnemy.name} -2。`);
+    }
 
     // 不灭之心：HP 即将归 0 时复活，整局仅 1 次（用 player.revivesUsed 持久化）
     // 叠加层数决定复活后的 HP 比例：×1=50%, ×2=65%, ×3=80%, ×4=100%
@@ -808,6 +940,12 @@ export function endPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) 
 
   state.attackedThisTurn = false;
   log(`── 回合 ${state.turn}（你的回合）──`, "system");
+
+  // ★ 花色专精 · 红心 Tier 1（≥5）：每回合开始 +1 HP
+  if (suitTier(state, "heart") >= 1 && state.player.vita < state.player.vitaMax) {
+    state.player.vita = Math.min(state.player.vitaMax, state.player.vita + 1);
+    log("♥ 红心专精·生机：+1 HP。", "player");
+  }
 
   // 玩家中毒结算（每回合开始受 stacks 伤，stacks - 1）
   const playerPoison = state.player.statuses.find(s => s.id === "poison");

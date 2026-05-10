@@ -43,6 +43,8 @@ import {
   discardWeapons,
   discardArmors,
   applyNextBattlePenalty,
+  suitTier,
+  consumeSuitAffinity,
 } from "./battle.ts";
 // makeEnemyGroupsForFloor 现在被 map.ts 调用
 import {
@@ -202,6 +204,7 @@ function startNodeEvent(state: GameState, node: MapNode) {
 
 function startNodeForge(state: GameState) {
   state.phase = "forge";
+  state.forgeRecolorUsed = false;  // 每次进入铁匠铺重置染色服务
   pushLog(state, `⚒ 铁匠铺：使用灵魂碎片为武器附魔，或跳过。`, "system");
 }
 
@@ -252,6 +255,15 @@ export function gameSuitPicked(state: GameState, suit: Suit) {
     if (existing) existing.stacks += 1;
     else p.statuses.push({ id, name, stacks: 1, duration: 1 });
     log(`染色术：本回合攻击视为 ${SUIT_SYMBOLS[suit]}。`, "player");
+  } else if (action === "chant") {
+    // 持咒：整场战斗持续，duration -1
+    const id = `chanted_${suit}`;
+    const name = `持咒${SUIT_SYMBOLS[suit]}`;
+    const p = state.battle.player;
+    // 如果已有不同花色的持咒，先清掉（避免多重）
+    p.statuses = p.statuses.filter(s => !s.id.startsWith("chanted_"));
+    p.statuses.push({ id, name, stacks: 1, duration: -1 });
+    log(`持咒：整场战斗攻击视为 ${SUIT_SYMBOLS[suit]}。`, "player");
   } else if (action === "resonance") {
     const target = state.battle.enemies[state.battle.targetIndex]
       ?? state.battle.enemies.find(e => e.alive);
@@ -643,4 +655,100 @@ export function discardHandCards(state: GameState, uids: string[]): boolean {
   const names = discarded.map(c => CARD_DB[c.defId].name).join("、");
   pushLog(state, `主动弃手牌 ${discarded.length} 张：${names}。`, "player");
   return before > state.player.hand.length;
+}
+
+// ─────────────────────────────────────────────────────────
+// 花色专精 · Tier 3 大招（消耗 10 亲和度）
+// ─────────────────────────────────────────────────────────
+
+export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
+  if (state.phase !== "battle" || !state.battle) return false;
+  const tier = suitTier(state.battle, suit);
+  if (tier < 3) return false;
+  const log = logFn(state);
+  const player = state.battle.player;
+  const enemies = state.battle.enemies;
+
+  if (suit === "spade") {
+    // 狂战之击：当前目标 50% 真实伤害（无视护甲）
+    const target = enemies[state.battle.targetIndex] ?? enemies.find(e => e.alive);
+    if (target) {
+      const dmg = Math.max(1, Math.floor(target.hp * 0.5));
+      target.hp = Math.max(0, target.hp - dmg);
+      log(`★♠ 狂战之击！${target.name} -${dmg}（真实伤害，无视护甲）。`, "win");
+      if (target.hp <= 0) { target.alive = false; log(`★ 击败 ${target.name}！`, "win"); }
+    }
+  } else if (suit === "diamond") {
+    // 影舞步：本回合敌人攻击全闪避（dodge_full_round）+ 下次攻击 hits ×3
+    player.statuses.push({ id: "dodge_full_round", name: "影舞步·闪避", stacks: 99, duration: 1 });
+    player.statuses.push({ id: "triple_strike",   name: "影舞步·三连", stacks: 1,  duration: -1 });
+    log(`★♦ 影舞步！本回合 100% 闪避，下次攻击三连击。`, "win");
+  } else if (suit === "heart") {
+    // 生命洪流：HP 回满 + 永久 maxHP +5
+    const before = player.vita;
+    player.vitaMax += 5;
+    player.vita = player.vitaMax;
+    log(`★♥ 生命洪流！HP ${before} → ${player.vita}（maxHP +5）。`, "win");
+  } else if (suit === "club") {
+    // 群体禁咒：全敌 +3 沉默 / +3 易伤 / +3 中毒
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const exists = (id: string) => e.statuses.find(s => s.id === id);
+      const sil = exists("silenced");
+      if (sil) sil.duration = Math.max(sil.duration, 3);
+      else e.statuses.push({ id: "silenced", name: "沉默", stacks: 1, duration: 3 });
+      const vul = exists("vulnerable");
+      if (vul) { vul.stacks += 1; vul.duration = Math.max(vul.duration, 3); }
+      else e.statuses.push({ id: "vulnerable", name: "易伤", stacks: 1, duration: 3 });
+      const psn = exists("poison");
+      if (psn) psn.stacks += 3;
+      else e.statuses.push({ id: "poison", name: "中毒", stacks: 3, duration: -1 });
+    }
+    log(`★♣ 群体禁咒！全体敌人 +沉默 +易伤 +中毒。`, "win");
+  }
+
+  // 消耗 10 亲和度
+  consumeSuitAffinity(state.battle, suit, 10);
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────
+// 铁匠铺 · 染色服务（机制 C：3 任意碎片 → 1 张攻击牌永久变色）
+// 每次铁匠铺访问只能用 1 次
+// ─────────────────────────────────────────────────────────
+
+export function applyForgeRecolor(
+  state: GameState,
+  cardUid: string,
+  targetSuit: Suit,
+  paySpend: Partial<Record<EnemyRace, number>>,
+): boolean {
+  if (state.phase !== "forge") return false;
+  if (state.forgeRecolorUsed) return false;
+  // 验证支付总额 = 3
+  let total = 0;
+  for (const r in paySpend) total += paySpend[r as EnemyRace] ?? 0;
+  if (total !== 3) return false;
+  // 验证库存足够
+  for (const r in paySpend) {
+    const need = paySpend[r as EnemyRace] ?? 0;
+    if ((state.player.fragments[r as EnemyRace] ?? 0) < need) return false;
+  }
+  // 找到攻击牌
+  const card = state.player.deck.find(c => c.uid === cardUid)
+    ?? state.player.hand.find(c => c.uid === cardUid)
+    ?? state.player.discard.find(c => c.uid === cardUid);
+  if (!card) return false;
+  const def = CARD_DB[card.defId];
+  if (def.category !== "attack") return false;
+  // 扣碎片
+  for (const r in paySpend) {
+    const cost = paySpend[r as EnemyRace] ?? 0;
+    state.player.fragments[r as EnemyRace] -= cost;
+  }
+  // 染色（修改 card 实例的 attackSuit；CardInstance 不能改 def，但 instance 上可加 override 字段）
+  card.attackSuitOverride = targetSuit;
+  state.forgeRecolorUsed = true;
+  pushLog(state, `染坊：将「${def.name}」永久变为 ${SUIT_SYMBOLS[targetSuit]}。`, "win");
+  return true;
 }

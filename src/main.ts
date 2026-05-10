@@ -23,6 +23,8 @@ import {
   skipForge,
   gameSuitPicked,
   gameSuitPickCanceled,
+  releaseSuitUltimate,
+  applyForgeRecolor,
   skipFloorEvent,
   merchantBuyCard,
   merchantTradeFragments,
@@ -36,7 +38,7 @@ import {
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
 import { ABILITY_DESCS } from "./enemies.ts";
-import { getCurrentDodgeChance } from "./battle.ts";
+import { getCurrentDodgeChance, getSuitAffinity, suitTier } from "./battle.ts";
 import {
   EVENT_META, MERCHANT_PRICES, GAMBLER_OPTIONS, SHRINE_OPTIONS, CHEST_TRAP_DESCS,
 } from "./events.ts";
@@ -410,6 +412,8 @@ function renderBattle() {
   const dodgeChip = dodgePct > 0
     ? `<span class="pcard-dodge-chip" title="完全闪避概率：每次受击有 ${dodgePct}% 概率跳过整次伤害">🎯 闪避 ${dodgePct}%</span>`
     : "";
+  // 4 个花色亲和度芯片
+  const affinityChips = renderSuitAffinityChips();
   stageEl.innerHTML = `
     <div id="enemies-row"></div>
     <div id="player-card">
@@ -420,6 +424,7 @@ function renderBattle() {
       </div>
       <div class="pcard-equip-row" id="pcard-equip"></div>
       <div class="pcard-statuses" id="pcard-statuses"></div>
+      <div class="pcard-suit-row" id="pcard-suit-row">${affinityChips}</div>
     </div>
   `;
 
@@ -427,6 +432,29 @@ function renderBattle() {
   for (let i = 0; i < battle.enemies.length; i++) {
     row.appendChild(renderEnemy(battle.enemies[i], i));
   }
+
+  // 大招按钮绑定 + 二次确认
+  stageEl.querySelectorAll<HTMLButtonElement>(".suit-ult-btn").forEach(btn => {
+    const suit = btn.dataset.suit as Suit;
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const theme = SUIT_THEMES[suit];
+      const ultDescs: Record<Suit, string> = {
+        spade:   "对当前目标造成其当前 HP <b>50%</b> 的真实伤害（无视护甲）",
+        diamond: "本回合敌人攻击 <b>全部闪避</b>，下次攻击 hits <b>×3</b>",
+        heart:   "HP <b>回满</b>，永久 maxHP <b>+5</b>",
+        club:    "对全体敌人 +3 沉默 + +3 易伤 + +3 中毒",
+      };
+      showConfirm({
+        title: `${SUIT_SYMBOLS[suit]} ${theme.name} · 大招`,
+        body: `${ultDescs[suit]}<br><br>消耗 <b>10 点</b>该花色亲和度。`,
+        confirmLabel: "释放！",
+        onConfirm: () => {
+          if (releaseSuitUltimate(state, suit)) render();
+        },
+      });
+    });
+  });
 
   // Player card — equip row
   const equipRow = $("pcard-equip");
@@ -511,6 +539,44 @@ function openLogOverlay() {
   content.scrollTop = content.scrollHeight;
   document.getElementById("log-close")?.addEventListener("click", () => overlay.remove());
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+}
+
+// 4 个花色亲和度芯片 + 大招按钮
+const SUIT_THEMES: Record<Suit, { name: string; color: string }> = {
+  spade:   { name: "黑桃·莽夫", color: "#e6e6e6" },
+  diamond: { name: "方块·灵巧", color: "#ff8a8a" },
+  heart:   { name: "红心·吸血", color: "#ff5e5e" },
+  club:    { name: "梅花·魔法", color: "#aaffc3" },
+};
+function renderSuitAffinityChips(): string {
+  if (!state.battle) return "";
+  const chips: string[] = [];
+  for (const suit of SUITS) {
+    const aff = getSuitAffinity(state.battle, suit);
+    const tier = suitTier(state.battle, suit);
+    const sym = SUIT_SYMBOLS[suit as Suit];
+    const isRed = suit === "heart" || suit === "diamond";
+    const t1 = tier >= 1 ? "tier-on" : "";
+    const t2 = tier >= 2 ? "tier-on" : "";
+    const t3 = tier >= 3 ? "tier-on tier-3" : "";
+    const ultimateBtn = tier >= 3
+      ? `<button class="suit-ult-btn" data-suit="${suit}" title="释放 ${SUIT_THEMES[suit as Suit].name} 大招（消耗 10 亲和）">⚡</button>`
+      : "";
+    chips.push(`
+      <div class="suit-aff-chip${isRed ? " red" : ""}" data-suit="${suit}"
+        title="${SUIT_THEMES[suit as Suit].name}：亲和度 ${aff.toFixed(1)}">
+        <span class="saff-sym">${sym}</span>
+        <span class="saff-val">${aff.toFixed(1)}</span>
+        <span class="saff-tiers">
+          <span class="saff-tier ${t1}">5</span>
+          <span class="saff-tier ${t2}">10</span>
+          <span class="saff-tier ${t3}">15</span>
+        </span>
+        ${ultimateBtn}
+      </div>
+    `);
+  }
+  return chips.join("");
 }
 
 function renderEnemy(e: EnemyState, idx: number): HTMLElement {
@@ -912,12 +978,29 @@ function renderDiscardCardEl(inst: CardInstance): HTMLElement {
 function renderForge() {
   const cur = state.player.weaponEnchant;
   const curWeapon = state.player.weapons[0] ? CARD_DB[state.player.weapons[0].defId].name : "（无武器）";
+  const recolorUsed = state.forgeRecolorUsed === true;
+  const totalFragments = Object.values(state.player.fragments).reduce((a, b) => a + b, 0);
+  const recolorBtn = recolorUsed
+    ? `<button class="forge-recolor-btn" disabled>本次已用过染色</button>`
+    : totalFragments < 3
+      ? `<button class="forge-recolor-btn" disabled>碎片不足（需 3 任意）</button>`
+      : `<button class="forge-recolor-btn">染色 1 张攻击牌（消耗 3 任意碎片）</button>`;
   stageEl.innerHTML = `
     <p class="hint">用灵魂碎片为武器附魔（消耗 ${ENCHANT_COST} 同种族碎片）。换附魔会覆盖旧的。</p>
     <div id="forge-current">当前武器：<b>${escapeHTML(curWeapon)}</b>　|　当前附魔：<b>${cur ? escapeHTML(ENCHANT_NAMES[cur]) : "（无）"}</b></div>
+    <div id="forge-recolor-section">
+      <div class="forge-recolor-title">🎨 染坊（每次铁匠铺仅可使用 1 次）</div>
+      <div class="forge-recolor-desc">用任意 3 个灵魂碎片，把牌库里的 1 张攻击牌永久变成你选的花色。</div>
+      ${recolorBtn}
+    </div>
     <div id="forge-list"></div>
     <button id="forge-skip-btn" class="big-btn">跳过铁匠铺</button>
   `;
+  // 染色按钮绑定
+  const rb = stageEl.querySelector(".forge-recolor-btn") as HTMLButtonElement | null;
+  if (rb && !recolorUsed && totalFragments >= 3) {
+    rb.addEventListener("click", () => showForgeRecolorWizard());
+  }
   const list = $("forge-list");
   for (const eid of ENCHANTS) {
     const race = ENCHANT_RACE[eid];
@@ -941,6 +1024,100 @@ function renderForge() {
     list.appendChild(card);
   }
   $("forge-skip-btn").addEventListener("click", () => { skipForge(state); render(); });
+}
+
+// 染色向导：选攻击牌 → 选目标花色 → 自动从最高库存种族扣 3 碎片
+function showForgeRecolorWizard(): void {
+  const attackCards = state.player.deck.filter(c => CARD_DB[c.defId]?.category === "attack");
+  if (attackCards.length === 0) {
+    showConfirm({ title: "无攻击牌", body: "牌库里没有攻击牌可染色。", confirmLabel: "知道了", onConfirm: () => {} });
+    return;
+  }
+  // 第 1 步：选攻击牌
+  document.getElementById("recolor-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "recolor-overlay";
+  overlay.className = "ic-overlay";
+  overlay.innerHTML = `
+    <div class="ic-modal" style="max-width: 480px">
+      <div class="ic-title">🎨 选要染色的攻击牌</div>
+      <div class="recolor-cards-grid"></div>
+      <div class="ic-actions"><button class="ic-cancel">取消</button></div>
+    </div>
+  `;
+  const grid = overlay.querySelector(".recolor-cards-grid")!;
+  // 按 (defId, attackSuitOverride/原色) 分组
+  const seen = new Set<string>();
+  for (const card of attackCards) {
+    const def = CARD_DB[card.defId];
+    const curSuit = card.attackSuitOverride ?? def.attackSuit ?? "spade";
+    const key = `${def.id}-${curSuit}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const sym = SUIT_SYMBOLS[curSuit as Suit];
+    const isRed = curSuit === "heart" || curSuit === "diamond";
+    const item = document.createElement("div");
+    item.className = "recolor-card-item";
+    item.innerHTML = `
+      <div class="recolor-card-name">${escapeHTML(def.name)}</div>
+      <div class="recolor-card-suit${isRed ? " red" : ""}">${sym}</div>
+    `;
+    item.addEventListener("click", () => {
+      overlay.remove();
+      pickRecolorTargetSuit(card.uid, curSuit as Suit);
+    });
+    grid.appendChild(item);
+  }
+  overlay.querySelector(".ic-cancel")!.addEventListener("click", () => overlay.remove());
+  document.body.appendChild(overlay);
+}
+
+function pickRecolorTargetSuit(cardUid: string, currentSuit: Suit): void {
+  document.getElementById("recolor-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "recolor-overlay";
+  overlay.className = "ic-overlay";
+  const card = state.player.deck.find(c => c.uid === cardUid);
+  const def = card ? CARD_DB[card.defId] : null;
+  overlay.innerHTML = `
+    <div class="ic-modal" style="max-width: 360px">
+      <div class="ic-title">选目标花色</div>
+      <div class="ic-body">将 <b>${escapeHTML(def?.name ?? "")}</b>（${SUIT_SYMBOLS[currentSuit]}）变成什么花色？</div>
+      <div class="suit-pick-wide-grid"></div>
+      <div class="ic-actions"><button class="ic-cancel">取消</button></div>
+    </div>
+  `;
+  const grid = overlay.querySelector(".suit-pick-wide-grid")!;
+  for (const suit of SUITS) {
+    if (suit === currentSuit) continue;
+    const sym = SUIT_SYMBOLS[suit as Suit];
+    const isRed = suit === "heart" || suit === "diamond";
+    const btn = document.createElement("button");
+    btn.className = `suit-pick-btn${isRed ? " red" : ""}`;
+    btn.textContent = sym;
+    btn.addEventListener("click", () => {
+      overlay.remove();
+      // 自动从库存最多的种族扣 3 个
+      const races: import("./types.ts").EnemyRace[] = ["beast", "humanoid", "undead", "giant", "dark"];
+      const sorted = [...races].sort((a, b) => (state.player.fragments[b] ?? 0) - (state.player.fragments[a] ?? 0));
+      const paySpend: Partial<Record<import("./types.ts").EnemyRace, number>> = {};
+      let need = 3;
+      for (const r of sorted) {
+        if (need <= 0) break;
+        const have = state.player.fragments[r] ?? 0;
+        const take = Math.min(have, need);
+        if (take > 0) {
+          paySpend[r] = take;
+          need -= take;
+        }
+      }
+      if (need > 0) return;
+      if (applyForgeRecolor(state, cardUid, suit as Suit, paySpend)) render();
+    });
+    grid.appendChild(btn);
+  }
+  overlay.querySelector(".ic-cancel")!.addEventListener("click", () => overlay.remove());
+  document.body.appendChild(overlay);
 }
 
 // ─────────────────────────────────────────────────────────

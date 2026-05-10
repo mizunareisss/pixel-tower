@@ -130,7 +130,7 @@ const LONG_SWORD: CardDef = {
   category: "equipment",
   desc: "装备：基础伤害 7，破甲 3（无视敌人 3 点护甲）。",
   equipKind: "weapon",
-  equipSuit: "club",
+  equipSuit: "spade",
   baseDmg: 7,
   pierce: 3,
   equipEffects: [
@@ -161,13 +161,45 @@ const DAGGER: CardDef = {
   ],
 };
 
+// ♥ 偏攻击吸血武器：高基础伤 + 击杀大量回血 + 残血加成
+const BLOOD_BLADE: CardDef = {
+  id: "blood_blade",
+  name: "血裂刃",
+  category: "equipment",
+  desc: "装备：基础伤害 7，吸血 30%。击杀目标时额外回 20% 最大 HP。",
+  equipKind: "weapon",
+  equipSuit: "heart",
+  baseDmg: 7,
+  equipEffects: (() => {
+    const mk = (vampPct: number, killPct: number) => ({
+      desc: `基础 7×N + 吸血 ${Math.round(vampPct * 100)}% + 击杀回 ${Math.round(killPct * 100)}% maxHP。`,
+      stat: `吸${Math.round(vampPct * 100)}% 击杀+${Math.round(killPct * 100)}%`,
+      onAttack: (ctx: BattleContext, d: number) => {
+        const heal = Math.floor(d * vampPct);
+        if (heal > 0) {
+          ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + heal);
+          ctx.log(`血裂刃吸血 ${heal}。`, "player");
+        }
+        // 击杀检测：本击若致死，额外回 X% maxHP
+        if (ctx.target.alive && ctx.target.hp - d <= 0) {
+          const bonus = Math.floor(ctx.player.vitaMax * killPct);
+          ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + bonus);
+          ctx.log(`血裂刃击杀回血 ${bonus}。`, "player");
+        }
+        return d;
+      },
+    });
+    return [mk(0.30, 0.15), mk(0.35, 0.18), mk(0.40, 0.22), mk(0.50, 0.28)] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
+  })(),
+};
+
 const WAR_BOW: CardDef = {
   id: "war_bow",
   name: "战弓",
   category: "equipment",
   desc: "装备：基础伤害 6，狙击——攻击 HP > 50% 的敌人 +4 伤。",
   equipKind: "weapon",
-  equipSuit: "diamond",
+  equipSuit: "spade",
   baseDmg: 6,
   equipEffects: [
     { desc: "基础 6 + HP>50% 狙击 +4。", stat: "6 伤 狙击+4",
@@ -189,7 +221,7 @@ const TWIN_BLADES: CardDef = {
   category: "equipment",
   desc: "装备：基础伤害 4，每次出攻击牌真触发 2 次（武器钩子触发 2 次）。",
   equipKind: "weapon",
-  equipSuit: "spade",
+  equipSuit: "diamond",
   baseDmg: 4,
   hits: 2,
   equipEffects: [
@@ -239,7 +271,7 @@ const BATTLE_STAFF: CardDef = {
   category: "equipment",
   desc: "装备：基础伤害 5，每次攻击给目标 +1 易伤（×1.5 受伤）持续 2 回合。",
   equipKind: "weapon",
-  equipSuit: "heart",
+  equipSuit: "club",
   baseDmg: 5,
   equipEffects: [
     { desc: "基础 5 + 易伤 ×1.5。", stat: "5 伤 易伤×1.5" },
@@ -310,7 +342,7 @@ const REPEATING_BOW: CardDef = {
   category: "equipment",
   desc: "装备：基础伤害 4，每回合可出多张攻击牌。连续两回合都出了一张以上的攻击时，第三回合开始自动弃置。",
   equipKind: "weapon",
-  equipSuit: "heart",
+  equipSuit: "diamond",
   baseDmg: 4,
   equipEffects: [
     { desc: "基础 4，可连续攻击。", stat: "4 伤 连击" },
@@ -348,7 +380,7 @@ const ROUND_SHIELD: CardDef = {
   category: "equipment",
   desc: "装备：受击 -3。",
   equipKind: "armor",
-  equipSuit: "diamond",
+  equipSuit: "club",
   baseReduce: 3,
   equipEffects: [
     { desc: "受击 -3。", stat: "-3 受击", onTakeDamage: (_c, d) => Math.max(0, d - 3) },
@@ -382,13 +414,44 @@ const LEATHER_ARMOR: CardDef = {
   ],
 };
 
+// ♥ 偏生存防具：低血量受击大幅减半 + 战斗结束自动回血
+const CROWN_OF_VITALITY: CardDef = {
+  id: "crown_of_vitality",
+  name: "生命之冠",
+  category: "equipment",
+  desc: "装备：受击 -1。HP < 30% 时受击额外减半。",
+  equipKind: "armor",
+  equipSuit: "heart",
+  baseReduce: 1,
+  equipEffects: (() => {
+    const mk = (reduce: number, hpThreshold: number, halfMult: number) => ({
+      desc: `受击 -${reduce}。HP < ${Math.round(hpThreshold * 100)}% 时受击额外 ×${halfMult}。`,
+      stat: `-${reduce} 受击 危机×${halfMult}`,
+      onTakeDamage: (c: BattleContext, d: number) => {
+        let nd = Math.max(0, d - reduce);
+        if (c.player.vita < c.player.vitaMax * hpThreshold) {
+          nd = Math.floor(nd * halfMult);
+          c.log(`生命之冠·危机：受击 ×${halfMult}（${d}→${nd}）。`, "player");
+        }
+        return nd;
+      },
+    });
+    return [
+      mk(1, 0.30, 0.6),
+      mk(1, 0.35, 0.55),
+      mk(2, 0.40, 0.50),
+      mk(2, 0.50, 0.40),
+    ] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
+  })(),
+};
+
 const SPIKE_ARMOR: CardDef = {
   id: "spike_armor",
   name: "反伤甲",
   category: "equipment",
   desc: "装备：受击反伤 3。",
   equipKind: "armor",
-  equipSuit: "spade",
+  equipSuit: "diamond",
   baseReduce: 0,
   equipEffects: [
     { desc: "反伤 3。", stat: "反伤 3", onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 3, c.log, `反伤甲 → ${t.name} -3。`); return d; } },
@@ -430,7 +493,7 @@ const MAGE_ROBE: CardDef = {
   category: "equipment",
   desc: "装备：受击 -1。出技能/道具时额外摸 1 张牌（持续过牌）。",
   equipKind: "armor",
-  equipSuit: "diamond",
+  equipSuit: "club",
   baseReduce: 1,
   equipEffects: [
     { desc: "受击 -1 + 技能/道具摸 1 张。", stat: "-1 受击 +1摸/技", onTakeDamage: (_c, d) => Math.max(0, d - 1) },
@@ -446,7 +509,7 @@ const CLOAK: CardDef = {
   category: "equipment",
   desc: "装备：受击 -1。每回合开始消除自身 1 个负面状态。",
   equipKind: "armor",
-  equipSuit: "spade",
+  equipSuit: "diamond",
   baseReduce: 1,
   equipEffects: [
     { desc: "-1 受击 + 自动驱毒。", stat: "-1 受击 自动驱毒",
@@ -494,7 +557,7 @@ const SCALE_MAIL: CardDef = {
   category: "equipment",
   desc: "装备：受击 -2，反伤 2。减伤+反伤双修，介于盾与反伤甲之间。",
   equipKind: "armor",
-  equipSuit: "heart",
+  equipSuit: "diamond",
   baseReduce: 2,
   equipEffects: [
     { desc: "-2 受击 + 反伤 2。", stat: "-2 受击 反伤2",
@@ -678,6 +741,16 @@ const SK_DYE: CardDef = {
   onPlay: (c) => {
     (c as any)._suitPick = "dye";
     c.log("染色术：请选择本回合攻击牌花色。", "player");
+  },
+};
+
+// 持咒：整场战斗内所有攻击牌视为指定花色（持续整场，染色术升级版）
+const SK_CHANT: CardDef = {
+  id: "sk_chant", name: "持咒", category: "skill", target: "self",
+  desc: "本场战斗内所有攻击牌的花色永久视为你选定的花色（直到战斗结束）。",
+  onPlay: (c) => {
+    (c as any)._suitPick = "chant";
+    c.log("持咒：请选择本场战斗攻击牌花色。", "player");
   },
 };
 
@@ -906,7 +979,7 @@ const EXCALIBUR: CardDef = {
   id: "excalibur", name: "王者之剑", category: "equipment",
   desc: "基础 10，无视全部护甲，攻击 +30%。",
   equipKind: "weapon",
-  equipSuit: "heart",
+  equipSuit: "spade",
   baseDmg: 10,
   pierce: 99,
   equipEffects: [
@@ -1239,6 +1312,7 @@ export const CARD_DB: Record<string, CardDef> = {
   wizard_staff: WIZARD_STAFF,
   repeating_bow: REPEATING_BOW,
   raider: RAIDER,
+  blood_blade: BLOOD_BLADE,
   // 防具（9）
   round_shield: ROUND_SHIELD,
   leather_armor: LEATHER_ARMOR,
@@ -1249,6 +1323,7 @@ export const CARD_DB: Record<string, CardDef> = {
   full_plate: FULL_PLATE,
   scale_mail: SCALE_MAIL,
   mind_armor: MIND_ARMOR,
+  crown_of_vitality: CROWN_OF_VITALITY,
   // 技能（16 单体 + 8 群攻 = 24）
   sk_poison_blade: SK_POISON_BLADE,
   sk_battle_cry: SK_BATTLE_CRY,
@@ -1268,6 +1343,7 @@ export const CARD_DB: Record<string, CardDef> = {
   sk_dbl_pummel: SK_DBL_PUMMEL,
   // 花色操作（单体）
   sk_dye: SK_DYE,
+  sk_chant: SK_CHANT,
   sk_attune: SK_ATTUNE,
   sk_recolor: SK_RECOLOR,
   // 持续/延时（单体）
@@ -1324,9 +1400,10 @@ export const CARD_DB: Record<string, CardDef> = {
 const _RARITY: Record<string, "rare" | "super_rare" | "epic"> = {
   // ── Rare（稳定的 build 件 / 解 buff / 群攻基础）──────────
   twin_blades: "rare", warhammer: "rare", battle_staff: "rare", chain_whip: "rare",
-  raider: "rare",
+  raider: "rare", blood_blade: "rare",
   spike_armor: "rare", scale_mail: "rare", full_plate: "rare",
-  sk_blast: "rare", sk_shadow_strike: "rare", sk_dye: "rare", sk_attune: "rare",
+  crown_of_vitality: "rare",
+  sk_blast: "rare", sk_shadow_strike: "rare", sk_dye: "rare", sk_attune: "rare", sk_chant: "super_rare",
   sk_pierce_shot: "rare",
   it_regroup: "rare", it_elixir: "rare", it_smoke: "rare",
   sk_chain_bolt: "rare", sk_fire_wall: "rare", sk_shockwave: "rare",
@@ -1367,9 +1444,11 @@ export const BASIC_ARMORS = [
 export const BUILD_WEAPONS = [
   "twin_blades", "warhammer", "battle_staff", "chain_whip",
   "berserker_blade", "wizard_staff", "repeating_bow",
+  "blood_blade",
 ];
 export const BUILD_ARMORS = [
   "spike_armor", "scale_mail", "full_plate", "mage_robe", "mind_armor",
+  "crown_of_vitality",
 ];
 
 export const STARTING_DECK_IDS: string[] = [
@@ -1393,17 +1472,19 @@ export const REWARD_CARD_POOL_BASE = [
   // 基础装备（common 档，可用来叠加副本到 ×2/×3/×4）
   "long_sword", "dagger", "war_bow",
   "round_shield", "leather_armor", "heavy_armor", "cloak",
-  // build 武器（8 = 原 7 + 破军）
+  // build 武器（9 = 原 7 + 破军 + 血裂刃）
   "twin_blades", "warhammer", "battle_staff", "chain_whip",
   "berserker_blade", "wizard_staff", "repeating_bow", "raider",
-  // build 防具（5）
+  "blood_blade",
+  // build 防具（6）
   "spike_armor", "scale_mail", "full_plate", "mage_robe", "mind_armor",
+  "crown_of_vitality",
   // 单体技能（24 = 22 + 风步 + 穿甲射）
   "sk_poison_blade", "sk_battle_cry", "sk_frenzy", "sk_evasive",
   "sk_silence", "sk_freeze", "sk_rend", "sk_focus",
   "sk_aegis", "sk_charge", "sk_weakening_bolt", "sk_shadow_strike",
   "sk_quick_draw", "sk_counter_stance", "sk_blast", "sk_dbl_pummel",
-  "sk_dye", "sk_attune", "sk_recolor",
+  "sk_dye", "sk_attune", "sk_recolor", "sk_chant",
   "sk_curse_blood", "sk_rhythm", "sk_time_stop",
   "sk_step", "sk_pierce_shot",
   // 道具（7 = 原 6 + 烟雾弹）

@@ -2709,3 +2709,152 @@ body.is-touch button:hover:not(:disabled) {
   font-size: 11px;
   line-height: 1.5;
 }
+
+/* ═══════════════════════════════════════
+   花色专精 · 亲和度芯片
+═══════════════════════════════════════ */
+
+.pcard-suit-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.suit-aff-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--white);
+}
+.suit-aff-chip.red { color: var(--red); }
+.saff-sym { font-size: 13px; font-weight: 900; line-height: 1; }
+.saff-val { font-weight: 700; }
+.saff-tiers { display: inline-flex; gap: 2px; margin-left: 4px; }
+.saff-tier {
+  display: inline-block;
+  width: 14px; height: 14px;
+  font-size: 8px;
+  text-align: center;
+  line-height: 14px;
+  background: rgba(255,255,255,0.08);
+  color: var(--gray-dim);
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.10);
+  font-weight: 900;
+}
+.saff-tier.tier-on {
+  background: var(--yellow);
+  color: #1a1a1a;
+  border-color: var(--yellow);
+  box-shadow: 0 0 6px rgba(245,197,24,0.6);
+}
+.saff-tier.tier-on.tier-3 {
+  background: linear-gradient(45deg, #ffd460, #ff5e5e);
+  animation: tier3Pulse 1.2s ease-in-out infinite;
+}
+@keyframes tier3Pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(255,140,40,0.6); }
+  50%      { box-shadow: 0 0 14px rgba(255,180,40,1); }
+}
+
+.suit-ult-btn {
+  margin-left: 4px;
+  width: 22px;
+  height: 22px;
+  background: linear-gradient(45deg, #ffd460, #ff5e5e);
+  border: 1px solid #ffd460;
+  color: #1a1a1a;
+  font-size: 13px;
+  font-weight: 900;
+  border-radius: 50%;
+  cursor: pointer;
+  clip-path: none !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  padding: 0 !important;
+  animation: tier3Pulse 1.2s ease-in-out infinite;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ═══════════════════════════════════════
+   铁匠铺 · 染色服务
+═══════════════════════════════════════ */
+
+#forge-recolor-section {
+  background: rgba(155,89,182,0.10);
+  border: 1px solid rgba(155,89,182,0.40);
+  padding: 10px 12px;
+  margin: 10px 0;
+}
+.forge-recolor-title {
+  color: var(--purple);
+  font-weight: 900;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.forge-recolor-desc {
+  color: var(--gray);
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.forge-recolor-btn {
+  background: var(--purple);
+  color: var(--white);
+  font-size: 11px;
+  padding: 6px 14px;
+  border: none;
+  clip-path: none;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+  font-weight: 900;
+}
+.forge-recolor-btn:disabled {
+  background: var(--bg-elev);
+  color: var(--gray-dim);
+  cursor: not-allowed;
+}
+
+.recolor-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 6px;
+  margin: 10px 0 12px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.recolor-card-item {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  padding: 8px 6px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.1s;
+}
+.recolor-card-item:active { border-color: var(--yellow); }
+.recolor-card-name {
+  font-size: 11px;
+  color: var(--white);
+  margin-bottom: 2px;
+  font-weight: 700;
+}
+.recolor-card-suit {
+  font-size: 18px;
+  color: var(--white);
+}
+.recolor-card-suit.red { color: var(--red); }
+
+.suit-pick-wide-grid {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 10px 0 14px;
+}

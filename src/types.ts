@@ -82,6 +82,16 @@ export const STATUS_META: Record<string, StatusMeta> = {
   dyed_heart:   { name: "染色♥", desc: "本回合攻击牌视为红心。", kind: "buff" },
   dyed_club:    { name: "染色♣", desc: "本回合攻击牌视为梅花。", kind: "buff" },
 
+  // 持咒 buff（整场战斗持续，攻击牌永久视为该花色）
+  chanted_spade:   { name: "持咒♠", desc: "本场战斗内攻击牌视为黑桃。", kind: "buff" },
+  chanted_diamond: { name: "持咒♦", desc: "本场战斗内攻击牌视为方块。", kind: "buff" },
+  chanted_heart:   { name: "持咒♥", desc: "本场战斗内攻击牌视为红心。", kind: "buff" },
+  chanted_club:    { name: "持咒♣", desc: "本场战斗内攻击牌视为梅花。", kind: "buff" },
+
+  // 花色专精大招触发的临时 buff
+  dodge_full_round: { name: "影舞步", desc: "本回合敌人攻击全部闪避。", kind: "buff" },
+  triple_strike:    { name: "三连击", desc: "下次攻击 hits ×3。", kind: "buff" },
+
   // 敌人 debuff
   burn:       { name: "燃烧", desc: "每回合 -stacks HP，持续 duration 回合。", kind: "debuff" },
   rend:       { name: "撕裂", desc: "受到的伤害永久 +stacks。", kind: "debuff" },
@@ -256,6 +266,8 @@ export interface CardInstance {
   suit?: Suit;
   slotId?: string;
   acquiredAtFloor?: number;     // 获得时所在的关卡（起始牌库 = 0；用于整理 UI 标记本关新增）
+  // 铁匠铺染色覆盖：永久把攻击牌花色改成此值（攻击牌专用）
+  attackSuitOverride?: Suit;
 }
 
 // ── 玩家状态 ──────────────────────────────────────────────
@@ -403,6 +415,9 @@ export interface GameState {
 
   // 楼层地图（floor_map 阶段时由 map.ts 设置）
   floorMap?: FloorMap;
+
+  // 铁匠铺访问内是否已用过染色服务（每次访问只允许 1 次）
+  forgeRecolorUsed?: boolean;
 
   // 事件结果对话框（事件完成后展示，玩家点确认才回地图）
   eventResult?: {
