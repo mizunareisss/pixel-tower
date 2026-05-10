@@ -3405,6 +3405,35 @@ body.is-touch button:hover:not(:disabled) {
 .loadout-deck-stats .rarity-super_rare { color: #d460ff; }
 .loadout-deck-stats .rarity-epic       { color: #ffd460; }
 
+.loadout-frags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.loadout-frag-pill {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  color: var(--white);
+}
+.loadout-frag-pill b {
+  font-weight: 900;
+  color: var(--yellow);
+  margin-left: 2px;
+}
+.loadout-frag-pill.rare {
+  border-color: rgba(255,140,40,0.50);
+  background: rgba(255,140,40,0.08);
+}
+.loadout-frag-pill.loadout-frag-zero {
+  opacity: 0.45;
+}
+.loadout-frag-pill.loadout-frag-zero b {
+  color: var(--gray-dim);
+}
+
 /* 图鉴 · 附魔分组 */
 .codex-enchant-branch {
   margin-bottom: 18px;

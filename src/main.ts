@@ -1694,6 +1694,22 @@ function showLoadoutModal(): void {
     </div>
   `;
 
+  // 灵魂碎片
+  const fragTotal = RACES.reduce((s, r) => s + (player.fragments[r] ?? 0), 0);
+  const fragBlock = `
+    <div class="loadout-row">
+      <div class="loadout-label">💠 灵魂碎片 (${fragTotal})</div>
+      <div class="loadout-content loadout-frags">
+        ${RACES.map(r => {
+          const have = player.fragments[r] ?? 0;
+          const rare = isRareRace(r);
+          const dim = have === 0 ? " loadout-frag-zero" : "";
+          return `<span class="loadout-frag-pill${rare ? " rare" : ""}${dim}" title="${RACE_NAMES[r]}（${rare ? "稀少种族" : "普通种族"}）">${FRAGMENT_ICONS[r]} ${FRAGMENT_NAMES[r]} <b>${have}</b></span>`;
+        }).join("")}
+      </div>
+    </div>
+  `;
+
   const overlay = document.createElement("div");
   overlay.id = "loadout-overlay";
   overlay.className = "ic-overlay";
@@ -1706,6 +1722,7 @@ function showLoadoutModal(): void {
         ${encBlock}
         ${perkBlock}
         ${suitBlock}
+        ${fragBlock}
         ${deckBlock}
       </div>
       <div class="ic-actions"><button class="ic-confirm">关闭</button></div>

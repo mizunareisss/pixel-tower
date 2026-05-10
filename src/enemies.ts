@@ -136,11 +136,24 @@ const RACE_SUIT_PREF: Record<EnemyRace, Suit> = {
   beast: "club", humanoid: "spade", undead: "spade", giant: "club", dark: "diamond",
 };
 
-// 楼层 → 可用种族（递增解锁）
-// v2：稀少种族（巨怪/暗影）从第 3 关起就有概率出现，让玩家更早获得稀少碎片
-function getRaceWhitelist(floor: number): EnemyRace[] {
+// 楼层 → 可用种族（按战斗档位独立解锁）
+// 设计：
+//   - 普通战：稀少种族（巨怪/暗影）第 3 关起就能遇到，玩家想刷碎片可主动选
+//   - 精英战：稀少种族晚 2 关解锁，避免低层精英 HP 暴涨
+//   - Boss 战：稀少种族再晚 1 关，避免 floor 3 boss 被抽到 giant ×3.2 HP 这种
+function getRaceWhitelist(floor: number, tier: "normal" | "elite" | "boss" = "normal"): EnemyRace[] {
   if (floor <= 2) return ["beast", "humanoid"];
-  // 第 3 关起：5 种族全开（普通战仍以 3 个普通种族为主，靠权重压制）
+  if (tier === "boss") {
+    if (floor <= 5) return ["beast", "humanoid", "undead"];
+    if (floor <= 7) return ["beast", "humanoid", "undead", "giant"];
+    return ["beast", "humanoid", "undead", "giant", "dark"];
+  }
+  if (tier === "elite") {
+    if (floor <= 4) return ["beast", "humanoid", "undead"];
+    if (floor <= 6) return ["beast", "humanoid", "undead", "giant"];
+    return ["beast", "humanoid", "undead", "giant", "dark"];
+  }
+  // normal：第 3 关起就有概率全 5 种族出现（让玩家能在普通战刷稀少碎片）
   return ["beast", "humanoid", "undead", "giant", "dark"];
 }
 
@@ -246,7 +259,7 @@ interface BuildOpts {
 }
 
 function buildRandomEnemy(opts: BuildOpts): EnemyState {
-  const whitelist = getRaceWhitelist(opts.floor);
+  const whitelist = getRaceWhitelist(opts.floor, opts.tier);
   const race = opts.race ?? pickRaceWeighted(whitelist, opts.tier);
   const tier = opts.tier;
 
