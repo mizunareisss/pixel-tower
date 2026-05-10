@@ -63,24 +63,60 @@ interface NodeTypeWeights {
 }
 
 function midLayerWeights(floor: number, layerIdx: number, totalMidLayers: number): NodeTypeWeights {
-  // 越靠近末端，elite 越多；商人/铁匠铺保持稀有
+  // 越靠近末端，elite 越多；事件 / 商人 / 铁匠铺保持稀有
   const lastLayerBoost = layerIdx === totalMidLayers - 1 ? 1.5 : 1;
+  // 第 1 关：以战斗为主，几乎无事件
+  if (floor === 1) {
+    return {
+      battle: 80,
+      elite:  Math.round(12 * lastLayerBoost),
+      event:  4,
+      forge:  0,
+      shop:   0,
+    };
+  }
   return {
-    battle: 50,
-    elite:  Math.round(15 * lastLayerBoost),
-    event:  20,
-    forge:  floor >= 2 ? 8 : 0,    // 第 1 关无铁匠铺
-    shop:   floor >= 2 ? 7 : 0,
+    battle: 60,
+    elite:  Math.round(14 * lastLayerBoost),
+    event:  12,
+    forge:  floor >= 2 ? 7 : 0,
+    shop:   floor >= 2 ? 6 : 0,
   };
 }
 
-function pickNodeType(weights: NodeTypeWeights): MapNodeType {
-  const total = weights.battle + weights.elite + weights.event + weights.forge + weights.shop;
+// 每张图各类型节点的硬上限（防止 5 个中间节点里 3 个是事件这种情况）
+function maxCountsForFloor(floor: number): Record<MapNodeType, number> {
+  return {
+    start:  1,
+    boss:   1,
+    elite:  floor <= 2 ? 1 : 2,
+    event:  floor === 1 ? 1 : 2,
+    forge:  1,
+    shop:   1,
+    battle: 99,  // 兜底类型
+  };
+}
+
+function pickNodeTypeWithCaps(
+  weights: NodeTypeWeights,
+  counts: Record<MapNodeType, number>,
+  maxCounts: Record<MapNodeType, number>,
+  layerEventTaken: boolean,
+): MapNodeType {
+  // 屏蔽达到上限的类型 + 同层已有事件时禁掉再事件
+  const w: NodeTypeWeights = { ...weights };
+  if (counts.battle >= maxCounts.battle) w.battle = 0;
+  if (counts.elite  >= maxCounts.elite)  w.elite  = 0;
+  if (counts.event  >= maxCounts.event || layerEventTaken) w.event = 0;
+  if (counts.forge  >= maxCounts.forge)  w.forge  = 0;
+  if (counts.shop   >= maxCounts.shop)   w.shop   = 0;
+  const total = w.battle + w.elite + w.event + w.forge + w.shop;
+  if (total <= 0) return "battle";
   let r = Math.random() * total;
-  if ((r -= weights.battle) < 0) return "battle";
-  if ((r -= weights.elite) < 0)  return "elite";
-  if ((r -= weights.event) < 0)  return "event";
-  if ((r -= weights.forge) < 0)  return "forge";
+  if ((r -= w.battle) < 0) return "battle";
+  if ((r -= w.elite)  < 0) return "elite";
+  if ((r -= w.event)  < 0) return "event";
+  if ((r -= w.forge)  < 0) return "forge";
   return "shop";
 }
 
@@ -122,14 +158,28 @@ export function generateFloorMap(floor: number): FloorMap {
   const nodes: MapNode[] = [];
   const layerNodes: MapNode[][] = [];
 
+  // 节点类型计数 + 上限
+  const counts: Record<MapNodeType, number> = { start: 0, battle: 0, elite: 0, boss: 0, event: 0, forge: 0, shop: 0 };
+  const maxCounts = maxCountsForFloor(floor);
+
   for (let layer = 0; layer < totalLayers; layer++) {
     const size = getLayerSize(layer, totalLayers);
     const layerArr: MapNode[] = [];
+    let layerEventTaken = false;  // 同层最多 1 个事件
     for (let col = 0; col < size; col++) {
       let type: MapNodeType;
       if (layer === 0) type = "start";
       else if (layer === totalLayers - 1) type = isBossFloor ? "boss" : "elite";
-      else type = pickNodeType(midLayerWeights(floor, layer - 1, midLayers));
+      else {
+        type = pickNodeTypeWithCaps(
+          midLayerWeights(floor, layer - 1, midLayers),
+          counts,
+          maxCounts,
+          layerEventTaken,
+        );
+      }
+      counts[type]++;
+      if (type === "event") layerEventTaken = true;
 
       const node: MapNode = {
         id: newNodeId(),
