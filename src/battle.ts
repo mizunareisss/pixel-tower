@@ -604,7 +604,16 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
     if (skipActions) continue;
 
     const intent = enemy.intents[enemy.intentIndex];
-    enemy.intentIndex = (enemy.intentIndex + 1) % enemy.intents.length;
+    // Boss 招式：随机抽下一招（避免立即重复）；其他档：顺序循环
+    if (enemy.tier === "boss" && enemy.intents.length > 1) {
+      let next: number;
+      do {
+        next = Math.floor(Math.random() * enemy.intents.length);
+      } while (next === enemy.intentIndex);
+      enemy.intentIndex = next;
+    } else {
+      enemy.intentIndex = (enemy.intentIndex + 1) % enemy.intents.length;
+    }
 
     if (intent.type === "buff" && enemy.statuses.find(s => s.id === "silenced")) {
       log(`${enemy.name} 被沉默，跳过。`, "player");
@@ -622,6 +631,18 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
       if (eWeak) {
         value = Math.max(0, value - eWeak.stacks);
         log(`${enemy.name} 虚弱 -${eWeak.stacks}。`, "player");
+      }
+      // 特能修饰：嗜血（HP <50% 攻击 +30%）
+      if (enemy.eliteAbility === "嗜血" && enemy.hp < enemy.maxHp * 0.5) {
+        const orig = value;
+        value = Math.round(value * 1.3);
+        log(`${enemy.name} 嗜血发动：${orig} → ${value}。`, "enemy");
+      }
+      // 特能修饰：致命一击（30% 暴击 ×1.5）
+      if (enemy.eliteAbility === "致命一击" && Math.random() < 0.3) {
+        const orig = value;
+        value = Math.round(value * 1.5);
+        log(`${enemy.name} 致命一击！${orig} → ${value}。`, "enemy");
       }
       const hits = intent.hits ?? 1;
       for (let i = 0; i < hits; i++) {

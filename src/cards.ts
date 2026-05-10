@@ -66,6 +66,13 @@ export function damageEnemy(target: EnemyState, n: number, log: (m: string, k?: 
   target.hp = Math.max(0, target.hp - n);
   if (msg) log(msg, "player");
   if (target.hp <= 0) {
+    // 特能：不朽 — HP 归 0 时复活到 50%（每只敌人整局 1 次）
+    if (target.eliteAbility === "不朽" && !(target as any)._undyingUsed) {
+      (target as any)._undyingUsed = true;
+      target.hp = Math.round(target.maxHp * 0.5);
+      log(`★ ${target.name} 不朽！复活到 ${target.hp} HP。`, "lose");
+      return;
+    }
     target.alive = false;
     log(`★ 击败 ${target.name}！`, "win");
   }

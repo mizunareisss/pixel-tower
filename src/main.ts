@@ -24,6 +24,7 @@ import {
   gameSuitPicked,
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
+import { ABILITY_DESCS } from "./enemies.ts";
 import { SUIT_SYMBOLS, SUITS, isRedSuit, FIGHTS_PER_FLOOR, STATUS_META, RACES, FRAGMENT_NAMES, FRAGMENT_ICONS,
   ENCHANTS, ENCHANT_NAMES, ENCHANT_DESCS, ENCHANT_RACE, ENCHANT_COST, RACE_NAMES } from "./types.ts";
 import type { EnemyRace, EnchantId, Suit } from "./types.ts";
@@ -335,13 +336,14 @@ function phaseLabel(p: GameState["phase"]) {
   return ({
     starter_perk_picks: `起手选特性（剩 ${state.picksRemaining}）`,
     battle: state.battle ? `第 ${state.floor} 关 · ${state.battleIndex + 1}/${FIGHTS_PER_FLOOR} · 回合 ${state.battle.turn}` : "战斗中",
-    battle_victory: "战斗胜利",
+    battle_victory: "★ 战斗胜利",
+    suit_pick: "选择花色",
     reward_card: "战利品 · 选 1 张牌",
     reward_perk: "通关 · 选 1 张特性",
     discard: "整理卡组",
     forge: "⚒ 铁匠铺",
-    game_over: "失败",
-    victory: "胜利",
+    game_over: "✗ 失败",
+    victory: "★ 通关胜利",
   } as Record<string, string>)[p] || p;
 }
 
@@ -556,9 +558,14 @@ function showEnemyDetail(e: EnemyState): void {
           </div>
         </div>
       </div>
-      ${e.eliteAbility ? `<div class="ed-ability">★ 特能：<b>${escapeHTML(e.eliteAbility)}</b></div>` : ""}
+      ${e.eliteAbility ? `
+        <div class="ed-ability">
+          <div class="ed-ability-name">★ ${escapeHTML(e.eliteAbility)}</div>
+          ${ABILITY_DESCS[e.eliteAbility] ? `<div class="ed-ability-desc">${escapeHTML(ABILITY_DESCS[e.eliteAbility])}</div>` : ""}
+        </div>
+      ` : ""}
       <div class="ed-hp">HP <b>${e.hp}</b> / ${e.maxHp}</div>
-      <div class="ed-section-title">招式（按顺序循环）</div>
+      <div class="ed-section-title">招式${tier === "boss" ? "（随机抽取）" : ""}</div>
       <ul class="ed-intent-list">${intentItems}</ul>
       <p class="ed-hint">击败可获得 ${FRAGMENT_ICONS[e.race]} <b>${FRAGMENT_NAMES[e.race]}</b> ×1${tier === "boss" ? " · 战利品保底 1 张史诗" : ""}</p>
     </div>
@@ -717,7 +724,7 @@ function renderSuitPick() {
     : "染色术：选择本回合攻击牌花色";
 
   stageEl.innerHTML = `
-    <h2>${title}</h2>
+    <p class="hint">${title}</p>
     <div id="suit-pick-grid"></div>
   `;
   const grid = $("suit-pick-grid");
@@ -734,7 +741,6 @@ function renderSuitPick() {
 
 function renderBattleVictory() {
   stageEl.innerHTML = `
-    <h2 class="win">★ 胜利！</h2>
     <p class="hint">敌人已被击败。点击下方按钮领取战利品。</p>
     <button id="claim-reward-btn" class="big-btn">领取奖励</button>
   `;
@@ -747,8 +753,7 @@ function renderBattleVictory() {
 
 function renderRewardCard() {
   stageEl.innerHTML = `
-    <h2>战利品：选 1 张牌</h2>
-    <p class="hint">选中后这张牌会进入你的牌库（不是手牌）。</p>
+    <p class="hint">选中的牌会进入你的牌库（不是手牌）。</p>
   `;
   const grid = document.createElement("div");
   grid.className = "choice-grid cols-3";
@@ -765,8 +770,7 @@ function renderRewardCard() {
 
 function renderRewardPerk() {
   stageEl.innerHTML = `
-    <h2>特性升级：选 1 张特性</h2>
-    <p class="hint">通关奖励。HP 已补满。</p>
+    <p class="hint">HP 已补满。也可选生命上限替代特性。</p>
   `;
   const grid = document.createElement("div");
   grid.className = "choice-grid cols-3";
@@ -799,8 +803,7 @@ function renderRewardPerk() {
 function renderDiscard() {
   _discardUids.clear();
   stageEl.innerHTML = `
-    <h2>整理卡组（全部牌库 / 装备 / 特性）</h2>
-    <p class="hint">点击卡片选中可弃置。<span style="color:var(--green)">绿色边框</span> = 本关新获得；其他 = 起始或之前关卡获得。点「确认」进入下一关。</p>
+    <p class="hint">点击卡片选中可弃置（牌库 / 装备 / 特性）。<span style="color:var(--green)">绿色边框</span> = 本关新获得。</p>
     <div id="discard-selection-label">已选：<span id="discard-count">0</span> 张</div>
     <div id="discard-cards-wrap"></div>
     <div id="discard-actions">
@@ -860,8 +863,7 @@ function renderForge() {
   const cur = state.player.weaponEnchant;
   const curWeapon = state.player.weapons[0] ? CARD_DB[state.player.weapons[0].defId].name : "（无武器）";
   stageEl.innerHTML = `
-    <h2>⚒ 铁匠铺</h2>
-    <p class="hint">使用灵魂碎片为武器附魔（消耗 ${ENCHANT_COST} 同种族碎片）。换附魔会覆盖旧的。</p>
+    <p class="hint">用灵魂碎片为武器附魔（消耗 ${ENCHANT_COST} 同种族碎片）。换附魔会覆盖旧的。</p>
     <div id="forge-current">当前武器：<b>${escapeHTML(curWeapon)}</b>　|　当前附魔：<b>${cur ? escapeHTML(ENCHANT_NAMES[cur]) : "（无）"}</b></div>
     <div id="forge-list"></div>
     <button id="forge-skip-btn" class="big-btn">跳过铁匠铺</button>
@@ -893,7 +895,6 @@ function renderForge() {
 
 function renderGameOver() {
   stageEl.innerHTML = `
-    <h2 class="lose">✗ 失败</h2>
     <p class="hint">你倒在了第 ${state.floor} 关。</p>
     <button id="new-run-btn" class="big-btn">开启新一局</button>
   `;

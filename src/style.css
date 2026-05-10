@@ -2161,13 +2161,21 @@ body.is-touch button:hover:not(:disabled) {
 .ed-ability {
   background: rgba(255,140,40,0.12);
   border: 1px solid rgba(255,140,40,0.35);
-  color: #ffb060;
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 8px 10px;
   margin-bottom: 8px;
   border-radius: 3px;
 }
-.ed-ability b { color: #ffd460; font-weight: 900; }
+.ed-ability-name {
+  color: #ffd460;
+  font-weight: 900;
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+.ed-ability-desc {
+  color: var(--white);
+  font-size: 11px;
+  line-height: 1.5;
+}
 
 .ed-hp {
   color: var(--white);

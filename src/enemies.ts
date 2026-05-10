@@ -51,22 +51,22 @@ const ENEMY_NAMES: Record<EnemyRace, { normal: string[]; elite: string[]; boss: 
   },
 };
 
-// 精英特能名（flavor 显示用）
-const ELITE_ABILITIES: Record<EnemyRace, string[]> = {
-  beast:    ["嗜血", "狂怒", "再生", "尖牙锐利", "狩猎本能"],
-  humanoid: ["军团长", "战术家", "无情", "刺客之眼", "猎人本能"],
-  undead:   ["不朽", "黑魔法环", "死灵召唤", "瘟疫使者", "亡灵之力"],
-  giant:    ["重甲护体", "巨力", "震地", "无懈", "山之子"],
-  dark:     ["突袭", "暗影遁", "致命一击", "影分身", "深渊低语"],
+// 精英 / Boss 特能 — 每种族 1 种，机制实装于 battle.ts
+// 名字 + 描述都明确，不再是纯 flavor
+export const ABILITY_BY_RACE: Record<EnemyRace, string> = {
+  beast:    "嗜血",
+  humanoid: "战吼",
+  undead:   "不朽",
+  giant:    "重甲护体",
+  dark:     "致命一击",
 };
 
-// Boss 特能名
-const BOSS_ABILITIES: Record<EnemyRace, string[]> = {
-  beast:    ["Boss · 兽王怒", "Boss · 嗜血狂暴"],
-  humanoid: ["Boss · 战团号令", "Boss · 终极一击"],
-  undead:   ["Boss · 群体诅咒", "Boss · 死灵复活"],
-  giant:    ["Boss · 山崩地裂", "Boss · 巨力压制"],
-  dark:     ["Boss · 龙息", "Boss · 暗影王座"],
+export const ABILITY_DESCS: Record<string, string> = {
+  "嗜血":     "自身 HP 低于 50% 时，所有攻击伤害 +30%。",
+  "战吼":     "战斗开始时永久 +5 攻击值。",
+  "不朽":     "HP 归 0 时复活到 50% HP，整局每只敌人仅 1 次。",
+  "重甲护体": "护甲额外 +3（受击时多减 3 伤害，可被破甲穿透）。",
+  "致命一击": "每次攻击 30% 概率暴击，造成 1.5× 伤害。",
 };
 
 // ─────────────────────────────────────────────────────────
@@ -259,12 +259,26 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
       if (i.type === "attack") i.value = Math.max(1, Math.round(i.value * wm));
     }
   }
-  const armor = armorForFloor(opts.floor, tier, race);
+  let armor = armorForFloor(opts.floor, tier, race);
 
-  // 特能名
-  const eliteAbility = tier === "elite" ? rand(ELITE_ABILITIES[race])
-                     : tier === "boss"  ? rand(BOSS_ABILITIES[race])
-                     : undefined;
+  // 特能（每种族固定 1 种，机制实装：嗜血/战吼/不朽/重甲护体/致命一击）
+  const eliteAbility = tier !== "normal" ? ABILITY_BY_RACE[race] : undefined;
+
+  // 实装：战吼 — 战斗开始即所有攻击招式 +5（永久 buff）
+  if (eliteAbility === "战吼") {
+    for (const i of intents) {
+      if (i.type === "attack") i.value += 5;
+    }
+  }
+  // 实装：重甲护体 — 额外 +3 armor
+  if (eliteAbility === "重甲护体") {
+    armor += 3;
+  }
+
+  // Boss 招式从随机位置开始（不再固定 0）
+  const intentIndex = tier === "boss"
+    ? Math.floor(Math.random() * intents.length)
+    : 0;
 
   return {
     id: newEnemyId(name),
@@ -274,7 +288,7 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
     suit,
     race,
     intents,
-    intentIndex: 0,
+    intentIndex,
     statuses: [],
     alive: true,
     armor: armor > 0 ? armor : undefined,
