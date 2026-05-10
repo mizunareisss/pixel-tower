@@ -14,6 +14,7 @@ import type {
   LogKind,
   EnchantId,
   CardRarity,
+  EquipEffect,
 } from "./types.ts";
 import { SUIT_SYMBOLS, SUITS, isRedSuit } from "./types.ts";
 
@@ -196,20 +197,33 @@ const WARHAMMER: CardDef = {
   id: "warhammer",
   name: "巨锤",
   category: "equipment",
-  desc: "装备：基础伤害 8，**击晕**——单次伤害 ≥ 10 时给目标 +1 沉默（1 回合）。",
+  desc: "装备：基础伤害 8，**击晕**——单次伤害达到目标最大 HP 的 25% 时，按概率沉默 1 回合。已沉默时不刷新。",
   equipKind: "weapon",
   equipSuit: "club",
   baseDmg: 8,
-  equipEffects: [
-    { desc: "基础 8 + 击晕。", stat: "8 伤 击晕10+",
-      onAttack: (c, d) => { if (d >= 10) { addStatus(c.target, "silenced", "沉默", 1, 1); c.log(`巨锤击晕：${c.target.name} 沉默 1 回合。`, "player"); } return d; } },
-    { desc: "叠加 ×1.4 + 击晕。", stat: "11.2 伤 击晕10+",
-      onAttack: (c, d) => { if (d >= 10) { addStatus(c.target, "silenced", "沉默", 1, 1); c.log(`巨锤击晕：${c.target.name} 沉默 1 回合。`, "player"); } return d; } },
-    { desc: "叠加 ×1.8 + 击晕。", stat: "14.4 伤 击晕10+",
-      onAttack: (c, d) => { if (d >= 10) { addStatus(c.target, "silenced", "沉默", 1, 1); c.log(`巨锤击晕：${c.target.name} 沉默 1 回合。`, "player"); } return d; } },
-    { desc: "叠加 ×2.2 + 击晕。", stat: "17.6 伤 击晕10+",
-      onAttack: (c, d) => { if (d >= 10) { addStatus(c.target, "silenced", "沉默", 1, 1); c.log(`巨锤击晕：${c.target.name} 沉默 1 回合。`, "player"); } return d; } },
-  ],
+  equipEffects: (() => {
+    const tryStun = (c: BattleContext, d: number, chance: number): number => {
+      if (
+        d >= c.target.maxHp * 0.25
+        && Math.random() < chance
+        && !c.target.statuses.find(s => s.id === "silenced")
+      ) {
+        c.target.statuses.push({ id: "silenced", name: "沉默", stacks: 1, duration: 1 });
+        c.log(`巨锤击晕：${c.target.name} 沉默 1 回合。`, "player");
+      }
+      return d;
+    };
+    return [
+      { desc: "基础 8，25% 上限击晕（30% 概率）。", stat: "8 伤 击晕30%",
+        onAttack: (c, d) => tryStun(c, d, 0.30) },
+      { desc: "叠加 ×1.4，击晕概率 40%。", stat: "11.2 伤 击晕40%",
+        onAttack: (c, d) => tryStun(c, d, 0.40) },
+      { desc: "叠加 ×1.8，击晕概率 50%。", stat: "14.4 伤 击晕50%",
+        onAttack: (c, d) => tryStun(c, d, 0.50) },
+      { desc: "叠加 ×2.2，击晕概率 60%。", stat: "17.6 伤 击晕60%",
+        onAttack: (c, d) => tryStun(c, d, 0.60) },
+    ] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
+  })(),
 };
 
 const BATTLE_STAFF: CardDef = {

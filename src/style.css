@@ -818,34 +818,62 @@ h2.lose::before { display: none; }
 .enemy-card.tier-elite::after,
 .enemy-card.tier-boss::after { content: ""; }
 
+/* tier 徽章 — 不再用 absolute 出框，改成卡顶内嵌 row（不会被 overflow:hidden 吃掉） */
 .enemy-tier-badge {
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  transform: translateX(-50%);
+  display: block;
   font-size: 10px;
   font-weight: 900;
-  padding: 2px 8px;
-  border-radius: 3px;
   letter-spacing: 0.08em;
+  text-align: center;
+  padding: 2px 6px;
+  margin: -2px -2px 4px;
+  border-radius: 2px;
   white-space: nowrap;
-  z-index: 4;
+  position: relative;
+  z-index: 2;
 }
 .enemy-tier-badge.elite {
   background: #ff8c28;
   color: #fff;
-  box-shadow: 0 0 8px rgba(255,140,40,0.65);
+  box-shadow: 0 0 6px rgba(255,140,40,0.5);
 }
 .enemy-tier-badge.boss {
   background: linear-gradient(90deg, #ff2d2d, #ffaa00);
   color: #fff;
-  box-shadow: 0 0 12px rgba(255,80,40,0.85);
+  box-shadow: 0 0 10px rgba(255,80,40,0.7);
   animation: bossBadgePulse 1.2s ease-in-out infinite;
 }
 @keyframes bossBadgePulse {
-  0%, 100% { transform: translateX(-50%) scale(1); }
-  50%      { transform: translateX(-50%) scale(1.10); }
+  0%, 100% { box-shadow: 0 0 8px rgba(255,80,40,0.55); }
+  50%      { box-shadow: 0 0 16px rgba(255,140,40,0.95); }
 }
+
+/* 详情按钮：卡角的 ⓘ */
+.enemy-info-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: var(--white);
+  font-size: 11px;
+  font-weight: 900;
+  font-family: serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+}
+.enemy-info-btn:active { background: rgba(255,255,255,0.25); }
+
+/* Boss 战斗卡更大，留出空间给完整招式列表 */
+.enemy-card.tier-boss { min-height: 180px; }
+.enemy-card.tier-boss .enemy-emoji { font-size: 44px; }
+.enemy-card.tier-boss .enemy-name { font-size: 13px; }
 
 .enemy-ability-tag {
   display: inline-block;
@@ -1950,3 +1978,232 @@ body.is-touch button:hover:not(:disabled) {
   30%  { opacity: 1; transform: translate(-50%, -10px) scale(1.2); }
   100% { opacity: 0; transform: translate(-50%, -30px) scale(1); }
 }
+
+/* ═══════════════════════════════════════
+   游戏内确认弹窗
+═══════════════════════════════════════ */
+
+#ingame-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: icFadeIn 0.18s ease-out;
+}
+@keyframes icFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+#ingame-confirm-modal {
+  background: var(--bg-card);
+  border: 2px solid var(--yellow);
+  box-shadow: 0 0 24px rgba(245,197,24,0.3), 0 0 60px rgba(0,0,0,0.6);
+  max-width: 320px;
+  width: 100%;
+  padding: 16px 18px 14px;
+  animation: icPopIn 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@keyframes icPopIn {
+  from { transform: scale(0.85); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+.ic-title {
+  color: var(--yellow);
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+.ic-body {
+  color: var(--white);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+.ic-body b {
+  color: var(--yellow);
+  font-weight: 900;
+}
+
+.ic-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.ic-actions button {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: none;
+  clip-path: polygon(0 0, 100% 0, 96% 100%, 0 100%);
+}
+.ic-cancel {
+  background: var(--bg-elev);
+  color: var(--gray);
+  border: 1px solid var(--border) !important;
+  clip-path: none !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-weight: 400 !important;
+}
+.ic-confirm {
+  background: var(--red);
+  color: var(--white);
+}
+
+/* ═══════════════════════════════════════
+   敌人详情弹窗
+═══════════════════════════════════════ */
+
+#enemy-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.72);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  animation: icFadeIn 0.18s ease-out;
+}
+
+#enemy-detail-modal {
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  max-width: 360px;
+  width: 100%;
+  padding: 14px 16px;
+  position: relative;
+  animation: icPopIn 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+#enemy-detail-modal.tier-elite { border-color: #ff8c28; box-shadow: 0 0 16px rgba(255,140,40,0.4); }
+#enemy-detail-modal.tier-boss {
+  border-color: #ff5e5e;
+  box-shadow: 0 0 20px rgba(255,80,40,0.5);
+  background: linear-gradient(180deg, var(--bg-card), rgba(60,12,12,0.4));
+}
+
+.ed-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border) !important;
+  color: var(--gray);
+  font-size: 14px;
+  font-weight: 900;
+  border-radius: 4px !important;
+  clip-path: none !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  cursor: pointer;
+}
+
+.ed-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-right: 32px;
+}
+.ed-emoji { font-size: 48px; line-height: 1; }
+.ed-name-block { flex: 1; }
+.ed-tier {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  margin-bottom: 2px;
+}
+#enemy-detail-modal.tier-elite .ed-tier { color: #ff8c28; }
+#enemy-detail-modal.tier-boss .ed-tier {
+  background: linear-gradient(90deg, #ff5e5e, #ffaa00);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.ed-name {
+  color: var(--white);
+  font-weight: 900;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+.ed-meta {
+  color: var(--gray);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.ed-ability {
+  background: rgba(255,140,40,0.12);
+  border: 1px solid rgba(255,140,40,0.35);
+  color: #ffb060;
+  padding: 6px 10px;
+  font-size: 12px;
+  margin-bottom: 8px;
+  border-radius: 3px;
+}
+.ed-ability b { color: #ffd460; font-weight: 900; }
+
+.ed-hp {
+  color: var(--white);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.ed-hp b { color: var(--red); font-weight: 900; }
+
+.ed-section-title {
+  color: var(--yellow);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.ed-intent-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px 0;
+}
+.ed-intent-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px dashed rgba(255,255,255,0.08);
+  color: var(--white);
+  font-size: 12px;
+}
+.ed-intent-list li:last-child { border-bottom: none; }
+.ed-intent-name { flex: 1; }
+.ed-intent-val {
+  color: var(--yellow);
+  font-weight: 700;
+  font-size: 11px;
+  margin-left: 12px;
+}
+
+.ed-hint {
+  color: var(--gray);
+  font-size: 10px;
+  text-align: center;
+  margin: 8px 0 0;
+  font-style: italic;
+}
+.ed-hint b { color: var(--yellow); }

@@ -67,20 +67,16 @@ const ONBOARDING_STEPS = [
     body: "装备牌打出后进入常驻武器/防具槽，同款最多叠 4 张，倍率逐渐提升。武器决定攻击力，防具每回合减伤。",
   },
   {
-    title: "④ 牌库与抽卡",
-    body: "起始牌库 40 张：21 攻击 + 6 技能 + 6 道具 + 7 基础装备（武器 3 件覆盖 ♦♥♣，防具 4 件四花色齐全）。基础装备只有纯属性，方便前期快速凑同色。每场战斗起手摸 6 张，期望见到 1 张装备。",
+    title: "④ 牌库与战利品",
+    body: "每场战斗起手摸 6 张牌。胜利可选 1 张新牌加入牌库；通关再选 1 个特性。爬得越高，新牌越强。",
   },
   {
-    title: "⑤ 战斗奖励池",
-    body: "每场战斗胜利从 3 张候选里选 1 张加入牌库。奖励池里有「Build 装备（12 件，带钩子的 buff/特殊机制）+ 技能 + 道具 + 第 3 关解锁的群攻」。Build 武器/防具改变核心打法，也只能从奖励里抽到。回血药水高权重，驱毒剂第 3 关起才推荐。",
+    title: "⑤ 特性与碎片",
+    body: "特性是常驻被动。击败不同种族敌人掉落灵魂碎片，去铁匠铺给武器附魔，解锁特殊机制。",
   },
   {
-    title: "⑥ 特性与碎片",
-    body: "特性提供强力被动效果。击败不同种族敌人掉落灵魂碎片，在铁匠铺（每 2 关）用碎片为武器附魔，获得特殊能力。",
-  },
-  {
-    title: "⑦ 爬塔节奏",
-    body: "每关 3 场战斗，全部胜利后选 1 张牌进牌库 + 选 1 个特性，HP 补满进下一关。爬得越高，敌人越强，奖励也越丰厚。",
+    title: "⑥ 爬塔节奏",
+    body: "每关 3 场战斗，最后一场会更强。通关后 HP 补满进下一关。",
   },
 ];
 
@@ -354,8 +350,8 @@ function phaseLabel(p: GameState["phase"]) {
 // ─────────────────────────────────────────────────────────
 
 function renderStarterPerks() {
+  // 标题已在顶部 phase-bar 显示"起手选特性（剩 N）"，stage 内不重复
   stageEl.innerHTML = `
-    <h2>起始特性：选 ${state.picksRemaining} 个</h2>
     <p class="hint">特性是常驻被动；同款叠加效果增强。</p>
   `;
   const grid = document.createElement("div");
@@ -499,21 +495,78 @@ function renderEnemy(e: EnemyState, idx: number): HTMLElement {
   const raceTag = `<span class="enemy-race-tag" title="${RACE_NAMES[e.race]} · 击败掉 ${FRAGMENT_NAMES[e.race]} 1 枚">${FRAGMENT_ICONS[e.race]} ${RACE_NAMES[e.race]}</span>`;
   // 精英 / Boss 标识
   const tierBadge = tier === "boss"
-    ? `<div class="enemy-tier-badge boss" title="${e.eliteAbility ?? "BOSS"}">👑 BOSS</div>`
+    ? `<div class="enemy-tier-badge boss">👑 BOSS</div>`
     : tier === "elite"
-      ? `<div class="enemy-tier-badge elite" title="${e.eliteAbility ?? "精英"}">✦ 精英</div>`
+      ? `<div class="enemy-tier-badge elite">✦ 精英</div>`
       : "";
+  // ⓘ 详情按钮（仅精英 / boss 才有）
+  const infoBtn = tier !== "normal" ? `<button class="enemy-info-btn" data-info-idx="${idx}" aria-label="查看机制">i</button>` : "";
   wrap.innerHTML = `
     ${tierBadge}
+    ${infoBtn}
     <div class="enemy-emoji">${emoji}</div>
     <div class="enemy-name">${escapeHTML(e.name)}${weaponBadge}${armorBadge}</div>
-    <div class="enemy-race-row">${raceTag}${e.eliteAbility ? `<span class="enemy-ability-tag" title="${e.eliteAbility}">★ ${escapeHTML(e.eliteAbility)}</span>` : ""}</div>
+    <div class="enemy-race-row">${raceTag}${e.eliteAbility ? `<span class="enemy-ability-tag">★ ${escapeHTML(e.eliteAbility)}</span>` : ""}</div>
     <div class="enemy-hp-text">HP ${e.hp} / ${e.maxHp}</div>
     ${renderEnemyHpSegments(e.hp, e.maxHp)}
     <div class="enemy-status">${statusTags}</div>
     ${isTarget ? '<div class="target-badge">▼ 目标</div>' : ""}
   `;
+  // info 按钮要拦截冒泡（不要触发"选目标"），并打开机制详情弹窗
+  const ib = wrap.querySelector(".enemy-info-btn") as HTMLButtonElement | null;
+  if (ib) {
+    ib.addEventListener("click", ev => {
+      ev.stopPropagation();
+      showEnemyDetail(e);
+    });
+  }
   return wrap;
+}
+
+// 敌人机制详情弹窗（精英 / Boss 专属）
+function showEnemyDetail(e: EnemyState): void {
+  document.getElementById("enemy-detail-overlay")?.remove();
+  const tier = e.tier ?? "normal";
+  const emoji = ENEMY_EMOJI[e.name] ?? "👾";
+  const tierLabel = tier === "boss" ? "👑 BOSS" : tier === "elite" ? "✦ 精英" : "普通";
+  const intentItems = e.intents.map(it => {
+    const valStr = it.type === "attack"
+      ? `⚔ ${it.value}${it.hits && it.hits > 1 ? ` × ${it.hits}` : ""}`
+      : it.type === "debuff"
+        ? `${it.debuffName ?? "debuff"} ${it.value > 0 ? `(${it.value})` : ""}${it.debuffDuration ? ` ${it.debuffDuration}回` : ""}`
+        : it.type === "buff"
+          ? "buff"
+          : "";
+    return `<li><span class="ed-intent-name">${escapeHTML(it.desc)}</span><span class="ed-intent-val">${escapeHTML(valStr)}</span></li>`;
+  }).join("");
+  const overlay = document.createElement("div");
+  overlay.id = "enemy-detail-overlay";
+  overlay.innerHTML = `
+    <div id="enemy-detail-modal" class="tier-${tier}">
+      <button class="ed-close" aria-label="关闭">✕</button>
+      <div class="ed-header">
+        <div class="ed-emoji">${emoji}</div>
+        <div class="ed-name-block">
+          <div class="ed-tier">${tierLabel}</div>
+          <div class="ed-name">${escapeHTML(e.name)}</div>
+          <div class="ed-meta">
+            ${FRAGMENT_ICONS[e.race]} ${RACE_NAMES[e.race]}
+            ${(e.armor ?? 0) > 0 ? ` · 🛡${e.armor}` : ""}
+            ${e.weaponMult && e.weaponMult > 1 ? ` · ⚔×${e.weaponMult.toFixed(1)}` : ""}
+          </div>
+        </div>
+      </div>
+      ${e.eliteAbility ? `<div class="ed-ability">★ 特能：<b>${escapeHTML(e.eliteAbility)}</b></div>` : ""}
+      <div class="ed-hp">HP <b>${e.hp}</b> / ${e.maxHp}</div>
+      <div class="ed-section-title">招式（按顺序循环）</div>
+      <ul class="ed-intent-list">${intentItems}</ul>
+      <p class="ed-hint">击败可获得 ${FRAGMENT_ICONS[e.race]} <b>${FRAGMENT_NAMES[e.race]}</b> ×1${tier === "boss" ? " · 战利品保底 1 张史诗" : ""}</p>
+    </div>
+  `;
+  const close = () => overlay.remove();
+  overlay.querySelector(".ed-close")!.addEventListener("click", close);
+  overlay.addEventListener("click", ev => { if (ev.target === overlay) close(); });
+  document.body.appendChild(overlay);
 }
 
 // 状态标签（含分色 + tooltip + 点击详情）
@@ -887,7 +940,6 @@ function renderHandCard(inst: CardInstance): HTMLElement {
   if (suitSym) el.setAttribute("data-suit", suitSym);
 
   let suitTag = "";
-  let suitLarge = "";
   if (def.category === "attack") {
     const sym = SUIT_SYMBOLS[def.attackSuit!];
     const isRed = isRedSuit(def.attackSuit!);
@@ -895,8 +947,8 @@ function renderHandCard(inst: CardInstance): HTMLElement {
   } else if (def.category === "equipment") {
     const sym = SUIT_SYMBOLS[def.equipSuit!];
     const isRed = isRedSuit(def.equipSuit!);
+    // 装备卡只在右上角显示一次花色，不再 SVG 图标下面重复
     suitTag = `<span class="card-suit-corner${isRed ? " red" : ""}">${sym}</span>`;
-    suitLarge = `<span class="card-suit-large${isRed ? " red" : ""}">${sym}</span>`;
   }
 
   const catTag = `<span class="cat-tag">${categoryLabel(def.category)}</span>`;
@@ -905,36 +957,85 @@ function renderHandCard(inst: CardInstance): HTMLElement {
   el.innerHTML = `
     ${suitTag}
     <div class="card-icon">${getCardIcon(def.id, def.category)}</div>
-    ${suitLarge}
     <div class="card-name">${escapeHTML(def.name)}</div>
     <div class="card-desc">${escapeHTML(def.desc)}</div>
     ${usedTag}
     ${catTag}
   `;
   el.addEventListener("click", () => {
-    // 装备牌：换装确认
+    // 装备牌：换装确认（游戏内弹窗）
     if (def.category === "equipment") {
       if (def.equipKind === "weapon" && state.player.weapons.length > 0 && state.player.weapons[0].defId !== def.id) {
         const cur = CARD_DB[state.player.weapons[0].defId].name;
         const cnt = state.player.weapons.length;
-        if (!confirm(`当前武器：${cur} ×${cnt}。装备「${def.name}」会弃掉全部 ${cur}，确认替换？`)) return;
-        gameDiscardWeapons(state);
+        showConfirm({
+          title: "替换武器",
+          body: `当前：<b>${escapeHTML(cur)}</b> ×${cnt}<br>装备 <b>${escapeHTML(def.name)}</b> 会弃掉全部 ${escapeHTML(cur)}。`,
+          confirmLabel: "替换",
+          onConfirm: () => {
+            gameDiscardWeapons(state);
+            playEquipCard(def, inst);
+          },
+        });
+        return;
       }
       if (def.equipKind === "armor" && state.player.armors.length > 0 && state.player.armors[0].defId !== def.id) {
         const cur = CARD_DB[state.player.armors[0].defId].name;
         const cnt = state.player.armors.length;
-        if (!confirm(`当前防具：${cur} ×${cnt}。装备「${def.name}」会弃掉全部 ${cur}，确认替换？`)) return;
-        gameDiscardArmors(state);
+        showConfirm({
+          title: "替换防具",
+          body: `当前：<b>${escapeHTML(cur)}</b> ×${cnt}<br>装备 <b>${escapeHTML(def.name)}</b> 会弃掉全部 ${escapeHTML(cur)}。`,
+          confirmLabel: "替换",
+          onConfirm: () => {
+            gameDiscardArmors(state);
+            playEquipCard(def, inst);
+          },
+        });
+        return;
       }
     }
-    // 记录出牌前的目标 idx 和卡定义，用于 render 后触发动效
-    const targetIdx = state.battle?.targetIndex ?? 0;
-    if (gamePlayCard(state, inst.uid)) {
-      render();
-      triggerCardAnimation(def, targetIdx);
-    }
+    playEquipCard(def, inst);
   });
   return el;
+}
+
+// 出装备/打牌的统一入口，封装出牌动效触发
+function playEquipCard(def: import("./types.ts").CardDef, inst: CardInstance): void {
+  const targetIdx = state.battle?.targetIndex ?? 0;
+  if (gamePlayCard(state, inst.uid)) {
+    render();
+    triggerCardAnimation(def, targetIdx);
+  }
+}
+
+// 游戏内确认弹窗（替代 native confirm）
+interface ConfirmOpts {
+  title: string;
+  body: string;        // 允许 innerHTML（调用方已 escapeHTML）
+  confirmLabel: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  onCancel?: () => void;
+}
+function showConfirm(opts: ConfirmOpts): void {
+  document.getElementById("ingame-confirm-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "ingame-confirm-overlay";
+  overlay.innerHTML = `
+    <div id="ingame-confirm-modal">
+      <div class="ic-title">${escapeHTML(opts.title)}</div>
+      <div class="ic-body">${opts.body}</div>
+      <div class="ic-actions">
+        <button class="ic-cancel">${escapeHTML(opts.cancelLabel ?? "取消")}</button>
+        <button class="ic-confirm">${escapeHTML(opts.confirmLabel)}</button>
+      </div>
+    </div>
+  `;
+  const close = () => overlay.remove();
+  overlay.querySelector(".ic-cancel")!.addEventListener("click", () => { close(); opts.onCancel?.(); });
+  overlay.querySelector(".ic-confirm")!.addEventListener("click", () => { close(); opts.onConfirm(); });
+  overlay.addEventListener("click", e => { if (e.target === overlay) { close(); opts.onCancel?.(); } });
+  document.body.appendChild(overlay);
 }
 
 // 出牌动效路由：根据卡的 category/target/id 决定播什么动效
@@ -1093,14 +1194,12 @@ function renderChoiceCardEl(inst: CardInstance, onClick: () => void): HTMLElemen
     : def.defaultSuit ? SUIT_SYMBOLS[def.defaultSuit] : "";
   if (choiceSuitSym) el.setAttribute("data-suit", choiceSuitSym);
   let suitTag = "";
-  let choiceSuitLarge = "";
   if (def.attackSuit) {
     const isRed = isRedSuit(def.attackSuit);
     suitTag = `<span class="card-suit-corner${isRed ? " red" : ""}">${SUIT_SYMBOLS[def.attackSuit]}</span>`;
   } else if (def.equipSuit) {
     const isRed = isRedSuit(def.equipSuit);
     suitTag = `<span class="card-suit-corner${isRed ? " red" : ""}">${SUIT_SYMBOLS[def.equipSuit]}</span>`;
-    choiceSuitLarge = `<span class="card-suit-large${isRed ? " red" : ""}">${SUIT_SYMBOLS[def.equipSuit]}</span>`;
   } else if (def.defaultSuit) {
     const isRed = isRedSuit(def.defaultSuit);
     suitTag = `<span class="card-suit-corner${isRed ? " red" : ""}">${SUIT_SYMBOLS[def.defaultSuit]}</span>`;
@@ -1113,7 +1212,7 @@ function renderChoiceCardEl(inst: CardInstance, onClick: () => void): HTMLElemen
     const cur = state.player.perks.filter(p => p.defId === inst.defId).length;
     const next = cur + 1;
     const summary = def.perkEffect.summary?.(next) ?? def.perkEffect.unitDesc;
-    descText = `选后总效果：${summary}`;
+    descText = summary;  // 直接用 summary，不加"选后总效果："前缀
     if (cur > 0) stackTag = `<span class="stack-future">已有 ×${cur} → ×${next}</span>`;
     else stackTag = `<span class="stack-future">×1</span>`;
   } else if (def.category === "equipment" && def.equipEffects) {
@@ -1134,7 +1233,6 @@ function renderChoiceCardEl(inst: CardInstance, onClick: () => void): HTMLElemen
     ${suitTag}
     ${rarityBadge}
     <div class="card-icon">${getCardIcon(def.id, def.category)}</div>
-    ${choiceSuitLarge}
     <div class="card-name">${escapeHTML(def.name)}</div>
     <div class="card-desc">${escapeHTML(descText)}</div>
     ${stackTag}
@@ -1243,11 +1341,16 @@ function openHamburger() {
   restartItem.innerHTML = "↺&nbsp; 重新开始";
   restartItem.addEventListener("click", () => {
     closeHamburger();
-    if (confirm("确定要重新开始？当前进度会丢失。")) {
-      state = newGame();
-      _logRenderedLen = 0; _prevVita = -1; _prevEnemyHps = []; _prevTurn = -1; _isProcessingTurn = false;
-      render();
-    }
+    showConfirm({
+      title: "重新开始",
+      body: "当前进度会丢失，确定？",
+      confirmLabel: "重开",
+      onConfirm: () => {
+        state = newGame();
+        _logRenderedLen = 0; _prevVita = -1; _prevEnemyHps = []; _prevTurn = -1; _isProcessingTurn = false;
+        render();
+      },
+    });
   });
 
   menu.appendChild(guideItem);
