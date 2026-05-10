@@ -32,26 +32,31 @@ function getDyedSuit(player: PlayerState): Suit | null {
 // 花色专精 · 亲和度系统
 // ─────────────────────────────────────────────────────────
 
-// 每个花色 4 类来源累计
+// 同花色攻击累积上限（cap，按花色独立计）
+export const SUIT_PLAYED_CAP = 30;
+
+// 每个花色 3 类来源累计（持久化跨战斗）
+//  - 装备同花色：每件 +1.5（武器/防具叠加各算）
+//  - 特性同花色：每张 +1
+//  - 出过的同花色攻击牌（含染色/持咒后视为色）：每张 +0.2，cap 30
+// 染色/持咒不再直接 +X 亲和（避免战斗内"暴涨 → 战斗后塌陷"的体验割裂）；
+// 它们的"协助专精"作用通过 trackSuitPlayed 已经按视为色累积进 player.suitPlayedTotal
 export function getSuitAffinity(state: BattleState, suit: Suit): number {
   let aff = 0;
-  // 装备同花色：每件 +1
+  // 装备同花色：每件 +1.5
   for (const w of state.player.weapons) {
-    if (CARD_DB[w.defId]?.equipSuit === suit) aff += 1;
+    if (CARD_DB[w.defId]?.equipSuit === suit) aff += 1.5;
   }
   for (const a of state.player.armors) {
-    if (CARD_DB[a.defId]?.equipSuit === suit) aff += 1;
+    if (CARD_DB[a.defId]?.equipSuit === suit) aff += 1.5;
   }
-  // 特性同花色：每张 +0.5
+  // 特性同花色：每张 +1
   for (const p of state.player.perks) {
-    if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 0.5;
+    if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 1;
   }
-  // 染色术 +3 / 持咒 +3
-  if (state.player.statuses.some(s => s.id === `dyed_${suit}`)) aff += 3;
-  if (state.player.statuses.some(s => s.id === `chanted_${suit}`)) aff += 3;
-  // 出过的同花色攻击牌：每张 +0.1（累积）
-  const played = state.player.statuses.find(s => s.id === `suit_played_${suit}`);
-  if (played) aff += played.stacks * 0.1;
+  // 出过的同花色攻击牌：每张 +0.2（持久化到 player.suitPlayedTotal，cap 30）
+  const played = state.player.suitPlayedTotal?.[suit] ?? 0;
+  aff += Math.min(SUIT_PLAYED_CAP, played) * 0.2;
   // Tier 3 大招消耗：扣减
   const consumed = state.player.statuses.find(s => s.id === `suit_consumed_${suit}`);
   if (consumed) aff -= consumed.stacks;
@@ -77,7 +82,7 @@ export function getActiveSpecialty(state: BattleState): Suit | null {
   const entries = SUITS.map(s => ({
     s,
     a: getSuitAffinity(state, s),
-    p: state.player.statuses.find(st => st.id === `suit_played_${s}`)?.stacks ?? 0,
+    p: state.player.suitPlayedTotal?.[s] ?? 0,
   }));
   const maxAff = Math.max(...entries.map(e => e.a));
   if (maxAff < 5) return null;
@@ -97,7 +102,7 @@ export function getDisplayedSpecialty(state: BattleState): Suit {
   const entries = SUITS.map(s => ({
     s,
     a: getSuitAffinity(state, s),
-    p: state.player.statuses.find(st => st.id === `suit_played_${s}`)?.stacks ?? 0,
+    p: state.player.suitPlayedTotal?.[s] ?? 0,
   }));
   entries.sort((x, y) => y.a - x.a || y.p - x.p || SUITS.indexOf(x.s) - SUITS.indexOf(y.s));
   return entries[0].s;
@@ -179,11 +184,13 @@ function exhaustEpicEquipment(state: BattleState, slot: "weapon" | "armor", log:
 }
 
 // 出过同花色攻击牌时累积（在 playAttack 调用）
+// 持久化到 player.suitPlayedTotal，cap 30/色（见 SUIT_PLAYED_CAP）
 function trackSuitPlayed(state: BattleState, suit: Suit): void {
-  const id = `suit_played_${suit}`;
-  const existing = state.player.statuses.find(s => s.id === id);
-  if (existing) existing.stacks += 1;
-  else state.player.statuses.push({ id, name: `${suit}-击次数`, stacks: 1, duration: -1 });
+  if (!state.player.suitPlayedTotal) {
+    state.player.suitPlayedTotal = { spade: 0, diamond: 0, heart: 0, club: 0 };
+  }
+  const cur = state.player.suitPlayedTotal[suit] ?? 0;
+  state.player.suitPlayedTotal[suit] = Math.min(SUIT_PLAYED_CAP, cur + 1);
 }
 
 // ─────────────────────────────────────────────────────────

@@ -1642,25 +1642,28 @@ function showLoadoutModal(): void {
         </div>
       </div>`;
 
-  // 花色亲和度（4 花色简表）
+  // 花色亲和度（4 花色简表，含全部三个永久来源）
   const suitBlock = `
     <div class="loadout-row">
       <div class="loadout-label">🎴 花色亲和</div>
       <div class="loadout-content loadout-suits">
         ${SUITS.map(suit => {
-          // 在 floor_map 阶段没有 battle，临时计算亲和度（与 battle 内一致的来源）
+          // 计算与 battle.ts/getSuitAffinity 一致的亲和度（地图阶段也准确显示）
           let aff = 0;
-          for (const w of player.weapons) if (CARD_DB[w.defId]?.equipSuit === suit) aff += 1;
-          for (const a of player.armors) if (CARD_DB[a.defId]?.equipSuit === suit) aff += 1;
-          for (const p of player.perks) if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 0.5;
+          for (const w of player.weapons) if (CARD_DB[w.defId]?.equipSuit === suit) aff += 1.5;
+          for (const a of player.armors) if (CARD_DB[a.defId]?.equipSuit === suit) aff += 1.5;
+          for (const p of player.perks) if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 1;
+          const played = Math.min(30, player.suitPlayedTotal?.[suit] ?? 0);
+          aff += played * 0.2;
+          aff = Math.max(0, Math.min(20, aff));
           const isRed = suit === "heart" || suit === "diamond";
           const tier = aff >= 15 ? 3 : aff >= 10 ? 2 : aff >= 5 ? 1 : 0;
           const tierLabel = tier > 0 ? `T${tier}` : "—";
-          return `<span class="loadout-suit-pill${isRed ? " red" : ""}${tier > 0 ? " lit" : ""}">${SUIT_SYMBOLS[suit]} ${aff.toFixed(1)} <em>${tierLabel}</em></span>`;
+          return `<span class="loadout-suit-pill${isRed ? " red" : ""}${tier > 0 ? " lit" : ""}" title="装备 +1.5/件 · 特性 +1/张 · 出牌累积 ${played}/30">${SUIT_SYMBOLS[suit]} ${aff.toFixed(1)} <em>${tierLabel}</em></span>`;
         }).join("")}
       </div>
     </div>
-    <div class="loadout-suit-note">仅展示装备/特性提供的基础亲和度。战斗中染色/持咒/出牌仍会额外累积。</div>
+    <div class="loadout-suit-note">装备 +1.5/件，特性 +1/张，同色攻击 +0.2/张（cap 30）。Tier 1 / 2 / 3 = 5 / 10 / 15。</div>
   `;
 
   // 牌库统计（按类别 + 稀有度简表）

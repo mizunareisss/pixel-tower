@@ -409,6 +409,9 @@ export interface PlayerState {
 
   // 跨场战斗的持续效果（神秘宝箱陷阱设置；newBattle 消费一次后清除）
   nextBattlePenalty?: "miss_one" | "miss_two" | "enemy_first";
+
+  // 花色专精：累积打过的同花色攻击牌总数（跨战斗保留；染色/持咒后按视为色累积；cap 30/色）
+  suitPlayedTotal?: Record<Suit, number>;
 }
 
 // ── 敌人 ──────────────────────────────────────────────────
