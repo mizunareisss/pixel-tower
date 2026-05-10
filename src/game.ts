@@ -255,9 +255,9 @@ export function continueFromVictory(state: GameState) {
     : REWARD_CARD_POOL_BASE;
   state.choices = rollRewardChoices(pool, REWARD_CHOICE_COUNT, state.floor);
 
-  // Boss 战胜利保底：把候选里第一张替换成 epic（如本次抽卡未抽到 epic）
+  // Boss 战胜利 epic 保底：仅第 6 关及以后的 Boss 触发（前 3 关 Boss 按正常概率走）
   // 判定刚结束的战斗是否为本关末场（pendingFloorClear 为 true 时表示）
-  if (state.pendingFloorClear) {
+  if (state.pendingFloorClear && state.floor >= 6) {
     const lastEnemies = state.battleGroups[state.battleGroups.length - 1];
     const wasBoss = lastEnemies?.some(e => e.tier === "boss");
     const hasEpic = state.choices.some(c => CARD_DB[c.defId].rarity === "epic");

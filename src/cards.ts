@@ -1384,10 +1384,11 @@ export function rollChoices(pool: string[], n: number, floor = 0, weights?: Reco
 }
 
 // ── 稀有度抽卡：先 roll 稀有度档，再从该档卡池里 uniform 抽 ──
-// 楼层敏感：早期不出 Epic
+// 楼层敏感：早期不出 Epic，中后期慢慢解锁
 export function rarityWeights(floor: number): Record<CardRarity, number> {
-  if (floor <= 2) return { common: 65, rare: 30, super_rare: 5, epic: 0 };
-  if (floor <= 4) return { common: 55, rare: 30, super_rare: 13, epic: 2 };
+  if (floor <= 2) return { common: 65, rare: 30, super_rare: 5,  epic: 0 };
+  if (floor <= 5) return { common: 56, rare: 30, super_rare: 13, epic: 1 };
+  if (floor <= 8) return { common: 51, rare: 30, super_rare: 17, epic: 2 };
   return            { common: 50, rare: 30, super_rare: 17, epic: 3 };
 }
 
