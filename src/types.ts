@@ -284,6 +284,9 @@ export interface PlayerState {
 
   // 整局 1 次的复活机制（不灭之心）已使用次数；不在 statuses 里因为状态会战斗间清空
   revivesUsed?: number;
+
+  // 跨场战斗的持续效果（神秘宝箱陷阱设置；newBattle 消费一次后清除）
+  nextBattlePenalty?: "miss_one" | "miss_two" | "enemy_first";
 }
 
 // ── 敌人 ──────────────────────────────────────────────────
@@ -339,6 +342,7 @@ export type GamePhase =
   | "battle_victory"
   | "reward_card"          // 战利品（1 张卡进牌库）
   | "reward_perk"          // 通关额外特性
+  | "floor_event"          // 楼层间随机事件（70% 概率，每关末）
   | "discard"
   | "forge"                // 铁匠铺（每 2 关一次，附魔武器）
   | "game_over"
@@ -356,4 +360,9 @@ export interface GameState {
   pendingFloorClear: boolean;
   log: LogEntry[];
   vitaUpAmount?: number;
+
+  // 楼层事件（floor_event 阶段时由 events.ts 设置）
+  activeEventId?: string;
+  // 商人事件的子界面状态（由 main.ts 渲染时使用）
+  merchantStock?: CardInstance[];
 }

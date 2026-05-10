@@ -81,6 +81,39 @@ export function newBattle(player: PlayerState, enemies: EnemyState[], floor: num
   };
 }
 
+// 应用跨场战斗惩罚（神秘宝箱陷阱）：在 startCurrentBattle 摸完 6 张后调用
+export function applyNextBattlePenalty(state: BattleState, log: (m: string, k?: LogKind) => void): void {
+  const penalty = state.player.nextBattlePenalty;
+  if (!penalty) return;
+  if (penalty === "miss_one") {
+    // 起手随机弃 1 张
+    if (state.player.hand.length > 0) {
+      const idx = Math.floor(Math.random() * state.player.hand.length);
+      const removed = state.player.hand.splice(idx, 1)[0];
+      state.player.discard.push(removed);
+      log("陷阱：起手少 1 张牌（已随机弃）。", "lose");
+    }
+  } else if (penalty === "miss_two") {
+    for (let i = 0; i < 2; i++) {
+      if (state.player.hand.length === 0) break;
+      const idx = Math.floor(Math.random() * state.player.hand.length);
+      const removed = state.player.hand.splice(idx, 1)[0];
+      state.player.discard.push(removed);
+    }
+    log("陷阱：起手少 2 张牌。", "lose");
+  } else if (penalty === "enemy_first") {
+    // 第一回合敌人先打一次（用第一只活敌的第一招攻击的 value）
+    const enemy = state.enemies.find(e => e.alive);
+    if (enemy) {
+      const firstAttack = enemy.intents.find(i => i.type === "attack");
+      const dmg = firstAttack?.value ?? 5;
+      log(`陷阱：${enemy.name} 抢先打了你！`, "lose");
+      damagePlayer(state, dmg, log, enemy);
+    }
+  }
+  state.player.nextBattlePenalty = undefined;
+}
+
 // ─────────────────────────────────────────────────────────
 // 战斗上下文
 // ─────────────────────────────────────────────────────────

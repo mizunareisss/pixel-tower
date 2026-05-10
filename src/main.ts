@@ -22,10 +22,23 @@ import {
   applyEnchant,
   skipForge,
   gameSuitPicked,
+  skipFloorEvent,
+  merchantBuyCard,
+  merchantTradeFragments,
+  merchantLeave,
+  gamblerBet,
+  shrineSacrifice,
+  wizardPick,
+  chestOpen,
+  discardHandCards,
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
 import { ABILITY_DESCS } from "./enemies.ts";
 import { getCurrentDodgeChance } from "./battle.ts";
+import {
+  EVENT_META, MERCHANT_PRICES, GAMBLER_OPTIONS, SHRINE_OPTIONS, CHEST_TRAP_DESCS,
+} from "./events.ts";
+import type { EventId } from "./events.ts";
 import { SUIT_SYMBOLS, SUITS, isRedSuit, FIGHTS_PER_FLOOR, STATUS_META, RACES, FRAGMENT_NAMES, FRAGMENT_ICONS,
   ENCHANTS, ENCHANT_NAMES, ENCHANT_DESCS, ENCHANT_RACE, ENCHANT_COST, RACE_NAMES } from "./types.ts";
 import type { EnemyRace, EnchantId, Suit } from "./types.ts";
@@ -120,6 +133,7 @@ function render() {
   else if (state.phase === "reward_perk") renderRewardPerk();
   else if (state.phase === "discard") renderDiscard();
   else if (state.phase === "forge") renderForge();
+  else if (state.phase === "floor_event") renderFloorEvent();
   else if (state.phase === "game_over") renderGameOver();
 
   renderHand();
@@ -350,6 +364,7 @@ function phaseLabel(p: GameState["phase"]) {
     reward_perk: "通关 · 选 1 张特性",
     discard: "整理卡组",
     forge: "⚒ 铁匠铺",
+    floor_event: "✨ 楼层事件",
     game_over: "✗ 失败",
     victory: "★ 通关胜利",
   } as Record<string, string>)[p] || p;
@@ -906,6 +921,179 @@ function renderForge() {
   $("forge-skip-btn").addEventListener("click", () => { skipForge(state); render(); });
 }
 
+// ─────────────────────────────────────────────────────────
+// 楼层事件渲染（5 个事件 + 跳过）
+// ─────────────────────────────────────────────────────────
+
+function renderFloorEvent() {
+  const eid = state.activeEventId as EventId | undefined;
+  if (!eid) return;
+  const meta = EVENT_META[eid];
+  stageEl.innerHTML = `
+    <div class="event-card">
+      <div class="event-header">
+        <span class="event-icon">${meta.icon}</span>
+        <span class="event-name">${escapeHTML(meta.name)}</span>
+      </div>
+      <p class="event-desc">${escapeHTML(meta.desc)}</p>
+      <div class="event-options" id="event-options"></div>
+      <button class="skip-btn" id="event-skip-btn">跳过本次事件</button>
+    </div>
+  `;
+  const optionsEl = $("event-options");
+  if (eid === "merchant") renderMerchant(optionsEl);
+  else if (eid === "gambler") renderGambler(optionsEl);
+  else if (eid === "shrine") renderShrine(optionsEl);
+  else if (eid === "wizard") renderWizard(optionsEl);
+  else if (eid === "chest") renderChest(optionsEl);
+
+  $("event-skip-btn").addEventListener("click", () => {
+    skipFloorEvent(state);
+    render();
+  });
+}
+
+// 商人 — 5 张候选购买 + 兑换碎片入口
+function renderMerchant(parent: HTMLElement) {
+  const stock = state.merchantStock ?? [];
+  if (stock.length === 0) {
+    parent.innerHTML = '<p class="hint">商人清空了货架。</p>';
+  } else {
+    const grid = document.createElement("div");
+    grid.className = "merchant-grid";
+    for (const inst of stock) {
+      const def = CARD_DB[inst.defId];
+      const rarity = def.rarity ?? "common";
+      const price = MERCHANT_PRICES[rarity];
+      const cardEl = document.createElement("div");
+      cardEl.className = `merchant-card rarity-${rarity}`;
+      cardEl.innerHTML = `
+        <div class="merchant-card-name">${escapeHTML(def.name)}</div>
+        <div class="merchant-card-rarity">${rarityLabel(rarity)}</div>
+        <div class="merchant-card-desc">${escapeHTML(def.desc)}</div>
+        <div class="merchant-card-price">💰 ${price} 碎片（任选种族）</div>
+        <button class="merchant-buy-btn">购买</button>
+      `;
+      cardEl.querySelector(".merchant-buy-btn")!.addEventListener("click", () => {
+        showRacePicker(`选择支付种族（消耗 ${price} 个）`, race => {
+          if (merchantBuyCard(state, inst.uid, race)) render();
+        });
+      });
+      grid.appendChild(cardEl);
+    }
+    parent.appendChild(grid);
+  }
+  // 操作：兑换碎片 + 离开
+  const actions = document.createElement("div");
+  actions.className = "merchant-actions";
+  actions.innerHTML = `
+    <button class="merchant-trade-btn">⇄ 兑换碎片（3:1）</button>
+    <button class="merchant-leave-btn">离开</button>
+  `;
+  actions.querySelector(".merchant-trade-btn")!.addEventListener("click", () => showFragmentTradeModal());
+  actions.querySelector(".merchant-leave-btn")!.addEventListener("click", () => {
+    merchantLeave(state);
+    render();
+  });
+  parent.appendChild(actions);
+}
+
+// 选种族弹窗
+function showRacePicker(title: string, onPick: (race: import("./types.ts").EnemyRace) => void) {
+  document.getElementById("race-picker-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "race-picker-overlay";
+  overlay.className = "ic-overlay";
+  overlay.innerHTML = `
+    <div class="ic-modal">
+      <div class="ic-title">${escapeHTML(title)}</div>
+      <div class="race-picker-grid"></div>
+      <div class="ic-actions"><button class="ic-cancel">取消</button></div>
+    </div>
+  `;
+  const grid = overlay.querySelector(".race-picker-grid")!;
+  for (const r of RACES) {
+    const have = state.player.fragments[r] ?? 0;
+    const btn = document.createElement("button");
+    btn.className = "race-pick-btn";
+    btn.innerHTML = `${FRAGMENT_ICONS[r]} ${FRAGMENT_NAMES[r]}<br><span class="race-pick-count">×${have}</span>`;
+    btn.addEventListener("click", () => { overlay.remove(); onPick(r); });
+    grid.appendChild(btn);
+  }
+  overlay.querySelector(".ic-cancel")!.addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+// 兑换碎片弹窗（选源 → 选目标）
+function showFragmentTradeModal() {
+  showRacePicker("选要花掉的碎片（消耗 3）", from => {
+    showRacePicker(`换什么？（${FRAGMENT_ICONS[from]} 3 → ? 1）`, to => {
+      if (merchantTradeFragments(state, from, to)) render();
+    });
+  });
+}
+
+function renderGambler(parent: HTMLElement) {
+  for (let i = 0; i < GAMBLER_OPTIONS.length; i++) {
+    const opt = GAMBLER_OPTIONS[i];
+    const enabled = opt.available(state);
+    const btn = document.createElement("button");
+    btn.className = `event-option-btn${!enabled ? " disabled" : ""}`;
+    btn.disabled = !enabled;
+    btn.innerHTML = `
+      <div class="event-option-label">${escapeHTML(opt.label)}</div>
+      <div class="event-option-cost">代价：${escapeHTML(opt.costDesc)}</div>
+      <div class="event-option-reward">回报：${escapeHTML(opt.rewardDesc)}</div>
+    `;
+    btn.addEventListener("click", () => { gamblerBet(state, i); render(); });
+    parent.appendChild(btn);
+  }
+}
+
+function renderShrine(parent: HTMLElement) {
+  for (let i = 0; i < SHRINE_OPTIONS.length; i++) {
+    const opt = SHRINE_OPTIONS[i];
+    const btn = document.createElement("button");
+    btn.className = "event-option-btn";
+    btn.innerHTML = `
+      <div class="event-option-label">${escapeHTML(opt.label)}</div>
+    `;
+    btn.addEventListener("click", () => { shrineSacrifice(state, i); render(); });
+    parent.appendChild(btn);
+  }
+}
+
+function renderWizard(parent: HTMLElement) {
+  const grid = document.createElement("div");
+  grid.className = "choice-grid cols-3";
+  for (const inst of state.choices) {
+    grid.appendChild(renderChoiceCardEl(inst, () => { wizardPick(state, inst.uid); render(); }));
+  }
+  parent.appendChild(grid);
+}
+
+function renderChest(parent: HTMLElement) {
+  const trapsList = (Object.values(CHEST_TRAP_DESCS) as string[]).map(d => `<li>${escapeHTML(d)}</li>`).join("");
+  parent.innerHTML = `
+    <p class="event-rules-info">
+      可能结果：<br>
+      · 50% 抽 1 张 rare 卡<br>
+      · 25% 抽 1 张 super_rare 卡<br>
+      · 5% 抽 1 张 epic 卡<br>
+      · 20% 触发陷阱（影响下一场战斗，三种之一）：
+      <ul>${trapsList}</ul>
+    </p>
+    <button class="event-option-btn open-chest-btn">
+      <div class="event-option-label">开 ！</div>
+    </button>
+  `;
+  parent.querySelector(".open-chest-btn")!.addEventListener("click", () => {
+    chestOpen(state);
+    render();
+  });
+}
+
 function renderGameOver() {
   stageEl.innerHTML = `
     <p class="hint">你倒在了第 ${state.floor} 关。</p>
@@ -921,10 +1109,12 @@ function renderGameOver() {
 function renderHand() {
   const activePanel = document.getElementById("active-panel");
   const endTurnBtn = document.getElementById("end-turn-btn") as HTMLButtonElement | null;
+  const discardBtn = document.getElementById("discard-hand-btn") as HTMLButtonElement | null;
   // 非战斗阶段：整个手牌面板隐藏（手牌、结束回合、装备 toggle 都不显示）
   if (state.phase !== "battle") {
     if (activePanel) activePanel.style.display = "none";
     if (endTurnBtn) endTurnBtn.style.display = "none";
+    if (discardBtn) discardBtn.style.display = "none";
     return;
   }
   if (activePanel) activePanel.style.display = "";
@@ -934,6 +1124,11 @@ function renderHand() {
     endTurnBtn.disabled = _isProcessingTurn;
     endTurnBtn.onclick = handleEndTurn;
   }
+  if (discardBtn) {
+    discardBtn.style.display = "";
+    discardBtn.disabled = _isProcessingTurn || state.player.hand.length === 0;
+    discardBtn.onclick = showHandDiscardModal;
+  }
   if (state.player.hand.length === 0) {
     handEl.innerHTML = '<p class="empty">手牌为空</p>';
   } else {
@@ -942,6 +1137,55 @@ function renderHand() {
     }
   }
   $("active-count").textContent = `${state.player.hand.length}/10 张`;
+}
+
+// 弃手牌弹窗：可勾选多张，确认后一并弃到弃牌堆
+function showHandDiscardModal() {
+  document.getElementById("hand-discard-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "hand-discard-overlay";
+  overlay.className = "ic-overlay";
+  overlay.innerHTML = `
+    <div class="ic-modal hd-modal">
+      <div class="ic-title">主动弃手牌</div>
+      <p class="ic-body">点击卡片切换"弃"标记。确认后选中的卡都会进弃牌堆，不消耗本回合。</p>
+      <div class="hd-grid"></div>
+      <div class="ic-actions">
+        <button class="ic-cancel">取消</button>
+        <button class="ic-confirm" disabled>确认弃 0 张</button>
+      </div>
+    </div>
+  `;
+  const grid = overlay.querySelector(".hd-grid")!;
+  const confirmBtn = overlay.querySelector(".ic-confirm") as HTMLButtonElement;
+  const selected = new Set<string>();
+  for (const inst of state.player.hand) {
+    const def = CARD_DB[inst.defId];
+    const rarity = def.rarity ?? "common";
+    const item = document.createElement("div");
+    item.className = `hd-card cat-${def.category} rarity-${rarity}`;
+    item.innerHTML = `
+      <div class="hd-card-name">${escapeHTML(def.name)}</div>
+      <div class="hd-card-cat">${categoryLabel(def.category)}</div>
+    `;
+    item.addEventListener("click", () => {
+      if (selected.has(inst.uid)) selected.delete(inst.uid);
+      else selected.add(inst.uid);
+      item.classList.toggle("selected", selected.has(inst.uid));
+      confirmBtn.disabled = selected.size === 0;
+      confirmBtn.textContent = `确认弃 ${selected.size} 张`;
+    });
+    grid.appendChild(item);
+  }
+  overlay.querySelector(".ic-cancel")!.addEventListener("click", () => overlay.remove());
+  confirmBtn.addEventListener("click", () => {
+    if (selected.size === 0) return;
+    discardHandCards(state, [...selected]);
+    overlay.remove();
+    render();
+  });
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 }
 
 function renderHandCard(inst: CardInstance): HTMLElement {

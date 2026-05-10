@@ -43,8 +43,23 @@ import {
   drawCards,
   discardWeapons,
   discardArmors,
+  applyNextBattlePenalty,
 } from "./battle.ts";
 import { makeEnemyGroupsForFloor } from "./enemies.ts";
+import {
+  rollFloorEvent,
+  generateMerchantStock,
+  tryPurchaseMerchantCard,
+  tradeFragments,
+  GAMBLER_OPTIONS,
+  SHRINE_OPTIONS,
+  generateWizardChoices,
+  applyWizardPick,
+  openChest,
+  EVENT_META,
+} from "./events.ts";
+import type { EventId } from "./events.ts";
+import type { CardInstance, EnemyRace } from "./types.ts";
 
 // ─────────────────────────────────────────────────────────
 // 工具
@@ -144,6 +159,8 @@ function startCurrentBattle(state: GameState) {
 
   // 起手摸 6
   drawCards(state.player, STARTING_HAND, logFn(state));
+  // 应用跨场战斗惩罚（神秘宝箱陷阱）
+  applyNextBattlePenalty(state.battle, logFn(state));
   pushLog(state, `回合 1（你的回合）`, "system");
 }
 
@@ -342,6 +359,33 @@ function afterPerkReward(state: GameState) {
   state.player.vita = state.player.vitaMax;
   pushLog(state, "完成一关，HP 补满。", "win");
   state.choices = [];
+  // 70% 概率触发楼层事件
+  const eventId = rollFloorEvent();
+  if (eventId) {
+    enterFloorEvent(state, eventId);
+    return;
+  }
+  goAfterFloorEvent(state);
+}
+
+function enterFloorEvent(state: GameState, eventId: string) {
+  state.activeEventId = eventId;
+  state.phase = "floor_event";
+  if (eventId === "merchant") {
+    state.merchantStock = generateMerchantStock(state.floor);
+  }
+  if (eventId === "wizard") {
+    state.choices = generateWizardChoices(state.floor);
+  }
+  const meta = EVENT_META[eventId as EventId];
+  pushLog(state, `${meta.icon} 楼层事件：${meta.name}。`, "system");
+}
+
+// 事件结束后进入下一阶段（铁匠铺或下一关）
+function goAfterFloorEvent(state: GameState) {
+  state.activeEventId = undefined;
+  state.merchantStock = undefined;
+  state.choices = [];
   // 每 2 关后进铁匠铺（即将进入 3 / 5 / 7...）
   if (state.floor > 0 && state.floor % 2 === 0) {
     state.phase = "forge";
@@ -395,4 +439,110 @@ export function skipForge(state: GameState) {
   if (state.phase !== "forge") return;
   pushLog(state, "跳过铁匠铺。");
   startNextFloor(state);
+}
+
+// ─────────────────────────────────────────────────────────
+// 楼层事件 · 公共 API
+// ─────────────────────────────────────────────────────────
+
+export function skipFloorEvent(state: GameState) {
+  if (state.phase !== "floor_event") return;
+  pushLog(state, "跳过本次事件。", "system");
+  goAfterFloorEvent(state);
+}
+
+// 商人购买
+export function merchantBuyCard(state: GameState, cardUid: string, payRace: EnemyRace): boolean {
+  if (state.phase !== "floor_event" || state.activeEventId !== "merchant") return false;
+  const card = state.merchantStock?.find(c => c.uid === cardUid);
+  if (!card) return false;
+  const result = tryPurchaseMerchantCard(state, card, payRace);
+  if (!result.ok) {
+    pushLog(state, `购买失败：${result.reason}`, "system");
+    return false;
+  }
+  // 移出库存（一张卡只能买一次）
+  state.merchantStock = state.merchantStock!.filter(c => c.uid !== cardUid);
+  pushLog(state, `购入 ${CARD_DB[card.defId].name}，消耗 ${payRace} 碎片。`, "player");
+  return true;
+}
+
+// 商人换碎片
+export function merchantTradeFragments(state: GameState, fromRace: EnemyRace, toRace: EnemyRace): boolean {
+  if (state.phase !== "floor_event" || state.activeEventId !== "merchant") return false;
+  const result = tradeFragments(state, fromRace, toRace);
+  if (!result.ok) {
+    pushLog(state, `兑换失败：${result.reason}`, "system");
+    return false;
+  }
+  pushLog(state, `3 ${fromRace} 碎片 → 1 ${toRace} 碎片。`, "player");
+  return true;
+}
+
+// 商人完成（玩家点"离开"）
+export function merchantLeave(state: GameState) {
+  if (state.phase !== "floor_event" || state.activeEventId !== "merchant") return;
+  goAfterFloorEvent(state);
+}
+
+// 赌徒
+export function gamblerBet(state: GameState, optionIdx: number) {
+  if (state.phase !== "floor_event" || state.activeEventId !== "gambler") return;
+  const opt = GAMBLER_OPTIONS[optionIdx];
+  if (!opt || !opt.available(state)) return;
+  const result = opt.apply(state);
+  pushLog(state, `🎲 ${opt.label}：${result}`, "player");
+  goAfterFloorEvent(state);
+}
+
+// 神龛
+export function shrineSacrifice(state: GameState, optionIdx: number) {
+  if (state.phase !== "floor_event" || state.activeEventId !== "shrine") return;
+  const opt = SHRINE_OPTIONS[optionIdx];
+  if (!opt) return;
+  const result = opt.apply(state);
+  pushLog(state, `⛲ ${result}`, "player");
+  goAfterFloorEvent(state);
+}
+
+// 诡异术士
+export function wizardPick(state: GameState, perkUid: string) {
+  if (state.phase !== "floor_event" || state.activeEventId !== "wizard") return;
+  const perk = state.choices.find(c => c.uid === perkUid);
+  if (!perk) return;
+  applyWizardPick(state, perk);
+  pushLog(state, `🐦‍⬛ 获得特性：${CARD_DB[perk.defId].name}（免费赠送）。`, "player");
+  goAfterFloorEvent(state);
+}
+
+// 神秘宝箱
+export function chestOpen(state: GameState) {
+  if (state.phase !== "floor_event" || state.activeEventId !== "chest") return;
+  const result = openChest(state);
+  pushLog(state, `📦 ${result.message}`, result.type === "trap" ? "lose" : "win");
+  goAfterFloorEvent(state);
+}
+
+// ─────────────────────────────────────────────────────────
+// 战斗中：玩家主动弃手牌
+// ─────────────────────────────────────────────────────────
+
+export function discardHandCards(state: GameState, uids: string[]): boolean {
+  if (state.phase !== "battle" || !state.battle) return false;
+  if (uids.length === 0) return false;
+  const set = new Set(uids);
+  const before = state.player.hand.length;
+  const discarded: CardInstance[] = [];
+  state.player.hand = state.player.hand.filter(c => {
+    if (set.has(c.uid)) {
+      discarded.push(c);
+      return false;
+    }
+    return true;
+  });
+  if (discarded.length === 0) return false;
+  state.player.discard.push(...discarded);
+  const names = discarded.map(c => CARD_DB[c.defId].name).join("、");
+  pushLog(state, `主动弃手牌 ${discarded.length} 张：${names}。`, "player");
+  return before > state.player.hand.length;
 }
