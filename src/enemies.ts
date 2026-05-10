@@ -1,6 +1,11 @@
-// 敌人定义 v0.9
-// makeEnemyGroupsForFloor(floor) 返回 EnemyState[][]：
-//   每个内层数组是"一场战斗"的敌人组合（1 关 3 场战斗）
+// 敌人生成 v0.10 · 完全随机
+// makeEnemyGroupsForFloor(floor) 返回 EnemyState[][]：每个内层数组是一场战斗
+//
+// 设计：
+//   - 敌人名字按种族 × 档位（normal/elite/boss）从名字池随机抽
+//   - HP/伤害/护甲由楼层 + 档位 + 多人战分摊公式决定
+//   - 招式从该种族的招式池随机抽 N 条，按楼层缩放数值
+//   - 关卡组合用"位置规则"：第 1-2 关全普通；第 3+ 关末场必是精英或 Boss
 
 import type { EnemyState, EnemyIntent, Suit, EnemyRace } from "./types.ts";
 import { SUITS } from "./types.ts";
@@ -10,395 +15,318 @@ function newEnemyId(name: string): string {
   return `e_${name}_${++_enemyUidCounter}`;
 }
 
-function randomSuit(): Suit {
-  return SUITS[Math.floor(Math.random() * SUITS.length)];
+function rand<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+// ─────────────────────────────────────────────────────────
+// 名字池（按种族 × 档位）
+// ─────────────────────────────────────────────────────────
+
+const ENEMY_NAMES: Record<EnemyRace, { normal: string[]; elite: string[]; boss: string[] }> = {
+  beast: {
+    normal: ["地鼠", "野狼", "毒蛇", "蝙蝠", "野猪", "黑豹", "狂狼", "野熊", "巨鼠", "豺狗"],
+    elite:  ["魔狼·首领", "巨爪熊王", "雷霆狼", "毒蛇王", "黑龙鳄", "霜熊", "影豹"],
+    boss:   ["原初之兽", "九尾狐妖", "雷神之爪", "兽王"],
+  },
+  humanoid: {
+    normal: ["哥布林", "强盗", "盗贼", "野蛮人", "异端兵", "佣兵", "刺客", "流浪者", "猎人", "异端徒"],
+    elite:  ["盗贼头目", "佣兵队长", "黑暗骑士", "异端祭司", "野蛮酋长", "杀手"],
+    boss:   ["哥布林王", "异端大主教", "黑暗骑士团长", "战团之王"],
+  },
+  undead: {
+    normal: ["骷髅兵", "丧尸", "食尸鬼", "白骨", "墓守", "腐尸", "亡灵小兵", "幽魂", "干尸"],
+    elite:  ["亡灵巫师", "骨王", "墓主", "黑暗法师", "鬼魅猎手", "亡魂祭司"],
+    boss:   ["巫妖", "亡灵之主", "骨之王座", "死灵法师"],
+  },
+  giant: {
+    normal: ["小巨人", "巨魔", "山地野人", "石头怪", "沼泽巨魔", "霜地野人"],
+    elite:  ["石巨人", "战争巨人", "冰霜巨人", "石神巨人", "山岭哨兵"],
+    boss:   ["山岳之主", "时间巨灵", "原始巨人", "霜山巨王"],
+  },
+  dark: {
+    normal: ["影爪", "夜魔", "深渊兽", "暗影爪牙", "黑暗使者", "影魂"],
+    elite:  ["暗影刺客", "暗影王子", "夜魔领主", "深渊使者", "影舞者"],
+    boss:   ["黑龙", "深渊领主", "暗影之主", "无相之主"],
+  },
+};
+
+// 精英特能名（flavor 显示用）
+const ELITE_ABILITIES: Record<EnemyRace, string[]> = {
+  beast:    ["嗜血", "狂怒", "再生", "尖牙锐利", "狩猎本能"],
+  humanoid: ["军团长", "战术家", "无情", "刺客之眼", "猎人本能"],
+  undead:   ["不朽", "黑魔法环", "死灵召唤", "瘟疫使者", "亡灵之力"],
+  giant:    ["重甲护体", "巨力", "震地", "无懈", "山之子"],
+  dark:     ["突袭", "暗影遁", "致命一击", "影分身", "深渊低语"],
+};
+
+// Boss 特能名
+const BOSS_ABILITIES: Record<EnemyRace, string[]> = {
+  beast:    ["Boss · 兽王怒", "Boss · 嗜血狂暴"],
+  humanoid: ["Boss · 战团号令", "Boss · 终极一击"],
+  undead:   ["Boss · 群体诅咒", "Boss · 死灵复活"],
+  giant:    ["Boss · 山崩地裂", "Boss · 巨力压制"],
+  dark:     ["Boss · 龙息", "Boss · 暗影王座"],
+};
+
+// ─────────────────────────────────────────────────────────
+// 招式池（按种族；baseValue 是楼层 1 标准，按楼层缩放）
+// ─────────────────────────────────────────────────────────
+
+interface IntentTemplate {
+  type: "attack" | "buff" | "debuff";
+  baseValue: number;          // 楼层 1 基线
+  hits?: number;
+  desc: string;
+  debuffId?: string;
+  debuffName?: string;
+  debuffDuration?: number;
+}
+
+const INTENT_POOLS: Record<EnemyRace, IntentTemplate[]> = {
+  beast: [
+    { type: "attack", baseValue: 4, desc: "啃咬" },
+    { type: "attack", baseValue: 5, desc: "撕咬" },
+    { type: "attack", baseValue: 2.5, hits: 2, desc: "连咬" },
+    { type: "attack", baseValue: 6, desc: "突袭" },
+    { type: "buff",   baseValue: 0, desc: "嚎叫（+2 攻）" },
+    { type: "debuff", baseValue: 2, desc: "獠牙伤", debuffId: "poison", debuffName: "中毒" },
+  ],
+  humanoid: [
+    { type: "attack", baseValue: 4, desc: "挥砍" },
+    { type: "attack", baseValue: 3, hits: 2, desc: "连斩" },
+    { type: "attack", baseValue: 5, desc: "突刺" },
+    { type: "attack", baseValue: 6, desc: "重击" },
+    { type: "buff",   baseValue: 0, desc: "战吼" },
+    { type: "debuff", baseValue: 3, desc: "断筋", debuffId: "weak", debuffName: "虚弱", debuffDuration: 2 },
+    { type: "debuff", baseValue: 2, desc: "破甲", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 2 },
+  ],
+  undead: [
+    { type: "attack", baseValue: 5, desc: "骨锤" },
+    { type: "attack", baseValue: 3, hits: 2, desc: "骨爪" },
+    { type: "attack", baseValue: 6, desc: "灵魂吸食" },
+    { type: "debuff", baseValue: 4, desc: "凋零术", debuffId: "poison", debuffName: "中毒" },
+    { type: "debuff", baseValue: 2, desc: "诅咒", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 2 },
+    { type: "debuff", baseValue: 3, desc: "瘴气", debuffId: "weak", debuffName: "虚弱", debuffDuration: 2 },
+  ],
+  giant: [
+    { type: "attack", baseValue: 7, desc: "巨拳" },
+    { type: "attack", baseValue: 4, hits: 2, desc: "双拳" },
+    { type: "attack", baseValue: 9, desc: "跺地震" },
+    { type: "buff",   baseValue: 0, desc: "硬化（armor +1）" },
+    { type: "debuff", baseValue: 3, desc: "砸碎", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 2 },
+    { type: "attack", baseValue: 11, desc: "重击" },
+  ],
+  dark: [
+    { type: "attack", baseValue: 5, desc: "暗影斩" },
+    { type: "attack", baseValue: 3, hits: 2, desc: "影矛连射" },
+    { type: "attack", baseValue: 7, desc: "黑闪" },
+    { type: "attack", baseValue: 8, desc: "暗杀重击" },
+    { type: "debuff", baseValue: 3, desc: "黑诅咒", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 3 },
+    { type: "debuff", baseValue: 4, desc: "腐血", debuffId: "poison", debuffName: "中毒" },
+    { type: "buff",   baseValue: 0, desc: "暗影遁" },
+  ],
+};
+
+// 种族属性偏向
+const RACE_HP_MULT: Record<EnemyRace, number> = {
+  beast: 0.85, humanoid: 1.0, undead: 1.05, giant: 1.4, dark: 1.15,
+};
+const RACE_SUIT_PREF: Record<EnemyRace, Suit> = {
+  beast: "club", humanoid: "spade", undead: "spade", giant: "club", dark: "diamond",
+};
+
+// 楼层 → 可用种族（递增解锁）
+function getRaceWhitelist(floor: number): EnemyRace[] {
+  if (floor <= 2) return ["beast", "humanoid"];
+  if (floor <= 4) return ["beast", "humanoid", "undead"];
+  if (floor <= 6) return ["beast", "humanoid", "undead", "giant"];
+  return ["beast", "humanoid", "undead", "giant", "dark"];
+}
+
+// ─────────────────────────────────────────────────────────
+// 数值公式
+// ─────────────────────────────────────────────────────────
+
+// 楼层 1 标准 HP；每关 +25%
+function baseHpForFloor(floor: number): number {
+  return 22 * Math.pow(1.25, floor - 1);
+}
+// 攻击数值随楼层 +18% 每关
+function scaleAttack(baseValue: number, floor: number, tier: "normal" | "elite" | "boss"): number {
+  let v = baseValue * (1 + (floor - 1) * 0.18);
+  if (tier === "elite") v *= 1.20;
+  if (tier === "boss")  v *= 1.45;
+  return Math.max(1, Math.round(v));
+}
+// 楼层防具：第 5 关起 +1，每关 +1
+function armorForFloor(floor: number, tier: "normal" | "elite" | "boss", race: EnemyRace): number {
+  let armor = 0;
+  if (floor >= 5) armor += floor - 4;
+  if (race === "giant") armor += 1;
+  if (race === "undead") armor += 1;
+  if (tier === "elite") armor += 1;
+  if (tier === "boss")  armor += 2;
+  return armor;
+}
+// 武器倍率（第 4 关起敌人"装备武器"）
+function weaponMultForFloor(floor: number): number | undefined {
+  if (floor < 4) return undefined;
+  return 1.0 + (floor - 4) * 0.10 + (floor >= 6 ? 0.20 : 0);
+}
+
+// ─────────────────────────────────────────────────────────
+// 招式生成：从池里抽 N 条，按楼层缩放
+// ─────────────────────────────────────────────────────────
+
+function generateIntents(race: EnemyRace, floor: number, tier: "normal" | "elite" | "boss"): EnemyIntent[] {
+  const pool = INTENT_POOLS[race];
+  const count = tier === "boss" ? Math.min(6, 4 + Math.floor(floor / 4))
+              : tier === "elite" ? 4
+              : Math.min(3, 2 + Math.floor(floor / 3));
+
+  // 抽 count 条，强制至少 60% 是攻击类
+  const attacks = pool.filter(i => i.type === "attack");
+  const others  = pool.filter(i => i.type !== "attack");
+  const minAttacks = Math.max(1, Math.ceil(count * 0.6));
+  const picked: IntentTemplate[] = [];
+  const aShuf = [...attacks].sort(() => Math.random() - 0.5);
+  for (let i = 0; i < minAttacks && i < aShuf.length; i++) picked.push(aShuf[i]);
+  const remaining = count - picked.length;
+  const oShuf = [...others, ...aShuf.slice(minAttacks)].sort(() => Math.random() - 0.5);
+  for (let i = 0; i < remaining && i < oShuf.length; i++) picked.push(oShuf[i]);
+
+  // 洗牌（避免攻击都堆在前面）
+  picked.sort(() => Math.random() - 0.5);
+
+  return picked.map(t => ({
+    type: t.type,
+    value: t.type === "attack" || t.type === "debuff"
+      ? scaleAttack(t.baseValue, floor, tier)
+      : 0,
+    hits: t.hits,
+    desc: t.desc,
+    debuffId: t.debuffId,
+    debuffName: t.debuffName,
+    debuffDuration: t.debuffDuration,
+  }));
+}
+
+// ─────────────────────────────────────────────────────────
+// 单个敌人生成
+// ─────────────────────────────────────────────────────────
+
+interface BuildOpts {
+  floor: number;
+  tier: "normal" | "elite" | "boss";
+  race?: EnemyRace;        // 不传则随机
+  groupSize?: number;      // 多人战每个 HP 减少
+  hpMultOverride?: number; // 特殊调整（如 boss 不被多人战分摊）
+}
+
+function buildRandomEnemy(opts: BuildOpts): EnemyState {
+  const whitelist = getRaceWhitelist(opts.floor);
+  const race = opts.race ?? rand(whitelist);
+  const tier = opts.tier;
+
+  // 名字
+  const namePool = ENEMY_NAMES[race][tier];
+  const name = rand(namePool);
+
+  // HP
+  let hp = baseHpForFloor(opts.floor) * RACE_HP_MULT[race];
+  if (tier === "elite") hp *= 1.6;
+  if (tier === "boss")  hp *= 3.2;
+  if (opts.groupSize && opts.groupSize > 1) {
+    hp = hp / (1 + (opts.groupSize - 1) * 0.5);
   }
-  return a;
-}
+  if (opts.hpMultOverride) hp *= opts.hpMultOverride;
+  hp = Math.max(8, Math.round(hp));
 
-interface EnemyTemplate {
-  name: string;
-  hp: number;
-  intents: EnemyIntent[];
-  suit?: Suit;
-  race: EnemyRace;
-  armor?: number;
-  tier?: "normal" | "elite" | "boss";
-  eliteAbility?: string;     // 精英特能简述（显示用）
-}
+  // 花色：30% 跟随种族倾向，70% 随机
+  const suit: Suit = Math.random() < 0.3
+    ? RACE_SUIT_PREF[race]
+    : rand(SUITS);
 
-// ── 关 1 敌人（HP +30%） ─────────────────────────────────
+  // 招式
+  const intents = generateIntents(race, opts.floor, tier);
 
-const T_RAT: EnemyTemplate = {
-  name: "地鼠",
-  hp: 16,
-  suit: "club",
-  race: "beast",
-  intents: [
-    { type: "attack", value: 3, desc: "啃咬 ⚔️ 3" },
-    { type: "attack", value: 2, hits: 2, desc: "连咬 ⚔️ 2×2" },
-  ],
-};
+  // 武器/护甲
+  const wm = weaponMultForFloor(opts.floor);
+  if (wm) {
+    // 把攻击招式的 value 再乘 weaponMult
+    for (const i of intents) {
+      if (i.type === "attack") i.value = Math.max(1, Math.round(i.value * wm));
+    }
+  }
+  const armor = armorForFloor(opts.floor, tier, race);
 
-const T_GOBLIN: EnemyTemplate = {
-  name: "哥布林",
-  hp: 21,
-  suit: "spade",
-  race: "humanoid",
-  intents: [
-    { type: "attack", value: 4, desc: "挥砍 ⚔️ 4" },
-    { type: "attack", value: 3, desc: "乱打 ⚔️ 3" },
-    { type: "buff", value: 0, desc: "怒吼 (下次 +3)" },
-  ],
-};
+  // 特能名
+  const eliteAbility = tier === "elite" ? rand(ELITE_ABILITIES[race])
+                     : tier === "boss"  ? rand(BOSS_ABILITIES[race])
+                     : undefined;
 
-const T_BANDIT: EnemyTemplate = {
-  name: "强盗",
-  hp: 26,
-  suit: "diamond",
-  race: "humanoid",
-  intents: [
-    { type: "attack", value: 5, desc: "盗刃 ⚔️ 5" },
-    { type: "attack", value: 3, hits: 2, desc: "连刺 ⚔️ 3×2" },
-  ],
-};
-
-// ── 关 2 敌人（HP +30%）────────────────────────────────
-
-const T_WOLF: EnemyTemplate = {
-  name: "野狼",
-  hp: 26,
-  suit: "heart",
-  race: "beast",
-  intents: [
-    { type: "attack", value: 4, desc: "撕咬" },
-    { type: "attack", value: 3, hits: 2, desc: "连咬" },
-    { type: "debuff", value: 2, desc: "嚎叫", debuffId: "weak", debuffName: "虚弱", debuffDuration: 2 },
-  ],
-};
-
-const T_KOBOLD: EnemyTemplate = {
-  name: "科博德",
-  hp: 34,
-  suit: "club",
-  race: "humanoid",
-  intents: [
-    { type: "attack", value: 5, desc: "刺击" },
-    { type: "attack", value: 3, hits: 2, desc: "双刺" },
-    { type: "debuff", value: 3, desc: "毒针", debuffId: "poison", debuffName: "中毒" },
-    { type: "buff", value: 0, desc: "怒吼" },
-  ],
-};
-
-const T_SKELETON: EnemyTemplate = {
-  name: "骷髅兵",
-  hp: 42,
-  suit: "spade",
-  race: "undead",
-  intents: [
-    { type: "attack", value: 6, desc: "骨锤" },
-    { type: "attack", value: 4, hits: 2, desc: "骨爪" },
-    { type: "debuff", value: 1, desc: "诅咒", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 2 },
-  ],
-};
-
-// ── 关 3：群战 / boss（HP +30%） ───────────────────────
-
-const T_GOBLIN_GRUNT: EnemyTemplate = {
-  name: "哥布林兵",
-  hp: 18,
-  suit: "spade",
-  race: "humanoid",
-  intents: [
-    { type: "attack", value: 2, desc: "戳刺 ⚔️ 2" },
-    { type: "attack", value: 3, desc: "猛挥 ⚔️ 3" },
-  ],
-};
-
-// 兽人首领已被 BOSS_GOBLIN_KING 替代，保留备用
-
-const T_RAT_SWARM: EnemyTemplate = {
-  name: "鼠群成员",
-  hp: 16,
-  suit: "club",
-  race: "beast",
-  intents: [
-    { type: "attack", value: 2, desc: "啃咬 ⚔️ 2" },
-    { type: "attack", value: 1, hits: 2, desc: "连咬 ⚔️ 1×2" },
-  ],
-};
-
-// ── 关 4+ 敌人（HP +30%） ────────────────────────────
-
-const T_GHOUL: EnemyTemplate = {
-  name: "食尸鬼",
-  hp: 65,
-  suit: "heart",
-  race: "undead",
-  armor: 1,
-  intents: [
-    { type: "attack", value: 7, desc: "撕咬" },
-    { type: "attack", value: 5, hits: 2, desc: "狂啃" },
-    { type: "debuff", value: 4, desc: "腐蚀", debuffId: "poison", debuffName: "中毒" },
-    { type: "debuff", value: 2, desc: "凝视", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 2 },
-  ],
-};
-
-const T_TROLL: EnemyTemplate = {
-  name: "巨魔",
-  hp: 91,
-  suit: "spade",
-  race: "giant",
-  armor: 2,
-  intents: [
-    { type: "attack", value: 9, desc: "重拳" },
-    { type: "buff", value: 0, desc: "咆哮" },
-    { type: "attack", value: 6, hits: 2, desc: "连击" },
-    { type: "debuff", value: 3, desc: "震慑", debuffId: "weak", debuffName: "虚弱", debuffDuration: 2 },
-  ],
-};
-
-const T_DARK_KNIGHT: EnemyTemplate = {
-  name: "黑暗骑士",
-  hp: 111,
-  suit: "diamond",
-  race: "dark",
-  armor: 3,
-  intents: [
-    { type: "attack", value: 10, desc: "黑剑" },
-    { type: "attack", value: 6, hits: 2, desc: "双斩" },
-    { type: "buff", value: 0, desc: "黑怒" },
-    { type: "debuff", value: 3, desc: "黑诅咒", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 3 },
-    { type: "debuff", value: 5, desc: "腐血", debuffId: "poison", debuffName: "中毒" },
-  ],
-};
-
-// ─────────────────────────────────────────────────────────
-// 精英敌人（HP +50%、1 个特能、攻击值 ×1.2）
-// ─────────────────────────────────────────────────────────
-
-const T_ELITE_DIRE_WOLF: EnemyTemplate = {
-  name: "魔狼·首领",
-  hp: 60,
-  suit: "club",
-  race: "beast",
-  tier: "elite",
-  eliteAbility: "嗜血",
-  intents: [
-    { type: "attack", value: 8, desc: "魔噬" },
-    { type: "attack", value: 5, hits: 2, desc: "撕咬连击" },
-    { type: "buff", value: 0, desc: "嗜血咆哮 (+3 攻)" },
-  ],
-};
-
-const T_ELITE_NECROMANCER: EnemyTemplate = {
-  name: "亡灵巫师",
-  hp: 70,
-  suit: "spade",
-  race: "undead",
-  tier: "elite",
-  eliteAbility: "黑魔法环",
-  armor: 1,
-  intents: [
-    { type: "debuff", value: 4, desc: "凋零术", debuffId: "poison", debuffName: "中毒" },
-    { type: "attack", value: 9, desc: "黑闪" },
-    { type: "debuff", value: 2, desc: "死亡凝视", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 3 },
-    { type: "attack", value: 6, hits: 2, desc: "亡爪" },
-  ],
-};
-
-const T_ELITE_GOLEM: EnemyTemplate = {
-  name: "石巨人",
-  hp: 95,
-  suit: "club",
-  race: "giant",
-  tier: "elite",
-  eliteAbility: "重甲护体",
-  armor: 4,
-  intents: [
-    { type: "attack", value: 11, desc: "巨拳" },
-    { type: "attack", value: 7, hits: 2, desc: "双拳" },
-    { type: "buff", value: 0, desc: "硬化（armor +2）" },
-  ],
-};
-
-const T_ELITE_SHADOW: EnemyTemplate = {
-  name: "暗影刺客",
-  hp: 65,
-  suit: "spade",
-  race: "dark",
-  tier: "elite",
-  eliteAbility: "突袭",
-  intents: [
-    { type: "attack", value: 7, hits: 2, desc: "双刃突袭" },
-    { type: "buff", value: 0, desc: "影遁" },
-    { type: "attack", value: 14, desc: "暗杀重击" },
-    { type: "debuff", value: 2, desc: "毒刃", debuffId: "poison", debuffName: "中毒" },
-  ],
-};
-
-// ─────────────────────────────────────────────────────────
-// Boss（每 3 关一个，第 3/6/9 关末场）
-// ─────────────────────────────────────────────────────────
-
-const BOSS_GOBLIN_KING: EnemyTemplate = {
-  name: "哥布林王",
-  hp: 130,
-  suit: "club",
-  race: "humanoid",
-  tier: "boss",
-  eliteAbility: "Boss · 3 阶段",
-  armor: 2,
-  intents: [
-    { type: "attack", value: 9, desc: "王者一击" },
-    { type: "attack", value: 5, hits: 2, desc: "连斩" },
-    { type: "buff", value: 0, desc: "号令援军" },
-    { type: "debuff", value: 4, desc: "击碎", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 2 },
-    { type: "attack", value: 13, desc: "怒吼斩击" },
-  ],
-};
-
-const BOSS_LICH: EnemyTemplate = {
-  name: "巫妖",
-  hp: 200,
-  suit: "spade",
-  race: "undead",
-  tier: "boss",
-  eliteAbility: "Boss · 群体诅咒",
-  armor: 3,
-  intents: [
-    { type: "debuff", value: 6, desc: "腐烂诅咒", debuffId: "poison", debuffName: "中毒" },
-    { type: "attack", value: 12, desc: "灵魂火焰" },
-    { type: "debuff", value: 3, desc: "灵魂枯萎", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 3 },
-    { type: "attack", value: 8, hits: 2, desc: "亡爪连击" },
-    { type: "buff", value: 0, desc: "亡灵之力" },
-    { type: "attack", value: 18, desc: "终焉爆裂" },
-  ],
-};
-
-const BOSS_DRAGON: EnemyTemplate = {
-  name: "黑龙",
-  hp: 280,
-  suit: "diamond",
-  race: "dark",
-  tier: "boss",
-  eliteAbility: "Boss · 龙息",
-  armor: 5,
-  intents: [
-    { type: "attack", value: 16, desc: "黑龙息" },
-    { type: "attack", value: 10, hits: 2, desc: "双爪" },
-    { type: "debuff", value: 5, desc: "灼烧", debuffId: "poison", debuffName: "中毒" },
-    { type: "buff", value: 0, desc: "龙之怒" },
-    { type: "attack", value: 24, desc: "毁灭龙息" },
-    { type: "debuff", value: 4, desc: "龙瞳", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 3 },
-  ],
-};
-
-// ─────────────────────────────────────────────────────────
-// 构建
-// ─────────────────────────────────────────────────────────
-
-function buildEnemy(
-  tpl: EnemyTemplate,
-  scale = 1.0,
-  weaponMult = 1.0,
-  extraArmor = 0,
-): EnemyState {
-  const hp = Math.round(tpl.hp * scale);
   return {
-    id: newEnemyId(tpl.name),
-    name: tpl.name,
+    id: newEnemyId(name),
+    name,
     hp,
     maxHp: hp,
-    suit: tpl.suit ?? randomSuit(),
-    race: tpl.race,
-    intents: tpl.intents.map(i => ({
-      ...i,
-      value: Math.round(i.value * (i.type === "attack" ? scale * weaponMult : scale)),
-    })),
+    suit,
+    race,
+    intents,
     intentIndex: 0,
     statuses: [],
     alive: true,
-    armor: (tpl.armor ?? 0) + extraArmor,
-    weaponMult: weaponMult > 1.0 ? weaponMult : undefined,
-    tier: tpl.tier ?? "normal",
-    eliteAbility: tpl.eliteAbility,
+    armor: armor > 0 ? armor : undefined,
+    weaponMult: wm,
+    tier,
+    eliteAbility,
   };
 }
 
-// 一关 = 3 场战斗
-// 节奏：1-2 关全普通；3 关 BOSS 替代收尾；4-5 关末场是精英；6 关再 BOSS；7+ 关精英为主，每 3 关末场必是 BOSS
+// ─────────────────────────────────────────────────────────
+// 关卡组合：3 场战斗
+// 第 1-2 关：3 普通（关 1 单体，关 2 单体）
+// 第 3 关起：2 普通 + 1 精英；每 3 关末场是 Boss（3、6、9...）
+// 中间偶尔来一场多人小怪战（30% 概率，第 2 关起）
+// ─────────────────────────────────────────────────────────
+
 export function makeEnemyGroupsForFloor(floor: number): EnemyState[][] {
-  if (floor === 1) {
-    return shuffle([T_RAT, T_GOBLIN, T_BANDIT]).map(t => [buildEnemy(t)]);
-  }
-  if (floor === 2) {
-    return shuffle([T_WOLF, T_KOBOLD, T_SKELETON]).map(t => [buildEnemy(t)]);
-  }
-  if (floor === 3) {
-    // 第 3 关：2 普通 + 1 BOSS（哥布林王）— T_ORC_BOSS 退役为精英级展示
-    return [
-      [buildEnemy(T_GOBLIN_GRUNT), buildEnemy(T_GOBLIN_GRUNT)],
-      [buildEnemy(T_RAT_SWARM), buildEnemy(T_RAT_SWARM), buildEnemy(T_RAT_SWARM)],
-      [buildEnemy(BOSS_GOBLIN_KING)],
-    ];
-  }
-  if (floor === 4) {
-    // 第 4 关：2 普通 + 1 精英末场
-    return [
-      [buildEnemy(T_GHOUL, 1.0, 1.3)],
-      [buildEnemy(T_TROLL, 1.0, 1.3)],
-      [buildEnemy(pickElite(), 1.0, 1.3)],
-    ];
-  }
-  if (floor === 5) {
-    // 第 5 关：2 普通 + 1 精英
-    const scale = 1.25, wm = 1.4;
-    return [
-      [buildEnemy(T_DARK_KNIGHT, scale, wm, 1)],
-      [buildEnemy(T_GHOUL, scale, wm, 1)],
-      [buildEnemy(pickElite(), scale, wm, 1)],
-    ];
-  }
-  if (floor === 6) {
-    // 第 6 关：1 普通 + 1 精英 + BOSS（巫妖）
-    const scale = 1.5, wm = 1.5;
-    return [
-      [buildEnemy(T_TROLL, scale, wm, 2)],
-      [buildEnemy(pickElite(), scale, wm, 2)],
-      [buildEnemy(BOSS_LICH, 1.0, 1.0, 0)],
-    ];
+  const isBossFloor = floor % 3 === 0;
+  const groups: EnemyState[][] = [];
+
+  // 第 1 场：普通（偶尔多人小怪）
+  if (floor >= 2 && Math.random() < 0.3) {
+    // 多人小怪战：2-3 个低 HP 普通
+    const size = Math.random() < 0.5 ? 2 : 3;
+    const arr: EnemyState[] = [];
+    for (let i = 0; i < size; i++) {
+      arr.push(buildRandomEnemy({ floor, tier: "normal", groupSize: size }));
+    }
+    groups.push(arr);
+  } else {
+    groups.push([buildRandomEnemy({ floor, tier: "normal" })]);
   }
 
-  // 第 7+ 关
-  const scale = 1 + 0.25 * (floor - 4);
-  const weaponMult = 1.3 + 0.1 * (floor - 5);
-  const extraArmor = floor - 4;
-  const isBossFloor = floor % 3 === 0;  // 9/12/15... 是 BOSS 收尾
-  return [
-    [buildEnemy(T_DARK_KNIGHT, scale, weaponMult, extraArmor)],
-    [buildEnemy(pickElite(), scale, weaponMult, extraArmor)],
-    isBossFloor
-      ? [buildEnemy(pickBoss(floor), 1.0 + (floor - 9) * 0.15, 1.0, 0)]
-      : [buildEnemy(pickElite(), scale * 1.2, weaponMult * 1.1, extraArmor + 1)],
-  ];
-}
+  // 第 2 场：普通（or 多人）
+  if (floor >= 3 && Math.random() < 0.25) {
+    const size = 2;
+    groups.push([
+      buildRandomEnemy({ floor, tier: "normal", groupSize: size }),
+      buildRandomEnemy({ floor, tier: "normal", groupSize: size }),
+    ]);
+  } else {
+    groups.push([buildRandomEnemy({ floor, tier: "normal" })]);
+  }
 
-const ELITE_POOL = [T_ELITE_DIRE_WOLF, T_ELITE_NECROMANCER, T_ELITE_GOLEM, T_ELITE_SHADOW];
-const BOSS_POOL = [BOSS_GOBLIN_KING, BOSS_LICH, BOSS_DRAGON];
+  // 第 3 场：关 1-2 普通；关 3+ 精英；每 3 关末场是 Boss
+  if (floor <= 2) {
+    groups.push([buildRandomEnemy({ floor, tier: "normal" })]);
+  } else if (isBossFloor) {
+    groups.push([buildRandomEnemy({ floor, tier: "boss" })]);
+  } else {
+    groups.push([buildRandomEnemy({ floor, tier: "elite" })]);
+  }
 
-function pickElite(): EnemyTemplate {
-  return ELITE_POOL[Math.floor(Math.random() * ELITE_POOL.length)];
-}
-function pickBoss(floor: number): EnemyTemplate {
-  // 楼层越高轮换出更强的 boss
-  const idx = Math.min(BOSS_POOL.length - 1, Math.floor((floor - 6) / 3));
-  return BOSS_POOL[idx];
+  return groups;
 }
