@@ -30,17 +30,22 @@ export function newSlotId(): string { return `slt_${++_slotCounter}`; }
 
 function pickRandSuit(): Suit { return SUITS[Math.floor(Math.random() * SUITS.length)]; }
 
+// 史诗卡每场战斗的使用次数（newBattle 时重置；用尽后回到牌库需要重新抽起）
+export const EPIC_USES_PER_BATTLE = 3;
+
 export function makeInstance(defId: string, suit?: Suit, floor = 0): CardInstance {
   const def = CARD_DB[defId];
   const s = suit ?? def?.defaultSuit ?? def?.attackSuit ?? def?.equipSuit ?? pickRandSuit();
   const uid = `${defId}_${++_uidCounter}`;
-  return {
+  const inst: CardInstance = {
     defId,
     uid,
     scale: floorScale(floor),
     suit: s,
     slotId: newSlotId(),
   };
+  if (def?.rarity === "epic") inst.usesRemaining = EPIC_USES_PER_BATTLE;
+  return inst;
 }
 
 // ── 状态工具 ──────────────────────────────────────────────
@@ -66,6 +71,13 @@ export function damageEnemy(target: EnemyState, n: number, log: (m: string, k?: 
   target.hp = Math.max(0, target.hp - n);
   if (msg) log(msg, "player");
   if (target.hp <= 0) {
+    // 特能：不朽 — HP 归 0 时复活到 50%（每只敌人整局 1 次）
+    if (target.eliteAbility === "不朽" && !(target as any)._undyingUsed) {
+      (target as any)._undyingUsed = true;
+      target.hp = Math.round(target.maxHp * 0.5);
+      log(`★ ${target.name} 不朽！复活到 ${target.hp} HP。`, "lose");
+      return;
+    }
     target.alive = false;
     log(`★ 击败 ${target.name}！`, "win");
   }
@@ -123,7 +135,7 @@ const LONG_SWORD: CardDef = {
   category: "equipment",
   desc: "装备：基础伤害 7，破甲 3（无视敌人 3 点护甲）。",
   equipKind: "weapon",
-  equipSuit: "club",
+  equipSuit: "spade",
   baseDmg: 7,
   pierce: 3,
   equipEffects: [
@@ -154,13 +166,45 @@ const DAGGER: CardDef = {
   ],
 };
 
+// ♥ 偏攻击吸血武器：高基础伤 + 击杀大量回血 + 残血加成
+const BLOOD_BLADE: CardDef = {
+  id: "blood_blade",
+  name: "血裂刃",
+  category: "equipment",
+  desc: "装备：基础伤害 7，吸血 30%。击杀目标时额外回 20% 最大 HP。",
+  equipKind: "weapon",
+  equipSuit: "heart",
+  baseDmg: 7,
+  equipEffects: (() => {
+    const mk = (vampPct: number, killPct: number) => ({
+      desc: `基础 7×N + 吸血 ${Math.round(vampPct * 100)}% + 击杀回 ${Math.round(killPct * 100)}% maxHP。`,
+      stat: `吸${Math.round(vampPct * 100)}% 击杀+${Math.round(killPct * 100)}%`,
+      onAttack: (ctx: BattleContext, d: number) => {
+        const heal = Math.floor(d * vampPct);
+        if (heal > 0) {
+          ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + heal);
+          ctx.log(`血裂刃吸血 ${heal}。`, "player");
+        }
+        // 击杀检测：本击若致死，额外回 X% maxHP
+        if (ctx.target.alive && ctx.target.hp - d <= 0) {
+          const bonus = Math.floor(ctx.player.vitaMax * killPct);
+          ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + bonus);
+          ctx.log(`血裂刃击杀回血 ${bonus}。`, "player");
+        }
+        return d;
+      },
+    });
+    return [mk(0.30, 0.15), mk(0.35, 0.18), mk(0.40, 0.22), mk(0.50, 0.28)] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
+  })(),
+};
+
 const WAR_BOW: CardDef = {
   id: "war_bow",
   name: "战弓",
   category: "equipment",
   desc: "装备：基础伤害 6，狙击——攻击 HP > 50% 的敌人 +4 伤。",
   equipKind: "weapon",
-  equipSuit: "diamond",
+  equipSuit: "spade",
   baseDmg: 6,
   equipEffects: [
     { desc: "基础 6 + HP>50% 狙击 +4。", stat: "6 伤 狙击+4",
@@ -182,7 +226,7 @@ const TWIN_BLADES: CardDef = {
   category: "equipment",
   desc: "装备：基础伤害 4，每次出攻击牌真触发 2 次（武器钩子触发 2 次）。",
   equipKind: "weapon",
-  equipSuit: "spade",
+  equipSuit: "diamond",
   baseDmg: 4,
   hits: 2,
   equipEffects: [
@@ -232,7 +276,7 @@ const BATTLE_STAFF: CardDef = {
   category: "equipment",
   desc: "装备：基础伤害 5，每次攻击给目标 +1 易伤（×1.5 受伤）持续 2 回合。",
   equipKind: "weapon",
-  equipSuit: "heart",
+  equipSuit: "club",
   baseDmg: 5,
   equipEffects: [
     { desc: "基础 5 + 易伤 ×1.5。", stat: "5 伤 易伤×1.5" },
@@ -303,13 +347,31 @@ const REPEATING_BOW: CardDef = {
   category: "equipment",
   desc: "装备：基础伤害 4，每回合可出多张攻击牌。连续两回合都出了一张以上的攻击时，第三回合开始自动弃置。",
   equipKind: "weapon",
-  equipSuit: "heart",
+  equipSuit: "diamond",
   baseDmg: 4,
   equipEffects: [
     { desc: "基础 4，可连续攻击。", stat: "4 伤 连击" },
     { desc: "叠加 ×1.4，可连续攻击。", stat: "5.6 伤 连击" },
     { desc: "叠加 ×1.8，可连续攻击。", stat: "7.2 伤 连击" },
     { desc: "叠加 ×2.2，可连续攻击。", stat: "8.8 伤 连击" },
+  ],
+};
+
+// 破军：动态破甲武器，pierce 跟随目标 armor 自适应（在 calcAttackDamage 特判）
+const RAIDER: CardDef = {
+  id: "raider",
+  name: "破军",
+  category: "equipment",
+  desc: "装备：基础伤害 5，破甲数等于目标当前护甲的 50%（自适应）。",
+  equipKind: "weapon",
+  equipSuit: "spade",
+  baseDmg: 5,
+  pierce: 0,  // 实际 pierce 在 battle.ts/calcAttackDamage 里基于 target.armor 动态计算
+  equipEffects: [
+    { desc: "基础 5，破甲 50% 目标护甲。", stat: "5 伤 破50%" },
+    { desc: "叠加 ×1.4，破甲 50%。",       stat: "7 伤 破50%" },
+    { desc: "叠加 ×1.8，破甲 60%。",       stat: "9 伤 破60%" },
+    { desc: "叠加 ×2.2，破甲 70%。",       stat: "11 伤 破70%" },
   ],
 };
 
@@ -323,7 +385,7 @@ const ROUND_SHIELD: CardDef = {
   category: "equipment",
   desc: "装备：受击 -3。",
   equipKind: "armor",
-  equipSuit: "diamond",
+  equipSuit: "club",
   baseReduce: 3,
   equipEffects: [
     { desc: "受击 -3。", stat: "-3 受击", onTakeDamage: (_c, d) => Math.max(0, d - 3) },
@@ -357,13 +419,44 @@ const LEATHER_ARMOR: CardDef = {
   ],
 };
 
+// ♥ 偏生存防具：低血量受击大幅减半 + 战斗结束自动回血
+const CROWN_OF_VITALITY: CardDef = {
+  id: "crown_of_vitality",
+  name: "生命之冠",
+  category: "equipment",
+  desc: "装备：受击 -1。HP < 30% 时受击额外减半。",
+  equipKind: "armor",
+  equipSuit: "heart",
+  baseReduce: 1,
+  equipEffects: (() => {
+    const mk = (reduce: number, hpThreshold: number, halfMult: number) => ({
+      desc: `受击 -${reduce}。HP < ${Math.round(hpThreshold * 100)}% 时受击额外 ×${halfMult}。`,
+      stat: `-${reduce} 受击 危机×${halfMult}`,
+      onTakeDamage: (c: BattleContext, d: number) => {
+        let nd = Math.max(0, d - reduce);
+        if (c.player.vita < c.player.vitaMax * hpThreshold) {
+          nd = Math.floor(nd * halfMult);
+          c.log(`生命之冠·危机：受击 ×${halfMult}（${d}→${nd}）。`, "player");
+        }
+        return nd;
+      },
+    });
+    return [
+      mk(1, 0.30, 0.6),
+      mk(1, 0.35, 0.55),
+      mk(2, 0.40, 0.50),
+      mk(2, 0.50, 0.40),
+    ] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
+  })(),
+};
+
 const SPIKE_ARMOR: CardDef = {
   id: "spike_armor",
   name: "反伤甲",
   category: "equipment",
   desc: "装备：受击反伤 3。",
   equipKind: "armor",
-  equipSuit: "spade",
+  equipSuit: "diamond",
   baseReduce: 0,
   equipEffects: [
     { desc: "反伤 3。", stat: "反伤 3", onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 3, c.log, `反伤甲 → ${t.name} -3。`); return d; } },
@@ -405,7 +498,7 @@ const MAGE_ROBE: CardDef = {
   category: "equipment",
   desc: "装备：受击 -1。出技能/道具时额外摸 1 张牌（持续过牌）。",
   equipKind: "armor",
-  equipSuit: "diamond",
+  equipSuit: "club",
   baseReduce: 1,
   equipEffects: [
     { desc: "受击 -1 + 技能/道具摸 1 张。", stat: "-1 受击 +1摸/技", onTakeDamage: (_c, d) => Math.max(0, d - 1) },
@@ -421,7 +514,7 @@ const CLOAK: CardDef = {
   category: "equipment",
   desc: "装备：受击 -1。每回合开始消除自身 1 个负面状态。",
   equipKind: "armor",
-  equipSuit: "spade",
+  equipSuit: "diamond",
   baseReduce: 1,
   equipEffects: [
     { desc: "-1 受击 + 自动驱毒。", stat: "-1 受击 自动驱毒",
@@ -469,7 +562,7 @@ const SCALE_MAIL: CardDef = {
   category: "equipment",
   desc: "装备：受击 -2，反伤 2。减伤+反伤双修，介于盾与反伤甲之间。",
   equipKind: "armor",
-  equipSuit: "heart",
+  equipSuit: "diamond",
   baseReduce: 2,
   equipEffects: [
     { desc: "-2 受击 + 反伤 2。", stat: "-2 受击 反伤2",
@@ -483,24 +576,26 @@ const SCALE_MAIL: CardDef = {
   ],
 };
 
-// 意念甲：固定概率闪避，叠加后提升（×1:10%, ×2:20%, ×3:30%, ×4:40%）
+// 意念甲：闪避概率，叠加后提升（×1:10%, ×2:20%, ×3:30%, ×4:40%）
+// 注：实际 dodge roll 走 battle.ts 统一的 getCurrentDodgeChance + damagePlayer hook，
+// 这里 onTakeDamage 只做基础 -1 受击。叠加层数由 getCurrentDodgeChance 读取。
 const MIND_ARMOR: CardDef = {
   id: "mind_armor",
   name: "意念甲",
   category: "equipment",
-  desc: "装备：10% 概率完全闪避攻击。叠加后提升（20% / 30% / 40%）。",
+  desc: "防具：受击 -1。叠加增加完全闪避概率（10/20/30/40%）。",
   equipKind: "armor",
   equipSuit: "diamond",
-  baseReduce: 0,
+  baseReduce: 1,
   equipEffects: [
-    { desc: "10% 闪避（完全无视伤害）。", stat: "10% 闪避",
-      onTakeDamage: (c, d) => { if (Math.random() < 0.10) { c.log("意念甲：完全闪避！", "player"); return 0; } return d; } },
-    { desc: "20% 闪避。", stat: "20% 闪避",
-      onTakeDamage: (c, d) => { if (Math.random() < 0.20) { c.log("意念甲：完全闪避！", "player"); return 0; } return d; } },
-    { desc: "30% 闪避。", stat: "30% 闪避",
-      onTakeDamage: (c, d) => { if (Math.random() < 0.30) { c.log("意念甲：完全闪避！", "player"); return 0; } return d; } },
-    { desc: "40% 闪避。", stat: "40% 闪避",
-      onTakeDamage: (c, d) => { if (Math.random() < 0.40) { c.log("意念甲：完全闪避！", "player"); return 0; } return d; } },
+    { desc: "受击 -1，闪避 +10%。", stat: "-1 受击 闪10%",
+      onTakeDamage: (_c, d) => Math.max(0, d - 1) },
+    { desc: "受击 -1，闪避 +20%。", stat: "-1 受击 闪20%",
+      onTakeDamage: (_c, d) => Math.max(0, d - 1) },
+    { desc: "受击 -1，闪避 +30%。", stat: "-1 受击 闪30%",
+      onTakeDamage: (_c, d) => Math.max(0, d - 1) },
+    { desc: "受击 -1，闪避 +40%。", stat: "-1 受击 闪40%",
+      onTakeDamage: (_c, d) => Math.max(0, d - 1) },
   ],
 };
 
@@ -523,8 +618,8 @@ function removeOneDebuff(c: BattleContext) {
 
 const SK_POISON_BLADE: CardDef = {
   id: "sk_poison_blade", name: "毒刃", category: "skill", target: "single",
-  desc: "目标 +3 层中毒：每回合扣等同层数的 HP，每回合自动 -1 层。",
-  onPlay: (c) => { addStatus(c.target, "poison", "中毒", 3); c.log(`${c.target.name} 中毒 +3。`, "player"); },
+  desc: "目标 +6 层中毒：每回合扣等同层数 HP（合计 21 伤害），每回合自动 -1 层。可叠加施放。",
+  onPlay: (c) => { addStatus(c.target, "poison", "中毒", 6); c.log(`${c.target.name} 中毒 +6。`, "player"); },
 };
 
 const SK_BATTLE_CRY: CardDef = {
@@ -547,9 +642,9 @@ const SK_FRENZY: CardDef = {
 };
 
 const SK_EVASIVE: CardDef = {
-  id: "sk_evasive", name: "闪避姿态", category: "skill", target: "self",
-  desc: "本回合受到的伤害 -50%。",
-  onPlay: (c) => { addStatus(c.player, "evasive", "闪避", 1, 1); c.log("闪避姿态。", "player"); },
+  id: "sk_evasive", name: "屏息", category: "skill", target: "self",
+  desc: "本回合受到的伤害 -50%（与闪避概率不同：屏息减半，闪避跳过整次）。",
+  onPlay: (c) => { addStatus(c.player, "evasive", "屏息", 1, 1); c.log("屏息：本回合伤害减半。", "player"); },
 };
 
 const SK_SILENCE: CardDef = {
@@ -647,17 +742,27 @@ const SK_DBL_PUMMEL: CardDef = {
 // 染色术：本回合所有攻击牌花色视为玩家手选花色
 const SK_DYE: CardDef = {
   id: "sk_dye", name: "染色术", category: "skill", target: "self",
-  desc: "本回合内所有攻击牌的花色视为你选定的花色（让花色相性更可控）。",
+  desc: "本回合内所有攻击牌的花色视为你选定的花色。",
   onPlay: (c) => {
     (c as any)._suitPick = "dye";
     c.log("染色术：请选择本回合攻击牌花色。", "player");
   },
 };
 
+// 持咒：整场战斗内所有攻击牌视为指定花色（持续整场，染色术升级版）
+const SK_CHANT: CardDef = {
+  id: "sk_chant", name: "持咒", category: "skill", target: "self",
+  desc: "本场战斗内所有攻击牌的花色永久视为你选定的花色（直到战斗结束）。",
+  onPlay: (c) => {
+    (c as any)._suitPick = "chant";
+    c.log("持咒：请选择本场战斗攻击牌花色。", "player");
+  },
+};
+
 // 共鸣咒：目标敌人花色变成玩家手选花色（永久，直到被再次改色）
 const SK_ATTUNE: CardDef = {
   id: "sk_attune", name: "共鸣咒", category: "skill", target: "single",
-  desc: "目标敌人花色永久变为你选定的花色（让同花克制更可控）。",
+  desc: "目标敌人花色永久变为你选定的花色。",
   onPlay: (c) => {
     (c as any)._suitPick = "resonance";
     c.log(`共鸣咒：请选择 ${c.target.name} 变为的花色。`, "player");
@@ -667,7 +772,7 @@ const SK_ATTUNE: CardDef = {
 // 变色：随机改目标敌人花色（保证 ≠ 当前）
 const SK_RECOLOR: CardDef = {
   id: "sk_recolor", name: "变色", category: "skill", target: "single",
-  desc: "随机改变目标敌人花色（保证 ≠ 当前）。运气向。",
+  desc: "随机改变目标敌人花色（保证 ≠ 当前）。",
   onPlay: (c) => {
     const others = SUITS.filter(s => s !== c.target.suit);
     const newSuit = others[Math.floor(Math.random() * others.length)];
@@ -840,6 +945,36 @@ const IT_ELIXIR: CardDef = {
   onPlay: (c) => { addStatus(c.player, "weapon_buff", "强化药", 2, -1); c.log("强化药：武器 +2 伤。", "player"); },
 };
 
+// 烟雾弹：临时闪避 buff
+const IT_SMOKE: CardDef = {
+  id: "it_smoke", name: "烟雾弹", category: "item", target: "self",
+  desc: "5 回合内闪避概率 +30%。",
+  onPlay: (c) => {
+    addStatus(c.player, "smoke_dodge", "烟雾", 30, 5);
+    c.log("烟雾弹：闪避 +30%（5 回合）。", "player");
+  },
+};
+
+// 风步：下次受击必闪避（一次性）
+const SK_STEP: CardDef = {
+  id: "sk_step", name: "风步", category: "skill", target: "self",
+  desc: "下一次受到伤害时必定闪避（一次性）。",
+  onPlay: (c) => {
+    addStatus(c.player, "guaranteed_dodge", "风步", 1, -1);
+    c.log("风步：下次受击必闪避。", "player");
+  },
+};
+
+// 穿甲射：下一次攻击无视全部护甲
+const SK_PIERCE_SHOT: CardDef = {
+  id: "sk_pierce_shot", name: "穿甲射", category: "skill", target: "self",
+  desc: "下一次攻击牌无视目标全部护甲（一次性）。",
+  onPlay: (c) => {
+    addStatus(c.player, "pierce_next", "穿甲蓄势", 1, -1);
+    c.log("穿甲射：下一击无视护甲。", "player");
+  },
+};
+
 // ─────────────────────────────────────────────────────────
 // EPIC 卡（5 张 · 极难抽到，但一抽到就改变跑酷走向）
 // ─────────────────────────────────────────────────────────
@@ -849,7 +984,7 @@ const EXCALIBUR: CardDef = {
   id: "excalibur", name: "王者之剑", category: "equipment",
   desc: "基础 10，无视全部护甲，攻击 +30%。",
   equipKind: "weapon",
-  equipSuit: "heart",
+  equipSuit: "spade",
   baseDmg: 10,
   pierce: 99,
   equipEffects: [
@@ -968,16 +1103,12 @@ const PERK_BLEED: CardDef = {
 
 const PERK_DODGE: CardDef = {
   id: "p_dodge", name: "闪避", category: "perk",
-  desc: "每张：受击 -3%、完全闪避概率 +3%（全闪上限 50%）。",
+  desc: "每张：完全闪避概率 +3%（叠加上限 50%）。",
   defaultSuit: "diamond",
   perkEffect: {
-    unitDesc: "受击 -3% + 全闪 +3%（每张，全闪 cap 50%）",
-    summary: (s) => `受击 -${s * 3}% + 全闪 ${Math.min(50, s * 3)}%`,
-    onTakeDamage: (c, d, s) => {
-      const dodgeChance = Math.min(0.5, s * 0.03);
-      if (Math.random() < dodgeChance) { c.log("完全闪避！", "player"); return 0; }
-      return Math.max(0, d * (1 - 0.03 * s));
-    },
+    unitDesc: "闪避 +3%（每张，cap 50%）",
+    summary: (s) => `闪避 +${Math.min(50, s * 3)}%`,
+    // 闪避 roll 走 battle.ts 统一处理（getCurrentDodgeChance 读取 perk 层数）
   },
 };
 
@@ -999,14 +1130,17 @@ const PERK_REGEN: CardDef = {
 
 const PERK_CRIT: CardDef = {
   id: "p_crit", name: "暴击", category: "perk",
-  desc: "每张：暴击率 +5%（暴击伤害 ×2，可叠到 100%）。",
+  desc: "每张：暴击率 +5%（暴击伤害 ×2，可叠到 100%）。中毒会削减暴击率。",
   defaultSuit: "diamond",
   perkEffect: {
-    unitDesc: "暴击率 +5%（每张，×2 暴击伤）",
+    unitDesc: "暴击率 +5%（每张，×2 暴击伤；中毒削减）",
     summary: (s) => `${Math.min(100, s * 5)}% 暴击 ×2`,
     onDealDamage: (c, d, s) => {
-      const chance = Math.min(1, s * 0.05);
-      if (Math.random() < chance) { c.log("暴击！×2", "player"); return d * 2; }
+      // 中毒削减：每 stack -3 百分点（cap -30）
+      const poison = c.player.statuses.find(st => st.id === "poison");
+      const penalty = poison ? Math.min(0.30, poison.stacks * 0.03) : 0;
+      const chance = Math.max(0, Math.min(1, s * 0.05) - penalty);
+      if (chance > 0 && Math.random() < chance) { c.log("暴击！×2", "player"); return d * 2; }
       return d;
     },
   },
@@ -1014,12 +1148,12 @@ const PERK_CRIT: CardDef = {
 
 const PERK_TOUGH: CardDef = {
   id: "p_tough", name: "强壮", category: "perk",
-  desc: "每张：受击 -3%（叠加无上限）。",
+  desc: "每张：受击 -3%（叠加 cap 30%）。",
   defaultSuit: "club",
   perkEffect: {
-    unitDesc: "受击伤害 -3%（每张）",
-    summary: (s) => `受击 -${s * 3}%`,
-    onTakeDamage: (_c, d, s) => Math.max(0, d * (1 - 0.03 * s)),
+    unitDesc: "受击伤害 -3%（每张，cap 30%）",
+    summary: (s) => `受击 -${Math.min(30, s * 3)}%`,
+    onTakeDamage: (_c, d, s) => Math.max(0, d * (1 - Math.min(0.30, 0.03 * s))),
   },
 };
 
@@ -1146,6 +1280,70 @@ const PERK_COLDBLOOD: CardDef = {
   },
 };
 
+// 疾风斩 ♦：本场战斗第 1 回合首次攻击 +10%（每张）
+const PERK_SWIFT_STRIKE: CardDef = {
+  id: "p_swift_strike", name: "疾风斩", category: "perk",
+  desc: "每张：本场战斗第 1 回合首次攻击 +10%。",
+  defaultSuit: "diamond",
+  perkEffect: {
+    unitDesc: "本场战斗第 1 回合首次攻击 +10%（每张）",
+    summary: (s) => `第 1 回合首攻 +${s * 10}%`,
+    onDealDamage: (c, d, s) => {
+      // 第 1 回合 + 还没出过攻击牌的"本回合首次攻击"
+      const used = c.player.statuses.find(st => st.id === "swift_first_used");
+      if (c.turn === 1 && !used) {
+        c.player.statuses.push({ id: "swift_first_used", name: "疾风触发", stacks: 1, duration: -1 });
+        c.log(`疾风斩：第 1 回合首攻 +${s * 10}%。`, "player");
+        return d * (1 + 0.10 * s);
+      }
+      return d;
+    },
+  },
+};
+
+// 血誓 ♥：受到伤害的 5% 转化为下次攻击 +X 伤（cap +6）
+const PERK_BLOOD_PACT: CardDef = {
+  id: "p_blood_pact", name: "血誓", category: "perk",
+  desc: "每张：受到伤害的 5% 转化为下次攻击 +X 伤（cap +6 / 张）。",
+  defaultSuit: "heart",
+  perkEffect: {
+    unitDesc: "受到伤害的 5% 转化为下次攻击 +X 伤（cap +6 / 张）",
+    summary: (s) => `受击转化 ${s * 5}% → 攻击（cap +${s * 6}）`,
+    onTakeDamage: (c, d, s) => {
+      const add = Math.min(s * 6, Math.max(0, Math.floor(d * 0.05 * s)));
+      if (add > 0) {
+        const exists = c.player.statuses.find(st => st.id === "blood_pact_charge");
+        if (exists) exists.stacks = Math.min(s * 6, exists.stacks + add);
+        else c.player.statuses.push({ id: "blood_pact_charge", name: "血誓蓄势", stacks: add, duration: -1 });
+        c.log(`血誓：吸收 ${add} 伤 → 下次攻击 +${add}。`, "player");
+      }
+      return d;
+    },
+    onDealDamage: (c, d, _s) => {
+      const charge = c.player.statuses.find(st => st.id === "blood_pact_charge");
+      if (charge && charge.stacks > 0) {
+        const bonus = charge.stacks;
+        c.player.statuses = c.player.statuses.filter(st => st.id !== "blood_pact_charge");
+        c.log(`血誓蓄势：本次攻击 +${bonus}。`, "player");
+        return d + bonus;
+      }
+      return d;
+    },
+  },
+};
+
+// 洞察：每张 pierce +1（与武器/附魔的 pierce 累加）
+const PERK_INSIGHT: CardDef = {
+  id: "p_insight", name: "洞察", category: "perk",
+  desc: "每张：所有攻击破甲 +1（与武器/附魔/穿甲射叠加）。",
+  defaultSuit: "spade",
+  perkEffect: {
+    unitDesc: "破甲 +1（每张）",
+    summary: (s) => `破甲 +${s}`,
+    // pierce 加成走 battle.ts/calcAttackDamage 统一汇总
+  },
+};
+
 function playerHasDebuff(c: BattleContext): boolean {
   const debuffIds = ["poison", "weak", "vulnerable", "silenced"];
   return c.player.statuses.some(s => debuffIds.includes(s.id));
@@ -1173,6 +1371,8 @@ export const CARD_DB: Record<string, CardDef> = {
   berserker_blade: BERSERKER_BLADE,
   wizard_staff: WIZARD_STAFF,
   repeating_bow: REPEATING_BOW,
+  raider: RAIDER,
+  blood_blade: BLOOD_BLADE,
   // 防具（9）
   round_shield: ROUND_SHIELD,
   leather_armor: LEATHER_ARMOR,
@@ -1183,6 +1383,7 @@ export const CARD_DB: Record<string, CardDef> = {
   full_plate: FULL_PLATE,
   scale_mail: SCALE_MAIL,
   mind_armor: MIND_ARMOR,
+  crown_of_vitality: CROWN_OF_VITALITY,
   // 技能（16 单体 + 8 群攻 = 24）
   sk_poison_blade: SK_POISON_BLADE,
   sk_battle_cry: SK_BATTLE_CRY,
@@ -1202,6 +1403,7 @@ export const CARD_DB: Record<string, CardDef> = {
   sk_dbl_pummel: SK_DBL_PUMMEL,
   // 花色操作（单体）
   sk_dye: SK_DYE,
+  sk_chant: SK_CHANT,
   sk_attune: SK_ATTUNE,
   sk_recolor: SK_RECOLOR,
   // 持续/延时（单体）
@@ -1225,6 +1427,9 @@ export const CARD_DB: Record<string, CardDef> = {
   it_regroup: IT_REGROUP,
   it_bomb: IT_BOMB,
   it_elixir: IT_ELIXIR,
+  it_smoke: IT_SMOKE,
+  sk_step: SK_STEP,
+  sk_pierce_shot: SK_PIERCE_SHOT,
   it_echo: IT_ECHO,
   // Epic 卡（5 张）
   excalibur: EXCALIBUR,
@@ -1245,6 +1450,9 @@ export const CARD_DB: Record<string, CardDef> = {
   p_executioner: PERK_EXECUTIONER,
   p_resonance: PERK_RESONANCE,
   p_coldblood: PERK_COLDBLOOD,
+  p_insight: PERK_INSIGHT,
+  p_swift_strike: PERK_SWIFT_STRIKE,
+  p_blood_pact: PERK_BLOOD_PACT,
 };
 
 // ─────────────────────────────────────────────────────────
@@ -1254,9 +1462,12 @@ export const CARD_DB: Record<string, CardDef> = {
 const _RARITY: Record<string, "rare" | "super_rare" | "epic"> = {
   // ── Rare（稳定的 build 件 / 解 buff / 群攻基础）──────────
   twin_blades: "rare", warhammer: "rare", battle_staff: "rare", chain_whip: "rare",
+  raider: "rare", blood_blade: "rare",
   spike_armor: "rare", scale_mail: "rare", full_plate: "rare",
-  sk_blast: "rare", sk_shadow_strike: "rare", sk_dye: "rare", sk_attune: "rare",
-  it_regroup: "rare", it_elixir: "rare",
+  crown_of_vitality: "rare",
+  sk_blast: "rare", sk_shadow_strike: "rare", sk_dye: "rare", sk_attune: "rare", sk_chant: "super_rare",
+  sk_pierce_shot: "rare",
+  it_regroup: "rare", it_elixir: "rare", it_smoke: "rare",
   sk_chain_bolt: "rare", sk_fire_wall: "rare", sk_shockwave: "rare",
   sk_group_curse: "rare", sk_sonic: "rare", sk_mass_weak: "rare", sk_lightning: "rare",
   // ── Super Rare（强力 build 核心 / 大招）─────────────────
@@ -1264,6 +1475,7 @@ const _RARITY: Record<string, "rare" | "super_rare" | "epic"> = {
   mage_robe: "super_rare", mind_armor: "super_rare",
   sk_curse_blood: "super_rare", sk_rhythm: "super_rare", sk_time_stop: "super_rare",
   sk_curse_vortex: "super_rare", sk_chroma_wave: "super_rare",
+  sk_step: "super_rare",
   // ── Epic（极稀有，一卡逆转乾坤）────────────────────────
   excalibur: "epic", divine_blade: "epic", undying_heart: "epic",
   sk_wrath: "epic", it_echo: "epic",
@@ -1294,9 +1506,11 @@ export const BASIC_ARMORS = [
 export const BUILD_WEAPONS = [
   "twin_blades", "warhammer", "battle_staff", "chain_whip",
   "berserker_blade", "wizard_staff", "repeating_bow",
+  "blood_blade",
 ];
 export const BUILD_ARMORS = [
   "spike_armor", "scale_mail", "full_plate", "mage_robe", "mind_armor",
+  "crown_of_vitality",
 ];
 
 export const STARTING_DECK_IDS: string[] = [
@@ -1305,8 +1519,9 @@ export const STARTING_DECK_IDS: string[] = [
   "atk_diamond", "atk_diamond", "atk_diamond", "atk_diamond", "atk_diamond",
   "atk_heart", "atk_heart", "atk_heart", "atk_heart", "atk_heart",
   "atk_club", "atk_club", "atk_club", "atk_club", "atk_club",
-  // 6 技能
+  // 7 技能（含 1 张染色术：保底前期能调整花色，避免因敌人花色克制走死）
   "sk_poison_blade", "sk_battle_cry", "sk_focus", "sk_evasive", "sk_frenzy", "sk_rend",
+  "sk_dye",
   // 6 道具（回血 ×2，驱毒 ×0，其余各 1）
   "it_heal", "it_heal", "it_whetstone", "it_regroup", "it_bomb", "it_elixir",
   // 7 件基础装备（无 build 钩子，每件 ×1，让前期能快速凑同色装备）
@@ -1320,20 +1535,23 @@ export const REWARD_CARD_POOL_BASE = [
   // 基础装备（common 档，可用来叠加副本到 ×2/×3/×4）
   "long_sword", "dagger", "war_bow",
   "round_shield", "leather_armor", "heavy_armor", "cloak",
-  // build 武器（7）
+  // build 武器（9 = 原 7 + 破军 + 血裂刃）
   "twin_blades", "warhammer", "battle_staff", "chain_whip",
-  "berserker_blade", "wizard_staff", "repeating_bow",
-  // build 防具（5）
+  "berserker_blade", "wizard_staff", "repeating_bow", "raider",
+  "blood_blade",
+  // build 防具（6）
   "spike_armor", "scale_mail", "full_plate", "mage_robe", "mind_armor",
-  // 单体技能（22 = 16 + 3 花色 + 3 持续/延时）
+  "crown_of_vitality",
+  // 单体技能（24 = 22 + 风步 + 穿甲射）
   "sk_poison_blade", "sk_battle_cry", "sk_frenzy", "sk_evasive",
   "sk_silence", "sk_freeze", "sk_rend", "sk_focus",
   "sk_aegis", "sk_charge", "sk_weakening_bolt", "sk_shadow_strike",
   "sk_quick_draw", "sk_counter_stance", "sk_blast", "sk_dbl_pummel",
-  "sk_dye", "sk_attune", "sk_recolor",
+  "sk_dye", "sk_attune", "sk_recolor", "sk_chant",
   "sk_curse_blood", "sk_rhythm", "sk_time_stop",
-  // 道具
-  "it_heal", "it_purify", "it_whetstone", "it_regroup", "it_bomb", "it_elixir",
+  "sk_step", "sk_pierce_shot",
+  // 道具（7 = 原 6 + 烟雾弹）
+  "it_heal", "it_purify", "it_whetstone", "it_regroup", "it_bomb", "it_elixir", "it_smoke",
   // 攻击牌补强
   "atk_spade", "atk_diamond", "atk_heart", "atk_club",
   // Epic（极稀有，需要 tier roll 命中才会出现）
@@ -1353,7 +1571,8 @@ export const REWARD_CARD_POOL_AOE = [
 export const PERK_POOL = [
   "p_bleed", "p_dodge", "p_regen", "p_crit", "p_tough",
   "p_vampire", "p_thorns", "p_iron_will", "p_lifetap",
-  "p_overload", "p_executioner", "p_resonance", "p_coldblood",
+  "p_overload", "p_executioner", "p_resonance", "p_coldblood", "p_insight",
+  "p_swift_strike", "p_blood_pact",
 ];
 
 // 加权采样
@@ -1377,10 +1596,11 @@ export function rollChoices(pool: string[], n: number, floor = 0, weights?: Reco
 }
 
 // ── 稀有度抽卡：先 roll 稀有度档，再从该档卡池里 uniform 抽 ──
-// 楼层敏感：早期不出 Epic
+// 楼层敏感：早期不出 Epic，中后期慢慢解锁
 export function rarityWeights(floor: number): Record<CardRarity, number> {
-  if (floor <= 2) return { common: 65, rare: 30, super_rare: 5, epic: 0 };
-  if (floor <= 4) return { common: 55, rare: 30, super_rare: 13, epic: 2 };
+  if (floor <= 2) return { common: 65, rare: 30, super_rare: 5,  epic: 0 };
+  if (floor <= 5) return { common: 56, rare: 30, super_rare: 13, epic: 1 };
+  if (floor <= 8) return { common: 51, rare: 30, super_rare: 17, epic: 2 };
   return            { common: 50, rare: 30, super_rare: 17, epic: 3 };
 }
 
@@ -1394,9 +1614,22 @@ function pickRarity(floor: number): CardRarity {
   return "common";
 }
 
+// 花色操作牌：奖励池里给 ×3 加权，避免玩家凑专精却卡敌人花色
+const SUIT_OPERATION_CARDS = new Set(["sk_dye", "sk_attune", "sk_chant", "sk_recolor"]);
+
+function pickWeightedFromCandidates(candidates: string[]): string {
+  const items = candidates.map(id => ({ id, w: SUIT_OPERATION_CARDS.has(id) ? 3 : 1 }));
+  const total = items.reduce((s, x) => s + x.w, 0);
+  let r = Math.random() * total;
+  for (const it of items) {
+    if ((r -= it.w) < 0) return it.id;
+  }
+  return items[items.length - 1].id;
+}
+
 /**
  * 关卡奖励抽卡：先 roll 每张候选的稀有度档，再从该档卡池里抽（无放回）
- * 同次奖励里同张卡不会重复
+ * 同次奖励里同张卡不会重复。花色操作牌（染色/共鸣/持咒/变色）×3 加权。
  */
 export function rollRewardChoices(pool: string[], n: number, floor = 0): CardInstance[] {
   const byRarity: Record<CardRarity, string[]> = { common: [], rare: [], super_rare: [], epic: [] };
@@ -1418,7 +1651,7 @@ export function rollRewardChoices(pool: string[], n: number, floor = 0): CardIns
       tier = order[j];
       candidates = byRarity[tier].filter(id => !used.has(id));
       if (candidates.length > 0) {
-        pickedId = candidates[Math.floor(Math.random() * candidates.length)];
+        pickedId = pickWeightedFromCandidates(candidates);
       }
     }
     if (pickedId) {
@@ -1458,57 +1691,151 @@ export interface EnchantEffect {
 }
 
 export const ENCHANT_EFFECTS: Record<EnchantId, EnchantEffect> = {
-  // 怒涌：HP 越低伤害越高（每损 10% HP 攻击 +5%）
-  frenzy_e: {
-    id: "frenzy_e",
+  // ── 普通附魔（5）─────────────────────────────────────────
+  // 强袭（兽 ×3，♠ 特化）：HP < 50% 攻击 +12%
+  e_brawler: {
+    id: "e_brawler",
     onAttack: (ctx, d) => {
-      const lossPct = 1 - (ctx.player.vita / Math.max(1, ctx.player.vitaMax));
-      const bonus = Math.floor(lossPct * 10) * 0.05;  // 每 10% 损 = +5%
-      if (bonus > 0) {
-        ctx.log(`怒涌：HP 损失 ${Math.floor(lossPct * 100)}% → 攻击 +${(bonus * 100).toFixed(0)}%。`, "player");
-        return d * (1 + bonus);
+      if (ctx.player.vita < ctx.player.vitaMax * 0.50) {
+        ctx.log("强袭：绝境攻击 +12%。", "player");
+        return d * 1.12;
       }
       return d;
     },
   },
-  // 预谋：calc_charge 由 battle.ts 统一处理（法师杖 + 预谋叠加，每张非攻击牌 +3）
-  calculated: {
-    id: "calculated",
-    // 标记型：实际 onAttack 加成在 battle.ts 的 calcAttackDamage 里统一处理
-  },
-  // 夺命：每叠加 1 层武器 +15% 即死概率，上限 30%
-  assassinate: {
-    id: "assassinate",
+  // 算计（人型 ×3，♣ 特化）：每出 1 张非攻击牌，下张攻击 +2 伤
+  // 标记型：calc_charge 由 battle.ts 统一累积；calcAttackDamage 检 weaponEnchant 决定每 stack 加成
+  e_strategist: { id: "e_strategist" },
+  // 收割（不死 ×3，♥ 特化）：击杀后下次攻击 ×1.5（一次性）
+  e_reaper: {
+    id: "e_reaper",
+    onKill: (ctx, target) => {
+      const exists = ctx.player.statuses.find(s => s.id === "e_reaper_buff");
+      if (!exists) ctx.player.statuses.push({ id: "e_reaper_buff", name: "收割之刃", stacks: 1, duration: -1 });
+      ctx.log(`收割：击杀 ${target.name}，下次攻击 ×1.5。`, "player");
+    },
     onAttack: (ctx, d) => {
-      const chance = Math.min(0.30, ctx.player.weapons.length * 0.15);
-      if (chance > 0 && Math.random() < chance) {
-        ctx.log(`夺命触发（${Math.round(chance * 100)}%）：${ctx.target.name} 即死！`, "player");
-        return 999999;
+      const charge = ctx.player.statuses.find(s => s.id === "e_reaper_buff");
+      if (charge) {
+        ctx.player.statuses = ctx.player.statuses.filter(s => s.id !== "e_reaper_buff");
+        ctx.log("收割之刃：本次攻击 ×1.5。", "player");
+        return d * 1.5;
       }
       return d;
     },
-    bypassArmor: (_ctx, d) => d >= 999999,
   },
-  // 碾压：单击 ≥ 敌人最大 HP 10% 时 +30%
-  crushing: {
-    id: "crushing",
+  // 撼地（巨怪 ×3，♠ 特化强档）：单击 ≥ 敌人 maxHP 8% 时 +25%
+  e_titan: {
+    id: "e_titan",
     onAttack: (ctx, d) => {
-      if (d >= ctx.target.maxHp * 0.10) {
-        ctx.log(`碾压 +30%！（${Math.floor(d)} ≥ ${Math.floor(ctx.target.maxHp * 0.10)}）`, "player");
+      if (d >= ctx.target.maxHp * 0.08) {
+        ctx.log(`撼地 +25%！（${Math.floor(d)} ≥ ${Math.floor(ctx.target.maxHp * 0.08)}）`, "player");
+        return d * 1.25;
+      }
+      return d;
+    },
+  },
+  // 幻影（暗影 ×3，♦ 特化强档）：闪避后下次攻击 ×2 + 给目标 +3 易伤层
+  e_phantom: {
+    id: "e_phantom",
+    onAttack: (ctx, d) => {
+      const charge = ctx.player.statuses.find(s => s.id === "phantom_charge");
+      if (charge) {
+        ctx.player.statuses = ctx.player.statuses.filter(s => s.id !== "phantom_charge");
+        // 给目标 +3 易伤层
+        const v = ctx.target.statuses.find(s => s.id === "vulnerable");
+        if (v) { v.stacks += 3; v.duration = Math.max(v.duration, 2); }
+        else ctx.target.statuses.push({ id: "vulnerable", name: "易伤", stacks: 3, duration: 2 });
+        ctx.log(`幻影残像：本次攻击 ×2 + 目标 +3 易伤。`, "player");
+        return d * 2;
+      }
+      return d;
+    },
+  },
+
+  // ── 复合附魔（8）─────────────────────────────────────────
+  // 战狂血誓（兽×2 + 巨怪×2，♠ 强化中档）
+  // HP<50% 攻击 +20%；本场战斗每损 10% maxHP 永久攻击 +1（cap +5）
+  ec_warblood: {
+    id: "ec_warblood",
+    onAttack: (ctx, d) => {
+      let bonus = 0;
+      // 永久攻击 +1（基于 warblood_perm_atk status）
+      const perm = ctx.player.statuses.find(s => s.id === "warblood_perm_atk");
+      if (perm) bonus += perm.stacks;
+      // HP<50% 时再 +20%
+      const lowHp = ctx.player.vita < ctx.player.vitaMax * 0.50;
+      let res = d + bonus;
+      if (lowHp) res *= 1.20;
+      if (bonus > 0 || lowHp) {
+        ctx.log(`战狂血誓：${bonus > 0 ? `+${bonus} ` : ""}${lowHp ? "× 1.20（绝境）" : ""}。`, "player");
+      }
+      return res;
+    },
+    // 永久 stack 累积放在 battle.ts 的 onTurnStart 里检查（避免重复触发）
+  },
+  // 重甲列阵（兽×2 + 人型×2，♠ 互补）
+  // 攻击牌每打 1 张本回合受击 -1（cap -3）；本回合未受伤则下回合开局护盾 +5
+  // 实装在 battle.ts：playAttack 里累积 phalanx_dr.stacks；damagePlayer 减伤；endPlayerTurn 检测 took_damage
+  ec_phalanx: { id: "ec_phalanx" },
+  // 风行步（暗影×2 + 巨怪×2，♦ 强化双稀少 / 究极）
+  // 闪避 +10%；闪避后本回合再 +5%（cap +30%）；闪避后给目标 +1 易伤
+  // 闪避 +10% 在 battle.ts/getCurrentDodgeChance；其余在 damagePlayer 触发
+  ec_swift: { id: "ec_swift" },
+  // 凝神（不死×2 + 人型×2，♦ 互补）
+  // 每张非攻击牌使下张攻击 +1；伤害 ≥ 12 时额外 +5
+  // 标记型：calc_charge 由 battle.ts 统一累积；calcAttackDamage 检 weaponEnchant
+  ec_focus: {
+    id: "ec_focus",
+    onAttack: (ctx, d) => {
+      if (d >= 12) {
+        ctx.log("凝神：伤害 ≥ 12，+5。", "player");
+        return d + 5;
+      }
+      return d;
+    },
+  },
+  // 血祭仪（不死×2 + 暗影×2，♥ 强化中档）
+  // 攻击吸血额外 +8%；HP 满时攻击 +10%
+  ec_lifesteal: {
+    id: "ec_lifesteal",
+    onAttack: (ctx, d) => {
+      const heal = Math.max(0, Math.floor(d * 0.08));
+      if (heal > 0) {
+        ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + heal);
+        ctx.log(`血祭仪：吸血 ${heal}。`, "player");
+      }
+      if (ctx.player.vita >= ctx.player.vitaMax) {
+        ctx.log("血祭仪：HP 满，攻击 +10%。", "player");
+        return d * 1.10;
+      }
+      return d;
+    },
+  },
+  // 守护契（兽×2 + 不死×2，♥ 互补）
+  // 受击 -2；HP > 80% 受击再 -2；每回合 +1 HP
+  // 实装：damagePlayer 检 weaponEnchant；endPlayerTurn 加血
+  ec_resilient: { id: "ec_resilient" },
+  // 秘法回响（人型×2 + 暗影×2，♣ 强化中档）
+  // 每张非攻击牌额外摸 1（每回合 cap 3）；持咒/染色 buff 在场首次攻击 +30%
+  // 摸牌实装：playSkillOrItem 末尾；首次攻击 +30% 实装在 onAttack
+  ec_arcane: {
+    id: "ec_arcane",
+    onAttack: (ctx, d) => {
+      const used = ctx.player.statuses.find(s => s.id === "arcane_first_used");
+      if (used) return d;
+      const hasChantOrDye = ctx.player.statuses.some(s =>
+        s.id.startsWith("chanted_") || s.id.startsWith("dyed_"));
+      if (hasChantOrDye) {
+        ctx.player.statuses.push({ id: "arcane_first_used", name: "秘法已触发", stacks: 1, duration: -1 });
+        ctx.log("秘法回响：染/咒在场，本场首攻 +30%。", "player");
         return d * 1.30;
       }
       return d;
     },
   },
-  // 吸魂：击杀回复最大 HP 10%（最少 5 点），永久 +3 vitaMax
-  soul_drain: {
-    id: "soul_drain",
-    onKill: (ctx, target) => {
-      const heal = Math.max(5, Math.floor(ctx.player.vitaMax * 0.10));
-      ctx.player.vitaMax += 3;
-      const before = ctx.player.vita;
-      ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + heal);
-      ctx.log(`吸魂：击杀 ${target.name}，+${ctx.player.vita - before} HP，最大 HP +3。`, "player");
-    },
-  },
+  // 符文护盾（人型×2 + 巨怪×2，♣ 互补中档）
+  // 受击 -3；每场首次受击免疫；中毒/燃烧/出血对你无效
+  // 实装：damagePlayer 减伤 + 免疫；newBattle 时给玩家 enc_runic_immune + enc_dot_immune
+  ec_runic: { id: "ec_runic" },
 };

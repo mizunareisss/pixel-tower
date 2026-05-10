@@ -12,6 +12,50 @@ export function isRedSuit(s: Suit): boolean {
   return s === "diamond" || s === "heart";
 }
 
+// 花色专精档位名 + 大招名（4 字短语）
+export const SUIT_TIER_NAMES: Record<Suit, { tier1: string; tier2: string; tier3: string; ult: string }> = {
+  spade:   { tier1: "锋锐怒涛", tier2: "破甲狂攻", tier3: "斩魂蓄势", ult: "狂战之击" },
+  diamond: { tier1: "灵动闪步", tier2: "灵巧连击", tier3: "幻影成形", ult: "影舞步" },
+  heart:   { tier1: "生机涌动", tier2: "绝境吸血", tier3: "生命之泉", ult: "生命洪流" },
+  club:    { tier1: "魔法庇护", tier2: "护体真言", tier3: "禁咒蓄能", ult: "群体禁咒" },
+};
+
+// 各档与大招的具体效果描述
+export const SUIT_TIER_DESCS: Record<Suit, { tier1: string; tier2: string; tier3: string; ult: string }> = {
+  spade: {
+    tier1: "攻击 +5%；额外 5% 概率暴击 ×2。",
+    tier2: "破甲 +当前楼层数。",
+    tier3: "可释放大招（消耗 10 亲和）。",
+    ult: "对当前目标造成其当前 HP 50% 的真实伤害（无视护甲）。",
+  },
+  diamond: {
+    tier1: "闪避 +5%；受击反弹 +2 伤害。",
+    tier2: "攻击 25% 概率额外 +1 hit。",
+    tier3: "可释放大招（消耗 10 亲和）。",
+    ult: "本回合敌人攻击全部闪避，下次攻击 hits ×3。",
+  },
+  heart: {
+    tier1: "每回合开始 +1 HP；攻击吸血 5%。",
+    tier2: "HP <50% 受击 -30%；HP <25% 攻击 +25%。",
+    tier3: "可释放大招（消耗 10 亲和）。",
+    ult: "HP 回满，永久 maxHP +5。",
+  },
+  club: {
+    tier1: "受击 -1。",
+    tier2: "受击再 -2（共 -3）。",
+    tier3: "可释放大招（消耗 10 亲和）。",
+    ult: "对全体敌人 +3 沉默 +3 易伤 +3 中毒。",
+  },
+};
+
+// 花色主题色（统一从 types 出，main.ts 复用）
+export const SUIT_THEMES: Record<Suit, { name: string; color: string }> = {
+  spade:   { name: "黑桃", color: "#e6e6e6" },
+  diamond: { name: "方块", color: "#ff8a8a" },
+  heart:   { name: "红心", color: "#ff5e5e" },
+  club:    { name: "梅花", color: "#aaffc3" },
+};
+
 // ── 全局常量 ──────────────────────────────────────────────
 export const SLOT_CAP = 4;          // 武器/防具最多叠 4 张
 export const HAND_LIMIT = 10;       // 手牌上限
@@ -62,7 +106,7 @@ export const STATUS_META: Record<string, StatusMeta> = {
   // 玩家 buff
   battle_cry:     { name: "战吼", desc: "本回合所有攻击 +3 伤。", kind: "buff" },
   double_strike:  { name: "倍击", desc: "下一张攻击伤害 ×2。", kind: "buff" },
-  evasive:        { name: "闪避姿态", desc: "本回合受到伤害减半。", kind: "buff" },
+  evasive:        { name: "屏息", desc: "本回合受到伤害减半（与闪避概率是不同机制：屏息不会跳过伤害，而是减半）。", kind: "buff" },
   sharpened:      { name: "磨刀", desc: "下一张攻击伤害 ×1.5。", kind: "buff" },
   weapon_buff:    { name: "强化药", desc: "本场战斗武器伤害 +stacks。", kind: "buff" },
   shield_block:   { name: "护盾", desc: "吸收下次受到的 stacks 点伤害。", kind: "buff" },
@@ -72,7 +116,7 @@ export const STATUS_META: Record<string, StatusMeta> = {
   busi_triggered: { name: "已豁免", desc: "本场战斗已触发不死意志。", kind: "neutral" },
 
   // 玩家 debuff
-  poison:     { name: "中毒", desc: "每回合开始受 stacks 伤害，stacks 减 1。", kind: "debuff" },
+  poison:     { name: "中毒", desc: "每回合开始受 stacks 点伤害，stacks 减 1。副作用：暴击率 -stacks × 3%（cap -30%）。", kind: "debuff" },
   weak:       { name: "虚弱", desc: "攻击造成的伤害 -stacks。", kind: "debuff" },
   vulnerable: { name: "易伤", desc: "受到的伤害 +50%。", kind: "debuff" },
 
@@ -82,12 +126,22 @@ export const STATUS_META: Record<string, StatusMeta> = {
   dyed_heart:   { name: "染色♥", desc: "本回合攻击牌视为红心。", kind: "buff" },
   dyed_club:    { name: "染色♣", desc: "本回合攻击牌视为梅花。", kind: "buff" },
 
-  // 敌人 debuff
-  burn:       { name: "燃烧", desc: "每回合 -stacks HP，持续 duration 回合。", kind: "debuff" },
+  // 持咒 buff（整场战斗持续，攻击牌永久视为该花色）
+  chanted_spade:   { name: "持咒♠", desc: "本场战斗内攻击牌视为黑桃。", kind: "buff" },
+  chanted_diamond: { name: "持咒♦", desc: "本场战斗内攻击牌视为方块。", kind: "buff" },
+  chanted_heart:   { name: "持咒♥", desc: "本场战斗内攻击牌视为红心。", kind: "buff" },
+  chanted_club:    { name: "持咒♣", desc: "本场战斗内攻击牌视为梅花。", kind: "buff" },
+
+  // 花色专精大招触发的临时 buff
+  dodge_full_round: { name: "影舞步", desc: "本回合敌人攻击全部闪避。", kind: "buff" },
+  triple_strike:    { name: "三连击", desc: "下次攻击 hits ×3。", kind: "buff" },
+
+  // 敌人 debuff（玩家身上也可能有）
+  burn:       { name: "燃烧", desc: "每回合 -stacks HP，持续 duration 回合（纯扣血）。", kind: "debuff" },
   rend:       { name: "撕裂", desc: "受到的伤害永久 +stacks。", kind: "debuff" },
   frozen:     { name: "冰冻", desc: "下回合行动伤害减半。", kind: "debuff" },
   silenced:   { name: "沉默", desc: "下回合无法 buff。", kind: "debuff" },
-  bleed:      { name: "出血", desc: "每回合扣当前 HP × stacks × 5%。", kind: "debuff" },
+  bleed:      { name: "出血", desc: "每回合扣当前 HP × stacks × 5%。施加在玩家身上时副作用：闪避率 -stacks × 5%（cap -50%）。", kind: "debuff" },
 
   // 持续/延时类玩家 buff
   frenzy:        { name: "激奋", desc: "每打出 1 张攻击牌后 stacks +1，下次攻击 +stacks × 5 伤。", kind: "buff" },
@@ -95,6 +149,20 @@ export const STATUS_META: Record<string, StatusMeta> = {
   no_attack:     { name: "蓄力中", desc: "本回合无法出攻击牌。", kind: "neutral" },
   combat_rhythm: { name: "战斗节奏", desc: "本回合内每打 1 张牌额外摸 1 张。", kind: "buff" },
   time_stop:     { name: "时停", desc: "敌人下一回合无法行动（DoT 仍结算）。", kind: "buff" },
+
+  // 闪避 / 穿甲系统
+  smoke_dodge:      { name: "烟雾", desc: "闪避概率 +stacks%，剩余 duration 回合。", kind: "buff" },
+  guaranteed_dodge: { name: "风步", desc: "下一次受击必定闪避（一次性）。", kind: "buff" },
+  pierce_next:      { name: "穿甲蓄势", desc: "下一次攻击无视目标全部护甲（一次性）。", kind: "buff" },
+  phantom_charge:   { name: "幻影残像", desc: "下一次攻击伤害 ×2（一次性，由幻影附魔触发）。", kind: "buff" },
+  echo:             { name: "复读", desc: "本场战斗：每出 1 张非攻击牌后复制一份回手牌。", kind: "buff" },
+
+  // 附魔机制相关 status（v2 附魔系统）
+  phalanx_dr:        { name: "重甲列阵", desc: "本回合每张攻击牌使受击 -1（cap -3，由附魔触发）。", kind: "buff" },
+  swift_dodge_temp:  { name: "风行余势", desc: "本回合内闪避概率 +stacks%，由风行步附魔触发。", kind: "buff" },
+  enc_runic_immune:  { name: "符文护盾", desc: "本场战斗第 1 次受击免疫（由符文护盾附魔提供）。", kind: "buff" },
+  enc_dot_immune:    { name: "圣化", desc: "中毒 / 燃烧 / 出血对你无效（由符文护盾附魔提供）。", kind: "buff" },
+  warblood_perm_atk: { name: "血誓积累", desc: "本场战斗：每损 10% maxHP，攻击 +1（cap +5，由战狂血誓附魔触发）。", kind: "buff" },
 };
 
 // ── 敌人种族 ──────────────────────────────────────────────
@@ -126,36 +194,99 @@ export const FRAGMENT_ICONS: Record<EnemyRace, string> = {
 
 export const RACES: EnemyRace[] = ["beast", "humanoid", "undead", "giant", "dark"];
 
-// ── 附魔系统 ──────────────────────────────────────────────
-export type EnchantId = "frenzy_e" | "calculated" | "assassinate" | "crushing" | "soul_drain";
+// ── 附魔系统 v2（5 普通 + 8 复合 = 13 个）────────────────
+// 设计宗旨：附魔是中后期"补全 / 特化 build"的层级，单件数值控制在 15-30%
+// 普通附魔（人/兽/不死）单种族 ×3 → ~15% 增益
+// 稀少附魔（巨怪/暗影）单种族 ×3 → ~25% 增益（强档）
+// 复合附魔 = 2 种族×2 碎片；含稀少 = 中档；双稀少 = 究极
+export type EnchantId =
+  // 普通（5）：单种族 ×3
+  | "e_brawler"      // 兽 ×3 — ♠ 特化
+  | "e_strategist"   // 人型 ×3 — ♣ 特化
+  | "e_reaper"       // 不死 ×3 — ♥ 特化
+  | "e_titan"        // 巨怪 ×3 — ♠ 特化（强档）
+  | "e_phantom"      // 暗影 ×3 — ♦ 特化（强档）
+  // 复合（8）：2 种族 ×2+×2
+  | "ec_warblood"    // 兽×2 + 巨怪×2 — ♠ 强化
+  | "ec_phalanx"     // 兽×2 + 人型×2 — ♠ 互补
+  | "ec_swift"       // 暗影×2 + 巨怪×2 — ♦ 强化（双稀少 / 究极）
+  | "ec_focus"       // 不死×2 + 人型×2 — ♦ 互补
+  | "ec_lifesteal"   // 不死×2 + 暗影×2 — ♥ 强化
+  | "ec_resilient"   // 兽×2 + 不死×2 — ♥ 互补
+  | "ec_arcane"      // 人型×2 + 暗影×2 — ♣ 强化
+  | "ec_runic";      // 人型×2 + 巨怪×2 — ♣ 互补
 
 export const ENCHANT_NAMES: Record<EnchantId, string> = {
-  frenzy_e: "怒涌",
-  calculated: "预谋",
-  assassinate: "夺命",
-  crushing: "碾压",
-  soul_drain: "吸魂",
+  e_brawler:    "强袭",
+  e_strategist: "算计",
+  e_reaper:     "收割",
+  e_titan:      "撼地",
+  e_phantom:    "幻影",
+  ec_warblood:  "战狂血誓",
+  ec_phalanx:   "重甲列阵",
+  ec_swift:     "风行步",
+  ec_focus:     "凝神",
+  ec_lifesteal: "血祭仪",
+  ec_resilient: "守护契",
+  ec_arcane:    "秘法回响",
+  ec_runic:     "符文护盾",
 };
 
 export const ENCHANT_DESCS: Record<EnchantId, string> = {
-  frenzy_e: "HP 越低伤害越高：每损 10% HP，攻击 +5%（损 50% = +25%）。",
-  calculated: "每出 1 张非攻击牌，下张攻击 +3 伤（同回合累积，攻击后清零）。",
-  assassinate: "攻击有 武器叠加×15% 几率（最高 30%）即死目标，无视护甲。",
-  crushing: "单次伤害 ≥ 敌人最大 HP 的 10% 时，本次伤害额外 +30%。",
-  soul_drain: "击杀敌人时回复最大 HP 的 10%（最少 5 点），并永久 +3 最大 HP。",
+  e_brawler:    "HP < 50% 时，攻击 +12%。",
+  e_strategist: "每出 1 张非攻击牌，下张攻击 +2 伤（同回合累积，攻击后清零）。",
+  e_reaper:     "击杀敌人后，下次攻击伤害 ×1.5（一次性）。",
+  e_titan:      "单次伤害 ≥ 敌人最大 HP 8% 时，本次伤害额外 +25%。",
+  e_phantom:    "完全闪避后下次攻击 ×2，攻击命中后给目标 +3 易伤层。",
+  ec_warblood:  "HP < 50% 时攻击 +20%；本场战斗内每损 10% maxHP 永久攻击 +1（cap +5）。",
+  ec_phalanx:   "本回合攻击牌每打 1 张受击 -1（cap -3）；本回合未受伤则下回合开局护盾 +5。",
+  ec_swift:     "闪避概率额外 +10%；闪避后本回合内闪避再 +5%（cap +30%）；闪避后给当前目标 +1 易伤。",
+  ec_focus:     "每张非攻击牌使下张攻击 +1 伤；攻击伤害 ≥ 12 时额外 +5。",
+  ec_lifesteal: "攻击吸血额外 +8%；HP 满时攻击 +10%。",
+  ec_resilient: "受击 -2；HP > 80% 时受击再 -2；每回合开始 +1 HP。",
+  ec_arcane:    "每出 1 张非攻击牌额外摸 1 张（每回合 cap 3）；持咒/染色 buff 在场时首次攻击 +30%。",
+  ec_runic:     "受击 -3；每场战斗第 1 次受击免疫；中毒/燃烧/出血对你无效。",
 };
 
-// 附魔来源种族
-export const ENCHANT_RACE: Record<EnchantId, EnemyRace> = {
-  frenzy_e: "beast",
-  calculated: "humanoid",
-  assassinate: "undead",
-  crushing: "giant",
-  soul_drain: "dark",
+// 附魔配方
+export interface EnchantRecipe {
+  kind: "single" | "composite";
+  cost: Partial<Record<EnemyRace, number>>;
+  branch: Suit;                              // 流派归属（UI 分组用）
+  variant: "specialize" | "complement";      // 强化 / 互补
+  hasRare: boolean;                          // 含稀少种族（巨怪/暗影）→ 强档
+  doubleRare?: boolean;                      // 双稀少（究极）
+}
+
+export const ENCHANT_RECIPES: Record<EnchantId, EnchantRecipe> = {
+  // 普通附魔（5）
+  e_brawler:    { kind: "single",    cost: { beast:    3 }, branch: "spade",   variant: "specialize", hasRare: false },
+  e_strategist: { kind: "single",    cost: { humanoid: 3 }, branch: "club",    variant: "specialize", hasRare: false },
+  e_reaper:     { kind: "single",    cost: { undead:   3 }, branch: "heart",   variant: "specialize", hasRare: false },
+  e_titan:      { kind: "single",    cost: { giant:    3 }, branch: "spade",   variant: "specialize", hasRare: true  },
+  e_phantom:    { kind: "single",    cost: { dark:     3 }, branch: "diamond", variant: "specialize", hasRare: true  },
+  // 复合附魔（8）
+  ec_warblood:  { kind: "composite", cost: { beast:    2, giant: 2    }, branch: "spade",   variant: "specialize", hasRare: true  },
+  ec_phalanx:   { kind: "composite", cost: { beast:    2, humanoid: 2 }, branch: "spade",   variant: "complement", hasRare: false },
+  ec_swift:     { kind: "composite", cost: { dark:     2, giant: 2    }, branch: "diamond", variant: "specialize", hasRare: true,  doubleRare: true },
+  ec_focus:     { kind: "composite", cost: { undead:   2, humanoid: 2 }, branch: "diamond", variant: "complement", hasRare: false },
+  ec_lifesteal: { kind: "composite", cost: { undead:   2, dark: 2     }, branch: "heart",   variant: "specialize", hasRare: true  },
+  ec_resilient: { kind: "composite", cost: { beast:    2, undead: 2   }, branch: "heart",   variant: "complement", hasRare: false },
+  ec_arcane:    { kind: "composite", cost: { humanoid: 2, dark: 2     }, branch: "club",    variant: "specialize", hasRare: true  },
+  ec_runic:     { kind: "composite", cost: { humanoid: 2, giant: 2    }, branch: "club",    variant: "complement", hasRare: true  },
 };
 
-export const ENCHANT_COST = 3;  // 每个附魔消耗 3 同种族碎片
-export const ENCHANTS: EnchantId[] = ["frenzy_e", "calculated", "assassinate", "crushing", "soul_drain"];
+export const ENCHANTS: EnchantId[] = [
+  "e_brawler", "e_strategist", "e_reaper", "e_titan", "e_phantom",
+  "ec_warblood", "ec_phalanx", "ec_swift", "ec_focus",
+  "ec_lifesteal", "ec_resilient", "ec_arcane", "ec_runic",
+];
+
+// 稀少种族集合（用于 UI 标记 + 配方校验）
+export const RARE_RACES: EnemyRace[] = ["giant", "dark"];
+export function isRareRace(race: EnemyRace): boolean {
+  return race === "giant" || race === "dark";
+}
 
 // 卡牌稀有度 4 档：抽卡先 roll 稀有度，再从该档卡池里抽具体卡
 // common 普通 / rare 稀有 / super_rare 超稀有 / epic 史诗
@@ -243,6 +374,10 @@ export interface CardInstance {
   suit?: Suit;
   slotId?: string;
   acquiredAtFloor?: number;     // 获得时所在的关卡（起始牌库 = 0；用于整理 UI 标记本关新增）
+  // 铁匠铺染色覆盖：永久把攻击牌花色改成此值（攻击牌专用）
+  attackSuitOverride?: Suit;
+  // 史诗卡使用次数限制（每场战斗 3 次；用尽后回到牌库，需要重新抽起）
+  usesRemaining?: number;
 }
 
 // ── 玩家状态 ──────────────────────────────────────────────
@@ -271,6 +406,9 @@ export interface PlayerState {
 
   // 整局 1 次的复活机制（不灭之心）已使用次数；不在 statuses 里因为状态会战斗间清空
   revivesUsed?: number;
+
+  // 跨场战斗的持续效果（神秘宝箱陷阱设置；newBattle 消费一次后清除）
+  nextBattlePenalty?: "miss_one" | "miss_two" | "enemy_first";
 }
 
 // ── 敌人 ──────────────────────────────────────────────────
@@ -314,20 +452,67 @@ export interface BattleState {
   attackedThisTurn: boolean;    // 本回合是否已经打出攻击牌（每回合最多 1 张，连弩除外）
   bowAttackStreak: number;      // 连弩连续出攻击牌的回合数（满 2 后下回合弃置）
   pendingSuitPick?: string;     // 等待玩家手选花色的动作 ("dye" | "resonance")
+  floor: number;                // 当前楼层（calcAttackDamage 里的 sharp 附魔需要）
+  pendingDodgeFx?: number;      // 待播放的闪避动效次数（main.ts 渲染时消费）
+
+  // 花色专精：玩家手动指定的激活花色（仅在多花色亲和度并列时有效）
+  activeSpecialtyOverride?: Suit;
+
+  // Epic 装备耗尽时的替换流程（main.ts 渲染时消费）
+  pendingEpicReplacement?: {
+    slot: "weapon" | "armor";
+    candidates: string[];   // 牌库中可选的非 Epic 装备 uid 列表（最多 3 个）
+  };
 }
 
 // ── 游戏阶段 ──────────────────────────────────────────────
 export type GamePhase =
   | "starter_perk_picks"
+  | "floor_map"           // 楼层全貌 / 路径选择
   | "battle"
   | "suit_pick"           // 手选花色（染色术 / 共鸣咒）
   | "battle_victory"
   | "reward_card"          // 战利品（1 张卡进牌库）
   | "reward_perk"          // 通关额外特性
+  | "floor_event"          // 触发某事件（从 map node 进入）
   | "discard"
-  | "forge"                // 铁匠铺（每 2 关一次，附魔武器）
+  | "forge"                // 铁匠铺（map node）
   | "game_over"
   | "victory";
+
+// ── 楼层地图（Slay the Spire 式分支节点图） ───────────────
+export type MapNodeType = "start" | "battle" | "elite" | "boss" | "event" | "forge" | "shop";
+
+export interface MapNode {
+  id: string;
+  type: MapNodeType;
+  layer: number;             // 层（深度，0 = start）
+  col: number;               // 该层第几个节点（用于布局）
+  next: string[];            // 通向的下一层节点 id
+  // 渲染坐标（map.ts 计算后填充）
+  x: number;                 // 0-1 normalized
+  y: number;                 // 0-1 normalized
+  completed: boolean;
+  // 类型相关 payload（生成时预 roll，进入时使用）
+  enemies?: EnemyState[];    // battle/elite/boss
+  eventId?: string;          // event 节点
+}
+
+export interface FloorTheme {
+  name: string;              // 关卡名
+  flavor: string;            // 一句话氛围
+  bgClass: string;           // CSS 类名（决定背景渐变）
+  accentColor: string;       // 主调色（hex）
+}
+
+export interface FloorMap {
+  floor: number;
+  theme: FloorTheme;
+  nodes: MapNode[];
+  startNodeId: string;
+  bossNodeId: string;
+  currentNodeId: string;     // 玩家当前所在节点（初始 = start）
+}
 
 export interface GameState {
   phase: GamePhase;
@@ -341,4 +526,24 @@ export interface GameState {
   pendingFloorClear: boolean;
   log: LogEntry[];
   vitaUpAmount?: number;
+
+  // 楼层事件（floor_event 阶段时由 events.ts 设置）
+  activeEventId?: string;
+  // 商人事件的子界面状态（由 main.ts 渲染时使用）
+  merchantStock?: CardInstance[];
+
+  // 楼层地图（floor_map 阶段时由 map.ts 设置）
+  floorMap?: FloorMap;
+
+  // 铁匠铺访问内是否已用过染色服务（每次访问只允许 1 次）
+  forgeRecolorUsed?: boolean;
+
+  // 事件结果对话框（事件完成后展示，玩家点确认才回地图）
+  eventResult?: {
+    title: string;
+    message: string;
+    cardId?: string;        // 加入/失去的卡 id
+    cardChange?: "gained" | "lost";
+    kind: "win" | "lose" | "neutral";
+  };
 }
