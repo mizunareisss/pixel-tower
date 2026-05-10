@@ -1,0 +1,89 @@
+name: Release Draft
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build and upsert draft release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          PREV=$(gh release list --limit 20 \
+                  --json tagName,isDraft,isPrerelease \
+                  --jq '[.[] | select(.isDraft==false and .isPrerelease==false)][0].tagName' \
+                  2>/dev/null || echo "")
+
+          if [ -n "$PREV" ] && [ "$PREV" != "null" ]; then
+            HEADING="## 自 ${PREV} 以来的改动"
+            RANGE="${PREV}..HEAD"
+          else
+            HEADING="## 初始改动"
+            RANGE="HEAD"
+          fi
+
+          COMMITS=$(git log --no-merges --pretty=format:'%s%x09%h' ${RANGE})
+          if [ -z "$COMMITS" ]; then
+            echo "nothing new since ${PREV}; skipping"
+            exit 0
+          fi
+
+          emit_group () {
+            local title="$1" pattern="$2"
+            local matched
+            matched=$(printf '%s\n' "$COMMITS" | grep -iE "$pattern" || true)
+            if [ -n "$matched" ]; then
+              printf '### %s\n' "$title"
+              printf '%s\n' "$matched" | awk -F'\t' '{ print "- " $1 " (`" $2 "`)" }'
+              printf '\n'
+              COMMITS=$(printf '%s\n' "$COMMITS" | grep -ivE "$pattern" || true)
+            fi
+          }
+
+          {
+            printf '%s\n\n' "$HEADING"
+            emit_group "✨ 新功能"  '^(feat|add|feature)[:(]|^(feat|add|feature) '
+            emit_group "🐛 修复"    '^fix[:(]|^fix '
+            emit_group "🪄 细节"    '^(polish|ui|style|refactor|tweak|chore)[:(]|^(polish|ui|style|refactor|tweak|chore) '
+            emit_group "📝 文档"    '^(doc|docs|readme)[:(]|^(doc|docs|readme) '
+            if [ -n "$COMMITS" ]; then
+              printf '### 其它\n'
+              printf '%s\n' "$COMMITS" | awk -F'\t' '{ print "- " $1 " (`" $2 "`)" }'
+              printf '\n'
+            fi
+            printf '_自动生成于 %s · HEAD=`%s`_\n' "$(date -u +'%Y-%m-%d %H:%M UTC')" "$(git rev-parse --short HEAD)"
+          } > notes.md
+
+          DRAFT_TAG="next"
+          DRAFT_TITLE="🚧 下一版草稿（自动累积中）"
+
+          if gh release view "$DRAFT_TAG" >/dev/null 2>&1; then
+            gh release edit "$DRAFT_TAG" \
+              --notes-file notes.md \
+              --title "$DRAFT_TITLE" \
+              --target main
+          else
+            gh release create "$DRAFT_TAG" \
+              --draft \
+              --prerelease \
+              --target main \
+              --title "$DRAFT_TITLE" \
+              --notes-file notes.md
+          fi
+
+          echo "::group::generated notes"
+          cat notes.md
+          echo "::endgroup::"
