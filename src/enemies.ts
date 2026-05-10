@@ -137,11 +137,32 @@ const RACE_SUIT_PREF: Record<EnemyRace, Suit> = {
 };
 
 // 楼层 → 可用种族（递增解锁）
+// v2：稀少种族（巨怪/暗影）从第 3 关起就有概率出现，让玩家更早获得稀少碎片
 function getRaceWhitelist(floor: number): EnemyRace[] {
   if (floor <= 2) return ["beast", "humanoid"];
-  if (floor <= 4) return ["beast", "humanoid", "undead"];
-  if (floor <= 6) return ["beast", "humanoid", "undead", "giant"];
+  // 第 3 关起：5 种族全开（普通战仍以 3 个普通种族为主，靠权重压制）
   return ["beast", "humanoid", "undead", "giant", "dark"];
+}
+
+// 在普通战里压低稀少种族出现率（避免第 3 关满地巨怪/暗影），
+// 精英 / Boss 不压制（这俩档次本来就稀少 = 玩家想刷稀少碎片就主动选精英）
+function getRaceWeightForTier(race: EnemyRace, tier: "normal" | "elite" | "boss"): number {
+  if (tier === "normal") {
+    // 普通战：兽 / 人型 / 不死 = 1.0，巨怪 / 暗影 = 0.35
+    return (race === "giant" || race === "dark") ? 0.35 : 1.0;
+  }
+  // 精英 / Boss：等权重
+  return 1.0;
+}
+
+function pickRaceWeighted(whitelist: EnemyRace[], tier: "normal" | "elite" | "boss"): EnemyRace {
+  const weights = whitelist.map(r => getRaceWeightForTier(r, tier));
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < whitelist.length; i++) {
+    if ((r -= weights[i]) < 0) return whitelist[i];
+  }
+  return whitelist[whitelist.length - 1];
 }
 
 // ─────────────────────────────────────────────────────────
@@ -226,7 +247,7 @@ interface BuildOpts {
 
 function buildRandomEnemy(opts: BuildOpts): EnemyState {
   const whitelist = getRaceWhitelist(opts.floor);
-  const race = opts.race ?? rand(whitelist);
+  const race = opts.race ?? pickRaceWeighted(whitelist, opts.tier);
   const tier = opts.tier;
 
   // 名字

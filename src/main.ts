@@ -24,6 +24,9 @@ import {
   gameSuitPicked,
   gameSuitPickCanceled,
   releaseSuitUltimate,
+  setActiveSpecialty,
+  epicReplacementChoose,
+  epicReplacementSkip,
   applyForgeRecolor,
   skipFloorEvent,
   merchantBuyCard,
@@ -38,15 +41,16 @@ import {
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
 import { ABILITY_DESCS } from "./enemies.ts";
-import { getCurrentDodgeChance, getSuitAffinity, suitTier } from "./battle.ts";
+import { getCurrentDodgeChance, getSuitAffinity, suitTier, getActiveSpecialty, getDisplayedSpecialty, getTiedSpecialties } from "./battle.ts";
 import {
   EVENT_META, MERCHANT_PRICES, GAMBLER_OPTIONS, SHRINE_OPTIONS, CHEST_TRAP_DESCS,
 } from "./events.ts";
 import type { EventId } from "./events.ts";
 import { NODE_TYPE_META, getReachableNodes } from "./map.ts";
 import { SUIT_SYMBOLS, SUITS, isRedSuit, FIGHTS_PER_FLOOR, STATUS_META, RACES, FRAGMENT_NAMES, FRAGMENT_ICONS,
-  ENCHANTS, ENCHANT_NAMES, ENCHANT_DESCS, ENCHANT_RACE, ENCHANT_COST, RACE_NAMES } from "./types.ts";
-import type { EnemyRace, EnchantId, Suit } from "./types.ts";
+  ENCHANTS, ENCHANT_NAMES, ENCHANT_DESCS, ENCHANT_RECIPES, RACE_NAMES, isRareRace,
+  SUIT_TIER_NAMES, SUIT_TIER_DESCS, SUIT_THEMES } from "./types.ts";
+import type { EnemyRace, Suit, EnchantId } from "./types.ts";
 import type { GameState, CardInstance, EnemyState, StatusEffect } from "./types.ts";
 
 const ENEMY_EMOJI: Record<string, string> = {
@@ -80,7 +84,7 @@ const ONBOARDING_STEPS = [
   },
   {
     title: "② 花色相性",
-    body: "攻击牌与敌人花色相同 → 伤害 +20%；同色（同为红色或黑色）→ 无加成；不同色 → 伤害 -20%。选对花色事半功倍。",
+    body: "攻击牌与敌人花色相同 → 伤害 +20%；同色（同为红色或黑色）→ 无加成；不同色 → 伤害 -20%。",
   },
   {
     title: "③ 装备系统",
@@ -88,15 +92,23 @@ const ONBOARDING_STEPS = [
   },
   {
     title: "④ 牌库与战利品",
-    body: "每场战斗起手摸 6 张牌。胜利可选 1 张新牌加入牌库；通关再选 1 个特性。爬得越高，新牌越强。",
+    body: "每场战斗起手摸 6 张牌。胜利可选 1 张新牌加入牌库；通关再选 1 个特性。",
   },
   {
-    title: "⑤ 特性与碎片",
-    body: "特性是常驻被动。击败不同种族敌人掉落灵魂碎片，去铁匠铺给武器附魔，解锁特殊机制。",
+    title: "⑤ 花色专精",
+    body: "♠ 堆伤 / ♦ 闪避 / ♥ 续航 / ♣ 减伤——4 花色各有路线。装备、特性、染色 / 持咒 / 染坊和打出的攻击牌都会累积亲和度，达 5 / 10 / 15 解锁三档被动 + 大招。同一时间只激活一条最高花色。点 HP 条下方的花色芯片查看 4 花色对比面板。",
   },
   {
-    title: "⑥ 爬塔节奏",
-    body: "每关 3 场战斗，最后一场会更强。通关后 HP 补满进下一关。",
+    title: "⑥ 特性 · 碎片 · 附魔",
+    body: "特性是常驻被动，每关末获得 1 张。击败不同种族敌人掉灵魂碎片，去铁匠铺给武器附魔——单种族 ×3 或两种族 ×2+×2，搭配出 13 种附魔。",
+  },
+  {
+    title: "⑦ 大地图 · 选择路线",
+    body: "每关一张分支地图，节点上的种族 emoji 提示战斗会掉哪种碎片——根据你想做的附魔 / build 主动选路线。事件、铁匠铺、商店都是节点。",
+  },
+  {
+    title: "⑧ 爬塔节奏",
+    body: "每关 3 场战斗，最后一场是精英或 Boss。通关后 HP 补满进下一关。第 3/6/9 关是 Boss 关。",
   },
 ];
 
@@ -151,6 +163,13 @@ function render() {
   // 事件结果对话框（如果有 pending result，弹出，玩家点确认后清掉）
   if (state.eventResult && !document.getElementById("event-result-overlay")) {
     showEventResultModal();
+  }
+
+  // 史诗装备耗尽 → 替换装备 modal（战斗结束/选完后自动清理残留）
+  if (state.battle?.pendingEpicReplacement) {
+    if (!document.getElementById("epic-replace-overlay")) showEpicReplacementModal();
+  } else {
+    document.getElementById("epic-replace-overlay")?.remove();
   }
 
   // Player took damage → vita float + 受击动效
@@ -209,7 +228,8 @@ function showChipDetail(type: "weapon" | "armor" | "perk") {
       const cnt = state.player.weapons.length;
       const eff = def.equipEffects?.[Math.min(cnt, 4) - 1];
       const enchant = state.player.weaponEnchant;
-      title = `⚔ ${def.name} ×${cnt}`;
+      const sym = def.equipSuit ? SUIT_SYMBOLS[def.equipSuit] : "";
+      title = `⚔ ${def.name} ${sym} ×${cnt}`;
       content = `
         <p class="status-info-desc">${escapeHTML(def.desc)}</p>
         <div class="status-info-stats"><span><b>当前效果：</b>${escapeHTML(eff?.stat ?? eff?.desc ?? "")}</span></div>
@@ -228,7 +248,8 @@ function showChipDetail(type: "weapon" | "armor" | "perk") {
       const def = CARD_DB[arm.defId];
       const cnt = state.player.armors.length;
       const eff = def.equipEffects?.[Math.min(cnt, 4) - 1];
-      title = `🛡 ${def.name} ×${cnt}`;
+      const sym = def.equipSuit ? SUIT_SYMBOLS[def.equipSuit] : "";
+      title = `🛡 ${def.name} ${sym} ×${cnt}`;
       content = `
         <p class="status-info-desc">${escapeHTML(def.desc)}</p>
         <div class="status-info-stats"><span><b>当前效果：</b>${escapeHTML(eff?.stat ?? eff?.desc ?? "")}</span></div>
@@ -268,7 +289,7 @@ function showChipDetail(type: "weapon" | "armor" | "perk") {
 }
 
 // ─────────────────────────────────────────────────────────
-// 上手引导（5 步）
+// 上手引导
 // ─────────────────────────────────────────────────────────
 
 function showOnboarding(step = 0) {
@@ -336,24 +357,31 @@ function renderFragments() {
   }).join("");
 }
 
-// 碎片详情弹窗
+// 碎片详情弹窗：列出所有用到该种族的附魔（v2 配方系统）
 function showFragmentInfo(race: EnemyRace) {
   if (document.getElementById("frag-info-overlay")) return;
   const have = state.player.fragments[race] ?? 0;
-  let enchantId: EnchantId | null = null;
-  for (const eid of ENCHANTS) if (ENCHANT_RACE[eid] === race) { enchantId = eid; break; }
+  // 找出所有配方含该种族的附魔
+  const usedIn = ENCHANTS.filter(eid => (ENCHANT_RECIPES[eid].cost[race] ?? 0) > 0);
+  const enchantList = usedIn.map(eid => {
+    const r = ENCHANT_RECIPES[eid];
+    const allCost = Object.entries(r.cost).map(([rc, n]) => `${FRAGMENT_ICONS[rc as EnemyRace]}×${n}`).join(" + ");
+    return `<li><b>${ENCHANT_NAMES[eid]}</b> · 需 ${allCost}<br><span class="frag-info-enchant-desc">${escapeHTML(ENCHANT_DESCS[eid])}</span></li>`;
+  }).join("");
+  const rareTag = isRareRace(race) ? '<span class="frag-info-rare">★ 稀少种族</span>' : "";
+
   const overlay = document.createElement("div");
   overlay.id = "status-info-overlay"; // 复用 status modal 的样式
   overlay.innerHTML = `
     <div id="status-info-modal" class="k-neutral">
       <div class="status-info-header">
-        <h3>${FRAGMENT_ICONS[race]} ${FRAGMENT_NAMES[race]}<span class="status-info-kind k-neutral">灵魂碎片</span></h3>
+        <h3>${FRAGMENT_ICONS[race]} ${FRAGMENT_NAMES[race]}${rareTag}<span class="status-info-kind k-neutral">灵魂碎片</span></h3>
         <button id="status-info-close">✕</button>
       </div>
       <div class="status-info-body">
         <p class="status-info-desc">击败「${RACE_NAMES[race]}」种族的敌人时掉落 1 个。</p>
-        ${enchantId ? `<p class="status-info-desc">在铁匠铺消耗 <b>${ENCHANT_COST}</b> 个，可为武器附魔为「<b>${ENCHANT_NAMES[enchantId]}</b>」：</p>
-        <p class="status-info-desc"><i>${escapeHTML(ENCHANT_DESCS[enchantId])}</i></p>` : ""}
+        ${usedIn.length > 0 ? `<p class="status-info-desc">用于 <b>${usedIn.length}</b> 个附魔：</p>
+        <ul class="frag-info-enchant-list">${enchantList}</ul>` : ""}
         <div class="status-info-stats">
           <span><b>当前库存：</b>${have} 个</span>
         </div>
@@ -412,8 +440,8 @@ function renderBattle() {
   const dodgeChip = dodgePct > 0
     ? `<span class="pcard-dodge-chip" title="完全闪避概率：每次受击有 ${dodgePct}% 概率跳过整次伤害">🎯 闪避 ${dodgePct}%</span>`
     : "";
-  // 4 个花色亲和度芯片
-  const affinityChips = renderSuitAffinityChips();
+  // 单芯片：仅显示当前最高亲和度的花色（点击展开 4 花色面板）
+  const affinityChip = renderSuitAffinityChip();
   stageEl.innerHTML = `
     <div id="enemies-row"></div>
     <div id="player-card">
@@ -424,9 +452,14 @@ function renderBattle() {
       </div>
       <div class="pcard-equip-row" id="pcard-equip"></div>
       <div class="pcard-statuses" id="pcard-statuses"></div>
-      <div class="pcard-suit-row" id="pcard-suit-row">${affinityChips}</div>
+      <div class="pcard-suit-row" id="pcard-suit-row">${affinityChip}</div>
     </div>
   `;
+
+  // 单芯片点击 → 打开花色专精面板
+  stageEl.querySelectorAll<HTMLElement>("[data-aff-chip]").forEach(chip => {
+    chip.addEventListener("click", () => showSuitSpecialtyPanel());
+  });
 
   const row = $("enemies-row");
   for (let i = 0; i < battle.enemies.length; i++) {
@@ -439,15 +472,11 @@ function renderBattle() {
     btn.addEventListener("click", e => {
       e.stopPropagation();
       const theme = SUIT_THEMES[suit];
-      const ultDescs: Record<Suit, string> = {
-        spade:   "对当前目标造成其当前 HP <b>50%</b> 的真实伤害（无视护甲）",
-        diamond: "本回合敌人攻击 <b>全部闪避</b>，下次攻击 hits <b>×3</b>",
-        heart:   "HP <b>回满</b>，永久 maxHP <b>+5</b>",
-        club:    "对全体敌人 +3 沉默 + +3 易伤 + +3 中毒",
-      };
+      const names = SUIT_TIER_NAMES[suit];
+      const descs = SUIT_TIER_DESCS[suit];
       showConfirm({
-        title: `${SUIT_SYMBOLS[suit]} ${theme.name} · 大招`,
-        body: `${ultDescs[suit]}<br><br>消耗 <b>10 点</b>该花色亲和度。`,
+        title: `${SUIT_SYMBOLS[suit]} ${theme.name} · ${names.ult}`,
+        body: `${descs.ult}<br><br>消耗 <b>10 点</b>该花色亲和度。`,
         confirmLabel: "释放！",
         onConfirm: () => {
           if (releaseSuitUltimate(state, suit)) render();
@@ -464,7 +493,8 @@ function renderBattle() {
     ? `⚔ ${CARD_DB[wep.defId].name}×${state.player.weapons.length} ${wepSuit}${state.player.weaponEnchant ? " ⚒" + ENCHANT_NAMES[state.player.weaponEnchant] : ""}`
     : "⚔ 徒手";
   const arm = state.player.armors[0];
-  const armLabel = arm ? `🛡 ${CARD_DB[arm.defId].name}×${state.player.armors.length}` : "🛡 无防具";
+  const armSuit = arm ? SUIT_SYMBOLS[CARD_DB[arm.defId].equipSuit!] ?? "" : "";
+  const armLabel = arm ? `🛡 ${CARD_DB[arm.defId].name}×${state.player.armors.length} ${armSuit}` : "🛡 无防具";
   const perkGroups = new Map<string, number>();
   for (const p of state.player.perks) perkGroups.set(p.defId, (perkGroups.get(p.defId) ?? 0) + 1);
   const perkLabel = Array.from(perkGroups.entries()).map(([id, n]) => `${CARD_DB[id].name}×${n}`).join(" · ");
@@ -541,42 +571,152 @@ function openLogOverlay() {
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
 }
 
-// 4 个花色亲和度芯片 + 大招按钮
-const SUIT_THEMES: Record<Suit, { name: string; color: string }> = {
-  spade:   { name: "黑桃·莽夫", color: "#e6e6e6" },
-  diamond: { name: "方块·灵巧", color: "#ff8a8a" },
-  heart:   { name: "红心·吸血", color: "#ff5e5e" },
-  club:    { name: "梅花·魔法", color: "#aaffc3" },
-};
-function renderSuitAffinityChips(): string {
+// 花色专精芯片 v2：只显示当前最高亲和度的花色（单芯片 + 进度填充 + 大招按钮）
+// 进度填充规则：
+//   - aff < 5  → 填充 0%，灰显（未点亮）
+//   - 5 ≤ aff < 10 → 点亮但只显示档位名（Tier 1）
+//   - 10 ≤ aff < 15 → 进度条 50%，档位名（Tier 2）
+//   - aff ≥ 15 → 进度条 100%，档位名（Tier 3）+ 大招按钮
+// 点击芯片 → 打开"花色专精面板"（4 个花色横向对比 + 切换按钮）
+function renderSuitAffinityChip(): string {
   if (!state.battle) return "";
-  const chips: string[] = [];
-  for (const suit of SUITS) {
-    const aff = getSuitAffinity(state.battle, suit);
-    const tier = suitTier(state.battle, suit);
-    const sym = SUIT_SYMBOLS[suit as Suit];
-    const isRed = suit === "heart" || suit === "diamond";
-    const t1 = tier >= 1 ? "tier-on" : "";
-    const t2 = tier >= 2 ? "tier-on" : "";
-    const t3 = tier >= 3 ? "tier-on tier-3" : "";
-    const ultimateBtn = tier >= 3
-      ? `<button class="suit-ult-btn" data-suit="${suit}" title="释放 ${SUIT_THEMES[suit as Suit].name} 大招（消耗 10 亲和）">⚡</button>`
-      : "";
-    chips.push(`
-      <div class="suit-aff-chip${isRed ? " red" : ""}" data-suit="${suit}"
-        title="${SUIT_THEMES[suit as Suit].name}：亲和度 ${aff.toFixed(1)}">
+  const suit = getDisplayedSpecialty(state.battle);
+  const aff = getSuitAffinity(state.battle, suit);
+  const tier = suitTier(state.battle, suit);
+  const isActive = getActiveSpecialty(state.battle) === suit;
+  const sym = SUIT_SYMBOLS[suit];
+  const theme = SUIT_THEMES[suit];
+  const names = SUIT_TIER_NAMES[suit];
+  const isRed = suit === "heart" || suit === "diamond";
+  // 填充百分比：T1=lit-no-fill, T2=50%, T3=100%
+  let fillPct = 0;
+  let tierLabel = "未点亮";
+  if (tier >= 3) { fillPct = 100; tierLabel = names.tier3; }
+  else if (tier >= 2) { fillPct = 50; tierLabel = names.tier2; }
+  else if (tier >= 1) { fillPct = 0; tierLabel = names.tier1; }
+  // tier >= 1 但 fill 0% 用 class "lit"（亮但未填）
+  const litClass = tier >= 1 ? " lit" : "";
+  const tier3Class = tier >= 3 ? " tier-3" : "";
+  const inactiveClass = !isActive && tier >= 1 ? " is-tied-inactive" : "";
+
+  // 大招按钮（T3 时显示）
+  const ultBtn = (tier >= 3 && isActive)
+    ? `<button class="suit-ult-btn" data-suit="${suit}" title="释放 ${theme.name} 大招（消耗 10 亲和）">⚡ ${names.ult}</button>`
+    : "";
+
+  // 并列指示器（如果有多个花色并列最高，显示"⇄"提示玩家可切换）
+  const tied = getTiedSpecialties(state.battle);
+  const tiedHint = tied.length > 1 ? `<span class="saff-tied-hint">⇄ 并列 ${tied.length}</span>` : "";
+
+  return `
+    <div class="suit-aff-chip-v2${isRed ? " red" : ""}${litClass}${tier3Class}${inactiveClass}"
+         data-aff-chip="1" data-suit="${suit}"
+         title="${theme.name}：亲和度 ${aff.toFixed(1)} / Tier ${tier}（点击查看 4 花色面板）">
+      <div class="saff-fill" style="width:${fillPct}%"></div>
+      <div class="saff-content">
         <span class="saff-sym">${sym}</span>
+        <span class="saff-name">${tierLabel}</span>
         <span class="saff-val">${aff.toFixed(1)}</span>
-        <span class="saff-tiers">
-          <span class="saff-tier ${t1}">5</span>
-          <span class="saff-tier ${t2}">10</span>
-          <span class="saff-tier ${t3}">15</span>
-        </span>
-        ${ultimateBtn}
+        ${tiedHint}
       </div>
-    `);
-  }
-  return chips.join("");
+    </div>
+    ${ultBtn}
+  `;
+}
+
+// 花色专精详情面板（4 花色横向对比）
+function showSuitSpecialtyPanel(): void {
+  if (!state.battle) return;
+  document.getElementById("suit-panel-overlay")?.remove();
+  const battle = state.battle;
+  const active = getActiveSpecialty(battle);
+  const tied = getTiedSpecialties(battle);
+
+  const cards = SUITS.map(suit => {
+    const aff = getSuitAffinity(battle, suit);
+    const tier = suitTier(battle, suit);
+    const sym = SUIT_SYMBOLS[suit];
+    const theme = SUIT_THEMES[suit];
+    const names = SUIT_TIER_NAMES[suit];
+    const descs = SUIT_TIER_DESCS[suit];
+    const isRed = suit === "heart" || suit === "diamond";
+    const isActive = active === suit;
+    const isTiedTop = tied.includes(suit);
+    const canSwitch = isTiedTop && !isActive;
+    // 进度条（垂直）：100% = aff 15（T3 满档）
+    const fillPct = Math.min(100, Math.round((aff / 15) * 100));
+    // 各档名 + 锁定/已达
+    const t1Done = tier >= 1, t2Done = tier >= 2, t3Done = tier >= 3;
+    const switchBtn = canSwitch
+      ? `<button class="ssp-switch-btn" data-switch-suit="${suit}">切换激活</button>`
+      : isActive
+        ? `<div class="ssp-active-badge">★ 激活中</div>`
+        : "";
+    return `
+      <div class="ssp-card${isRed ? " red" : ""}${isActive ? " active" : ""}">
+        <div class="ssp-head">
+          <span class="ssp-sym">${sym}</span>
+          <span class="ssp-name">${theme.name}</span>
+        </div>
+        <div class="ssp-bar-wrap">
+          <div class="ssp-bar-bg">
+            <div class="ssp-bar-fill" style="height:${fillPct}%"></div>
+            <div class="ssp-tier-mark t1" style="bottom:33.3%"></div>
+            <div class="ssp-tier-mark t2" style="bottom:66.6%"></div>
+          </div>
+          <div class="ssp-aff-num">${aff.toFixed(1)}</div>
+        </div>
+        <div class="ssp-tiers">
+          <div class="ssp-tier-row${t1Done ? " done" : ""}">
+            <span class="ssp-tier-label">T1 · ${names.tier1}</span>
+            <div class="ssp-tier-desc">${descs.tier1}</div>
+          </div>
+          <div class="ssp-tier-row${t2Done ? " done" : ""}">
+            <span class="ssp-tier-label">T2 · ${names.tier2}</span>
+            <div class="ssp-tier-desc">${descs.tier2}</div>
+          </div>
+          <div class="ssp-tier-row${t3Done ? " done" : ""}">
+            <span class="ssp-tier-label">T3 · ${names.tier3}</span>
+            <div class="ssp-tier-desc">${descs.tier3}</div>
+          </div>
+          <div class="ssp-tier-row ult${t3Done ? " done" : ""}">
+            <span class="ssp-tier-label">⚡ ${names.ult}</span>
+            <div class="ssp-tier-desc">${descs.ult}</div>
+          </div>
+        </div>
+        ${switchBtn}
+      </div>
+    `;
+  }).join("");
+
+  const overlay = document.createElement("div");
+  overlay.id = "suit-panel-overlay";
+  overlay.innerHTML = `
+    <div id="suit-panel-modal">
+      <div class="ssp-header">
+        <span class="panel-label">花色专精</span>
+        <button class="ssp-close" aria-label="关闭">✕</button>
+      </div>
+      <div class="ssp-tip">
+        ${tied.length > 1
+          ? `当前有 <b>${tied.length}</b> 个花色亲和度并列最高，可点「切换激活」选择其一。`
+          : "亲和度最高的花色为激活专精。多个花色并列最高时可在此手动切换。"}
+      </div>
+      <div class="ssp-grid">${cards}</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector(".ssp-close")?.addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  overlay.querySelectorAll<HTMLButtonElement>("[data-switch-suit]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const suit = btn.dataset.switchSuit as Suit;
+      if (setActiveSpecialty(state, suit)) {
+        overlay.remove();
+        render();
+      }
+    });
+  });
 }
 
 function renderEnemy(e: EnemyState, idx: number): HTMLElement {
@@ -986,14 +1126,21 @@ function renderForge() {
       ? `<button class="forge-recolor-btn" disabled>碎片不足（需 3 任意）</button>`
       : `<button class="forge-recolor-btn">染色 1 张攻击牌（消耗 3 任意碎片）</button>`;
   stageEl.innerHTML = `
-    <p class="hint">用灵魂碎片为武器附魔（消耗 ${ENCHANT_COST} 同种族碎片）。换附魔会覆盖旧的。</p>
+    <p class="hint">用灵魂碎片为武器附魔。普通附魔（单种族 ×3）/ 复合附魔（2 种族 ×2+×2）。换附魔会覆盖旧的。</p>
     <div id="forge-current">当前武器：<b>${escapeHTML(curWeapon)}</b>　|　当前附魔：<b>${cur ? escapeHTML(ENCHANT_NAMES[cur]) : "（无）"}</b></div>
     <div id="forge-recolor-section">
       <div class="forge-recolor-title">🎨 染坊（每次铁匠铺仅可使用 1 次）</div>
       <div class="forge-recolor-desc">用任意 3 个灵魂碎片，把牌库里的 1 张攻击牌永久变成你选的花色。</div>
       ${recolorBtn}
     </div>
-    <div id="forge-list"></div>
+    <div id="forge-section-single">
+      <div class="forge-section-title">🔹 普通附魔（单种族 ×3 碎片）</div>
+      <div class="forge-grid" id="forge-list-single"></div>
+    </div>
+    <div id="forge-section-composite">
+      <div class="forge-section-title">🔸 复合附魔（2 种族 ×2 + ×2 碎片）<span class="forge-section-sub">含巨怪/暗影 = 强档；双稀少 = 究极</span></div>
+      <div class="forge-grid" id="forge-list-composite"></div>
+    </div>
     <button id="forge-skip-btn" class="big-btn">跳过铁匠铺</button>
   `;
   // 染色按钮绑定
@@ -1001,18 +1148,41 @@ function renderForge() {
   if (rb && !recolorUsed && totalFragments >= 3) {
     rb.addEventListener("click", () => showForgeRecolorWizard());
   }
-  const list = $("forge-list");
+  const listSingle = $("forge-list-single");
+  const listComposite = $("forge-list-composite");
   for (const eid of ENCHANTS) {
-    const race = ENCHANT_RACE[eid];
-    const have = state.player.fragments[race] ?? 0;
-    const enough = have >= ENCHANT_COST;
+    const recipe = ENCHANT_RECIPES[eid];
+    // 校验是否所有材料够
+    const costEntries = Object.entries(recipe.cost) as [import("./types.ts").EnemyRace, number][];
+    const enough = costEntries.every(([r, n]) => (state.player.fragments[r] ?? 0) >= (n ?? 0));
     const isCurrent = cur === eid;
+    const branchSym = SUIT_SYMBOLS[recipe.branch];
+    const branchTheme = SUIT_THEMES[recipe.branch];
+    const variantBadge = recipe.variant === "specialize"
+      ? `<span class="forge-tag forge-tag-spec">特化</span>`
+      : `<span class="forge-tag forge-tag-comp">互补</span>`;
+    const tierBadge = recipe.doubleRare
+      ? `<span class="forge-tag forge-tag-ultimate">究极</span>`
+      : recipe.hasRare
+        ? `<span class="forge-tag forge-tag-rare">强档</span>`
+        : `<span class="forge-tag forge-tag-base">普通</span>`;
+    const costHtml = costEntries.map(([r, n]) => {
+      const have = state.player.fragments[r] ?? 0;
+      const ok = have >= n;
+      const rare = isRareRace(r);
+      return `<span class="forge-cost-pill${ok ? " ok" : " miss"}${rare ? " rare" : ""}">${FRAGMENT_ICONS[r]} ${FRAGMENT_NAMES[r]} ${have}/${n}</span>`;
+    }).join("");
+
     const card = document.createElement("div");
-    card.className = `forge-card${enough ? " ok" : " disabled"}${isCurrent ? " current" : ""}`;
+    card.className = `forge-card v2${enough ? " ok" : " disabled"}${isCurrent ? " current" : ""}${recipe.doubleRare ? " ultimate" : recipe.hasRare ? " rare" : ""}`;
     card.innerHTML = `
+      <div class="forge-card-head">
+        <span class="forge-branch" style="color:${branchTheme.color}">${branchSym} ${branchTheme.name}</span>
+        ${variantBadge}${tierBadge}
+      </div>
       <div class="forge-name">${escapeHTML(ENCHANT_NAMES[eid])}${isCurrent ? "（已装备）" : ""}</div>
       <div class="forge-desc">${escapeHTML(ENCHANT_DESCS[eid])}</div>
-      <div class="forge-cost">需要：${FRAGMENT_ICONS[race]}${FRAGMENT_NAMES[race]} × ${ENCHANT_COST}　|　库存：${have}</div>
+      <div class="forge-cost-row">${costHtml}</div>
       <button class="forge-btn" ${enough ? "" : "disabled"}>${enough ? (isCurrent ? "重新附魔" : "应用") : "碎片不足"}</button>
     `;
     if (enough) {
@@ -1021,7 +1191,8 @@ function renderForge() {
         render();
       });
     }
-    list.appendChild(card);
+    if (recipe.kind === "single") listSingle.appendChild(card);
+    else listComposite.appendChild(card);
   }
   $("forge-skip-btn").addEventListener("click", () => { skipForge(state); render(); });
 }
@@ -1325,7 +1496,7 @@ function renderFloorMap() {
     }).join("");
   }).join("");
 
-  // 生成节点 div（可点击）
+  // 生成节点 div（可点击）；战斗 / 精英 / Boss 显示种族碎片 emoji，方便玩家选 build
   const nodesHtml = map.nodes.map(node => {
     const meta = NODE_TYPE_META[node.type];
     const isCurrent = node.id === map.currentNodeId;
@@ -1335,13 +1506,26 @@ function renderFloorMap() {
     if (isCurrent) cls += " is-current";
     if (isReachable) cls += " is-reachable";
     if (isCompleted) cls += " is-completed";
-    const title = meta.label + (isCurrent ? "（当前）" : isReachable ? "（可前往）" : "");
+
+    // 战斗 / 精英 / Boss：列出该 group 涉及的所有种族（去重排序）
+    let racesBadge = "";
+    let titleExtra = "";
+    if (node.enemies && node.enemies.length > 0) {
+      const races = Array.from(new Set(node.enemies.map(e => e.race)));
+      const fragIcons = races.map(r => FRAGMENT_ICONS[r]).join("");
+      const raceNames = races.map(r => `${RACE_NAMES[r]}（掉 ${FRAGMENT_NAMES[r]}）`).join(" / ");
+      racesBadge = `<span class="map-node-races">${fragIcons}</span>`;
+      titleExtra = ` · ${raceNames}`;
+    }
+
+    const title = meta.label + (isCurrent ? "（当前）" : isReachable ? "（可前往）" : "") + titleExtra;
     return `
       <div class="${cls}"
            data-node-id="${node.id}"
            style="left:${node.x * 100}%;top:${node.y * 100}%;border-color:${meta.color};color:${meta.color}"
            title="${title}">
         <span class="map-node-icon">${meta.icon}</span>
+        ${racesBadge}
       </div>
     `;
   }).join("");
@@ -1354,6 +1538,7 @@ function renderFloorMap() {
           <span class="floor-map-name">${escapeHTML(map.theme.name)}</span>
         </div>
         <div class="floor-map-flavor">"${escapeHTML(map.theme.flavor)}"</div>
+        <button id="map-loadout-btn" class="map-loadout-btn" title="查看当前装备 / 特性 / 附魔">📋 当前配置</button>
       </div>
       <div class="floor-map-canvas">
         <svg class="floor-map-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
@@ -1382,6 +1567,150 @@ function renderFloorMap() {
       });
     }
   });
+
+  // 当前配置按钮
+  document.getElementById("map-loadout-btn")?.addEventListener("click", showLoadoutModal);
+}
+
+// 当前配置 modal：装备 / 附魔 / 特性 / 花色专精概览
+function showLoadoutModal(): void {
+  document.getElementById("loadout-overlay")?.remove();
+  const player = state.player;
+
+  // 武器
+  const wep = player.weapons[0];
+  const wepBlock = wep ? (() => {
+    const def = CARD_DB[wep.defId];
+    const cnt = player.weapons.length;
+    const eff = def.equipEffects?.[Math.min(cnt, 4) - 1];
+    const sym = def.equipSuit ? SUIT_SYMBOLS[def.equipSuit] : "";
+    return `
+      <div class="loadout-row">
+        <div class="loadout-label">⚔ 武器</div>
+        <div class="loadout-content">
+          <div class="loadout-name">${escapeHTML(def.name)} ${sym} ×${cnt}</div>
+          <div class="loadout-desc">${escapeHTML(eff?.stat ?? eff?.desc ?? def.desc)}</div>
+        </div>
+      </div>
+    `;
+  })() : `<div class="loadout-row"><div class="loadout-label">⚔ 武器</div><div class="loadout-content loadout-empty">徒手（基础攻击）</div></div>`;
+
+  // 防具
+  const arm = player.armors[0];
+  const armBlock = arm ? (() => {
+    const def = CARD_DB[arm.defId];
+    const cnt = player.armors.length;
+    const eff = def.equipEffects?.[Math.min(cnt, 4) - 1];
+    const sym = def.equipSuit ? SUIT_SYMBOLS[def.equipSuit] : "";
+    return `
+      <div class="loadout-row">
+        <div class="loadout-label">🛡 防具</div>
+        <div class="loadout-content">
+          <div class="loadout-name">${escapeHTML(def.name)} ${sym} ×${cnt}</div>
+          <div class="loadout-desc">${escapeHTML(eff?.stat ?? eff?.desc ?? def.desc)}</div>
+        </div>
+      </div>
+    `;
+  })() : `<div class="loadout-row"><div class="loadout-label">🛡 防具</div><div class="loadout-content loadout-empty">无</div></div>`;
+
+  // 武器附魔
+  const enc = player.weaponEnchant;
+  const encBlock = enc ? `
+    <div class="loadout-row">
+      <div class="loadout-label">⚒ 附魔</div>
+      <div class="loadout-content">
+        <div class="loadout-name">${escapeHTML(ENCHANT_NAMES[enc])}</div>
+        <div class="loadout-desc">${escapeHTML(ENCHANT_DESCS[enc])}</div>
+      </div>
+    </div>
+  ` : `<div class="loadout-row"><div class="loadout-label">⚒ 附魔</div><div class="loadout-content loadout-empty">无</div></div>`;
+
+  // 特性（聚合）
+  const perkGroups = new Map<string, number>();
+  for (const p of player.perks) perkGroups.set(p.defId, (perkGroups.get(p.defId) ?? 0) + 1);
+  const perkBlock = perkGroups.size === 0
+    ? `<div class="loadout-row"><div class="loadout-label">✦ 特性</div><div class="loadout-content loadout-empty">无</div></div>`
+    : `<div class="loadout-row">
+        <div class="loadout-label">✦ 特性 (${player.perks.length})</div>
+        <div class="loadout-content">
+          ${Array.from(perkGroups.entries()).map(([id, cnt]) => {
+            const def = CARD_DB[id];
+            const eff = def.perkEffect;
+            const summary = eff?.summary?.(cnt) ?? eff?.unitDesc ?? def.desc;
+            return `<div class="loadout-perk-line"><b>${escapeHTML(def.name)} ×${cnt}</b> · <span class="loadout-perk-sum">${escapeHTML(summary)}</span></div>`;
+          }).join("")}
+        </div>
+      </div>`;
+
+  // 花色亲和度（4 花色简表）
+  const suitBlock = `
+    <div class="loadout-row">
+      <div class="loadout-label">🎴 花色亲和</div>
+      <div class="loadout-content loadout-suits">
+        ${SUITS.map(suit => {
+          // 在 floor_map 阶段没有 battle，临时计算亲和度（与 battle 内一致的来源）
+          let aff = 0;
+          for (const w of player.weapons) if (CARD_DB[w.defId]?.equipSuit === suit) aff += 1;
+          for (const a of player.armors) if (CARD_DB[a.defId]?.equipSuit === suit) aff += 1;
+          for (const p of player.perks) if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 0.5;
+          const isRed = suit === "heart" || suit === "diamond";
+          const tier = aff >= 15 ? 3 : aff >= 10 ? 2 : aff >= 5 ? 1 : 0;
+          const tierLabel = tier > 0 ? `T${tier}` : "—";
+          return `<span class="loadout-suit-pill${isRed ? " red" : ""}${tier > 0 ? " lit" : ""}">${SUIT_SYMBOLS[suit]} ${aff.toFixed(1)} <em>${tierLabel}</em></span>`;
+        }).join("")}
+      </div>
+    </div>
+    <div class="loadout-suit-note">仅展示装备/特性提供的基础亲和度。战斗中染色/持咒/出牌仍会额外累积。</div>
+  `;
+
+  // 牌库统计（按类别 + 稀有度简表）
+  const deckTotal = player.deck.length + player.hand.length + player.discard.length;
+  const allCards = [...player.deck, ...player.hand, ...player.discard];
+  const byCat = { attack: 0, skill: 0, item: 0, equipment: 0 };
+  const byRarity = { common: 0, rare: 0, super_rare: 0, epic: 0 };
+  for (const c of allCards) {
+    const def = CARD_DB[c.defId];
+    if (!def) continue;
+    if (def.category in byCat) (byCat as any)[def.category] += 1;
+    const r = (def.rarity ?? "common") as keyof typeof byRarity;
+    byRarity[r] += 1;
+  }
+  const deckBlock = `
+    <div class="loadout-row">
+      <div class="loadout-label">📚 牌库 (${deckTotal})</div>
+      <div class="loadout-content loadout-deck-stats">
+        <span>攻击 ${byCat.attack}</span>
+        <span>技能 ${byCat.skill}</span>
+        <span>道具 ${byCat.item}</span>
+        <span>装备 ${byCat.equipment}</span>
+        <span class="loadout-rarity-sep">|</span>
+        <span class="rarity-rare">稀有 ${byRarity.rare}</span>
+        <span class="rarity-super_rare">超稀 ${byRarity.super_rare}</span>
+        <span class="rarity-epic">史诗 ${byRarity.epic}</span>
+      </div>
+    </div>
+  `;
+
+  const overlay = document.createElement("div");
+  overlay.id = "loadout-overlay";
+  overlay.className = "ic-overlay";
+  overlay.innerHTML = `
+    <div class="ic-modal loadout-modal">
+      <div class="ic-title">📋 当前配置</div>
+      <div class="loadout-grid">
+        ${wepBlock}
+        ${armBlock}
+        ${encBlock}
+        ${perkBlock}
+        ${suitBlock}
+        ${deckBlock}
+      </div>
+      <div class="ic-actions"><button class="ic-confirm">关闭</button></div>
+    </div>
+  `;
+  overlay.querySelector(".ic-confirm")!.addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 }
 
 function renderGameOver() {
@@ -1487,7 +1816,9 @@ function renderHandCard(inst: CardInstance): HTMLElement {
   const hasRepeatingBow = state.battle?.player.weapons[0]?.defId === "repeating_bow";
   const attackUsed = def.category === "attack" && !!state.battle?.attackedThisTurn && !hasRepeatingBow;
   const rarity = def.rarity ?? "common";
-  el.className = `card hand-card cat-${def.category} rarity-${rarity}${attackUsed ? " disabled" : ""}`;
+  const isEpic = rarity === "epic";
+  const epicSpent = isEpic && (inst.usesRemaining ?? 0) <= 0;
+  el.className = `card hand-card cat-${def.category} rarity-${rarity}${attackUsed ? " disabled" : ""}${epicSpent ? " epic-spent" : ""}`;
   const suitSym = def.attackSuit ? SUIT_SYMBOLS[def.attackSuit]
     : def.equipSuit ? SUIT_SYMBOLS[def.equipSuit] : "";
   if (suitSym) el.setAttribute("data-suit", suitSym);
@@ -1506,9 +1837,13 @@ function renderHandCard(inst: CardInstance): HTMLElement {
 
   const catTag = `<span class="cat-tag">${categoryLabel(def.category)}</span>`;
   const usedTag = attackUsed ? `<span class="used-tag">本回合已攻击</span>` : "";
+  const epicUsesTag = isEpic
+    ? `<span class="epic-uses-tag${epicSpent ? " spent" : ""}" title="史诗卡每场限 3 次，用尽后回到牌库">★ ${inst.usesRemaining ?? 0}/3</span>`
+    : "";
 
   el.innerHTML = `
     ${suitTag}
+    ${epicUsesTag}
     <div class="card-icon">${getCardIcon(def.id, def.category)}</div>
     <div class="card-name">${escapeHTML(def.name)}</div>
     <div class="card-desc">${escapeHTML(def.desc)}</div>
@@ -1625,6 +1960,62 @@ function showEventResultModal(): void {
   `;
   overlay.querySelector(".ic-confirm")!.addEventListener("click", () => {
     state.eventResult = undefined;
+    overlay.remove();
+    render();
+  });
+  document.body.appendChild(overlay);
+}
+
+// 史诗装备耗尽 → 替换装备 modal（从牌库随机给 3 张同槽非史诗候选）
+function showEpicReplacementModal(): void {
+  const pe = state.battle?.pendingEpicReplacement;
+  if (!pe) return;
+  const slotLabel = pe.slot === "weapon" ? "武器" : "防具";
+  const candidateInsts = pe.candidates
+    .map(uid => state.player.deck.find(c => c.uid === uid))
+    .filter((c): c is CardInstance => !!c);
+
+  const cardHtml = candidateInsts.length > 0
+    ? candidateInsts.map(inst => {
+        const def = CARD_DB[inst.defId];
+        const rarity = def.rarity ?? "common";
+        const eq = def.equipKind === "weapon"
+          ? `⚔ 基础伤害 ${def.baseDmg ?? "—"}${def.hits && def.hits > 1 ? ` × ${def.hits}` : ""}${def.pierce ? ` · 破甲 ${def.pierce}` : ""}`
+          : `🛡 基础减伤 ${def.baseReduce ?? "—"}`;
+        return `
+          <button class="epic-rep-card cat-${def.category} rarity-${rarity}" data-pick-uid="${inst.uid}">
+            <div class="erp-name">${escapeHTML(def.name)}</div>
+            <div class="erp-meta">${rarityLabel(rarity)} · ${escapeHTML(eq)}</div>
+            <div class="erp-desc">${escapeHTML(def.desc)}</div>
+          </button>
+        `;
+      }).join("")
+    : `<div class="erp-empty">牌库里没有可用的非史诗${slotLabel}，槽位将空缺。</div>`;
+
+  const overlay = document.createElement("div");
+  overlay.id = "epic-replace-overlay";
+  overlay.className = "ic-overlay";
+  overlay.innerHTML = `
+    <div class="ic-modal epic-rep-modal">
+      <div class="ic-title">★ 史诗${slotLabel}已耗尽</div>
+      <div class="epic-rep-tip">本场使用次数耗尽，从牌库选 1 件替换：</div>
+      <div class="epic-rep-grid">${cardHtml}</div>
+      <div class="ic-actions">
+        <button class="ic-skip">${candidateInsts.length === 0 ? "确认" : "跳过（空槽位）"}</button>
+      </div>
+    </div>
+  `;
+  overlay.querySelectorAll<HTMLButtonElement>("[data-pick-uid]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.pickUid!;
+      if (epicReplacementChoose(state, uid)) {
+        overlay.remove();
+        render();
+      }
+    });
+  });
+  overlay.querySelector(".ic-skip")!.addEventListener("click", () => {
+    epicReplacementSkip(state);
     overlay.remove();
     render();
   });
@@ -1984,15 +2375,55 @@ function openCodex() {
     const content = document.getElementById("codex-content");
     if (!content) return;
     if (cat === "enchant") {
-      content.innerHTML = ENCHANTS.map(eid => {
-        const race = ENCHANT_RACE[eid];
+      // 按 4 花色分组（每组内：初级 → 复合）
+      const branchOrder: Suit[] = ["spade", "diamond", "heart", "club"];
+      const branchEnchants = new Map<Suit, EnchantId[]>();
+      for (const s of branchOrder) branchEnchants.set(s, []);
+      for (const eid of ENCHANTS) branchEnchants.get(ENCHANT_RECIPES[eid].branch)!.push(eid);
+      // 每组内按 kind 排序：single → composite，再按 hasRare 升序（普通 → 强档 → 究极）
+      for (const list of branchEnchants.values()) {
+        list.sort((a, b) => {
+          const ra = ENCHANT_RECIPES[a], rb = ENCHANT_RECIPES[b];
+          if (ra.kind !== rb.kind) return ra.kind === "single" ? -1 : 1;
+          return Number(ra.hasRare) - Number(rb.hasRare);
+        });
+      }
+
+      const renderEnchantCard = (eid: EnchantId): string => {
+        const r = ENCHANT_RECIPES[eid];
+        const tier = r.doubleRare ? "究极" : r.hasRare ? "强档" : "普通";
+        const variant = r.variant === "specialize" ? "特化" : "互补";
+        const kindLabel = r.kind === "single" ? "初级" : "复合";
+        const costStr = Object.entries(r.cost)
+          .map(([rc, n]) => `${FRAGMENT_ICONS[rc as EnemyRace]}${FRAGMENT_NAMES[rc as EnemyRace]} ×${n}`)
+          .join(" + ");
+        const tierClass = r.doubleRare ? " codex-enchant-ultimate" : r.hasRare ? " codex-enchant-rare" : "";
         return `
-          <div class="codex-card">
+          <div class="codex-card codex-enchant${tierClass}">
             <div class="codex-card-head">
               <span class="codex-card-name">${ENCHANT_NAMES[eid]}</span>
-              <span class="codex-cat">附魔 · ${FRAGMENT_ICONS[race]}${FRAGMENT_NAMES[race]} ×${ENCHANT_COST}</span>
+              <span class="codex-cat">${kindLabel} · ${variant}${tier === "普通" ? "" : ` · ${tier}`}</span>
             </div>
             <div class="codex-card-desc">${escapeHTML(ENCHANT_DESCS[eid])}</div>
+            <div class="codex-card-cost">配方：${costStr}</div>
+          </div>
+        `;
+      };
+
+      content.innerHTML = branchOrder.map(suit => {
+        const list = branchEnchants.get(suit)!;
+        const theme = SUIT_THEMES[suit];
+        const sym = SUIT_SYMBOLS[suit];
+        return `
+          <div class="codex-enchant-branch">
+            <div class="codex-enchant-branch-head" style="color:${theme.color}">
+              <span class="codex-enchant-branch-sym">${sym}</span>
+              <span class="codex-enchant-branch-name">${theme.name}</span>
+              <span class="codex-enchant-branch-count">（${list.length}）</span>
+            </div>
+            <div class="codex-enchant-branch-list">
+              ${list.map(renderEnchantCard).join("")}
+            </div>
           </div>
         `;
       }).join("");
@@ -2109,9 +2540,7 @@ function renderCodexCard(d: import("./types.ts").CardDef): string {
 }
 
 $("wb-apply").addEventListener("click", () => {
-  const hint = $("wb-hint");
-  hint.textContent = "稀有度系统已暂停（v0.8 重构期）。";
-  hint.style.color = "#a89880";
+  // 隐藏 workbench panel — 只是为了兼容 index.html 里 display:none 的元素，无实际功能
 });
 
 render();

@@ -16,7 +16,7 @@ import type {
   EnchantId,
   Suit,
 } from "./types.ts";
-import { ENCHANT_RACE, ENCHANT_COST, ENCHANT_NAMES, SUIT_SYMBOLS } from "./types.ts";
+import { ENCHANT_RECIPES, ENCHANT_NAMES, SUIT_SYMBOLS } from "./types.ts";
 import {
   STARTING_VITA,
   STARTING_HAND,
@@ -45,6 +45,7 @@ import {
   applyNextBattlePenalty,
   suitTier,
   consumeSuitAffinity,
+  getTiedSpecialties,
 } from "./battle.ts";
 // makeEnemyGroupsForFloor 现在被 map.ts 调用
 import {
@@ -487,17 +488,30 @@ export function discardAndAdvance(state: GameState, uids: string[]) {
 
 // ─────────────────────────────────────────────────────────
 // 铁匠铺：应用附魔 / 跳过
+// 配方系统 v2：单种族 (×3) 或 复合 (×2 + ×2)
 // ─────────────────────────────────────────────────────────
 export function applyEnchant(state: GameState, enchantId: EnchantId): boolean {
   if (state.phase !== "forge") return false;
-  const race = ENCHANT_RACE[enchantId];
-  if ((state.player.fragments[race] ?? 0) < ENCHANT_COST) {
-    pushLog(state, `${ENCHANT_NAMES[enchantId]} 需要 ${race} 碎片 ×${ENCHANT_COST}，库存不足。`, "system");
-    return false;
+  const recipe = ENCHANT_RECIPES[enchantId];
+  if (!recipe) return false;
+  // 校验所有配方所需碎片库存
+  for (const r in recipe.cost) {
+    const need = recipe.cost[r as EnemyRace] ?? 0;
+    if ((state.player.fragments[r as EnemyRace] ?? 0) < need) {
+      const races = Object.entries(recipe.cost)
+        .map(([rc, n]) => `${rc} × ${n}`).join(" + ");
+      pushLog(state, `${ENCHANT_NAMES[enchantId]} 需要 ${races}，库存不足。`, "system");
+      return false;
+    }
   }
-  state.player.fragments[race] -= ENCHANT_COST;
+  // 扣碎片
+  for (const r in recipe.cost) {
+    const need = recipe.cost[r as EnemyRace] ?? 0;
+    state.player.fragments[r as EnemyRace] -= need;
+  }
   state.player.weaponEnchant = enchantId;
-  pushLog(state, `武器附魔：${ENCHANT_NAMES[enchantId]}（消耗 ${ENCHANT_COST} ${race} 碎片）。`, "win");
+  const costStr = Object.entries(recipe.cost).map(([r, n]) => `${n} ${r}`).join(" + ");
+  pushLog(state, `武器附魔：${ENCHANT_NAMES[enchantId]}（消耗 ${costStr} 碎片）。`, "win");
   // 铁匠铺是 map 节点，完成后回地图
   if (state.floorMap) {
     const cur = getNode(state.floorMap, state.floorMap.currentNodeId);
@@ -709,6 +723,56 @@ export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
 
   // 消耗 10 亲和度
   consumeSuitAffinity(state.battle, suit, 10);
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────
+// 史诗装备耗尽 · 替换流程
+// 玩家从 modal 选 1 张候选装备（来自牌库），自动装备
+// ─────────────────────────────────────────────────────────
+
+export function epicReplacementChoose(state: GameState, cardUid: string): boolean {
+  if (!state.battle?.pendingEpicReplacement) return false;
+  const { slot, candidates } = state.battle.pendingEpicReplacement;
+  if (!candidates.includes(cardUid)) return false;
+  const idx = state.player.deck.findIndex(c => c.uid === cardUid);
+  if (idx < 0) return false;
+  const picked = state.player.deck.splice(idx, 1)[0];
+  // 验证类型匹配
+  const def = CARD_DB[picked.defId];
+  if (!def || def.category !== "equipment" || def.equipKind !== slot) {
+    state.player.deck.push(picked);  // 回滚
+    return false;
+  }
+  // 自动装备
+  if (slot === "weapon") {
+    state.battle.player.weapons.push(picked);
+  } else {
+    state.battle.player.armors.push(picked);
+  }
+  pushLog(state, `★ 替换装备：${def.name} 已自动装备。`, "player");
+  state.battle.pendingEpicReplacement = undefined;
+  return true;
+}
+
+// 玩家也可以"取消"——此时空槽，等待自然出装备牌
+export function epicReplacementSkip(state: GameState) {
+  if (!state.battle?.pendingEpicReplacement) return;
+  const { slot } = state.battle.pendingEpicReplacement;
+  pushLog(state, `跳过替换：${slot === "weapon" ? "武器" : "防具"} 槽位空缺。`, "system");
+  state.battle.pendingEpicReplacement = undefined;
+}
+
+// ─────────────────────────────────────────────────────────
+// 花色专精 · 手动切换激活花色（仅在多花色并列最高时生效）
+// ─────────────────────────────────────────────────────────
+
+export function setActiveSpecialty(state: GameState, suit: Suit): boolean {
+  if (state.phase !== "battle" || !state.battle) return false;
+  const tied = getTiedSpecialties(state.battle);
+  if (!tied.includes(suit)) return false;  // 只能切换到当前并列最高的花色
+  state.battle.activeSpecialtyOverride = suit;
+  pushLog(state, `切换激活专精：${SUIT_SYMBOLS[suit]}。`, "player");
   return true;
 }
 
