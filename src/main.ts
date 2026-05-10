@@ -780,7 +780,8 @@ function renderDiscardCardEl(inst: CardInstance): HTMLElement {
   const def = CARD_DB[inst.defId];
   const el = document.createElement("div");
   const isNew = inst.acquiredAtFloor === state.floor;
-  el.className = `discard-card cat-${def.category}${isNew ? " new-card" : ""}`;
+  const rarity = def.rarity ?? "common";
+  el.className = `discard-card cat-${def.category} rarity-${rarity}${isNew ? " new-card" : ""}`;
   el.innerHTML = `
     ${isNew ? '<span class="new-badge">本关新获得</span>' : ''}
     <div class="card-icon card-icon-sm">${getCardIcon(def.id, def.category)}</div>
@@ -873,7 +874,8 @@ function renderHandCard(inst: CardInstance): HTMLElement {
   const el = document.createElement("div");
   const hasRepeatingBow = state.battle?.player.weapons[0]?.defId === "repeating_bow";
   const attackUsed = def.category === "attack" && !!state.battle?.attackedThisTurn && !hasRepeatingBow;
-  el.className = `card hand-card cat-${def.category}${attackUsed ? " disabled" : ""}`;
+  const rarity = def.rarity ?? "common";
+  el.className = `card hand-card cat-${def.category} rarity-${rarity}${attackUsed ? " disabled" : ""}`;
   const suitSym = def.attackSuit ? SUIT_SYMBOLS[def.attackSuit]
     : def.equipSuit ? SUIT_SYMBOLS[def.equipSuit] : "";
   if (suitSym) el.setAttribute("data-suit", suitSym);
