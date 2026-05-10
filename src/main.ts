@@ -1,6 +1,10 @@
 import "./style.css";
 import { getCardIcon } from "./icons.ts";
 import {
+  playSlashHit, playSkillBurst, playDebuffApply, playBuffApply,
+  playHealSparkle, playAoeWave, playPlayerHit, playEquip,
+} from "./animations.ts";
+import {
   newGame,
   pickStarterPerk,
   gamePlayCard,
@@ -126,9 +130,11 @@ function render() {
   renderFragments();
   renderNotifBar();
 
-  // Player took damage → vita float
+  // Player took damage → vita float + 受击动效
   if (_prevVita >= 0 && snapVita < _prevVita) {
     showFloatDamagePlayer(_prevVita - snapVita);
+    const playerArea = document.querySelector("#player-card") as HTMLElement | null;
+    if (playerArea) playPlayerHit(playerArea);
   }
 
   // Enemy HP changes → enemy float
@@ -921,9 +927,54 @@ function renderHandCard(inst: CardInstance): HTMLElement {
         gameDiscardArmors(state);
       }
     }
-    if (gamePlayCard(state, inst.uid)) render();
+    // 记录出牌前的目标 idx 和卡定义，用于 render 后触发动效
+    const targetIdx = state.battle?.targetIndex ?? 0;
+    if (gamePlayCard(state, inst.uid)) {
+      render();
+      triggerCardAnimation(def, targetIdx);
+    }
   });
   return el;
+}
+
+// 出牌动效路由：根据卡的 category/target/id 决定播什么动效
+function triggerCardAnimation(def: import("./types.ts").CardDef, targetIdx: number): void {
+  // 用 setTimeout 而非 rAF — 后者在隐藏标签页里不触发
+  setTimeout(() => {
+    const targetEl = document.querySelector(`.enemy-card[data-idx="${targetIdx}"]`) as HTMLElement | null;
+    const enemiesRow = document.querySelector("#enemies-row") as HTMLElement | null;
+    const playerArea = document.querySelector("#player-card") as HTMLElement | null;
+
+    if (def.category === "attack") {
+      if (targetEl) playSlashHit(targetEl);
+    } else if (def.category === "skill") {
+      if (def.target === "all") {
+        if (enemiesRow) playAoeWave(enemiesRow, "purple");
+      } else if (def.target === "single") {
+        if (targetEl) playSkillBurst(targetEl, "purple");
+        // 附加：如果 desc 暗示是 debuff（中毒/虚弱/易伤/沉默/冰冻/诅咒）也撒黑暗粒子
+        if (targetEl && /中毒|虚弱|易伤|沉默|冰冻|诅咒|腐烂|枯萎/.test(def.desc)) {
+          playDebuffApply(targetEl);
+        }
+      } else {
+        // self-buff
+        if (playerArea) playBuffApply(playerArea);
+      }
+    } else if (def.category === "item") {
+      if (def.id === "it_heal") {
+        if (playerArea) playHealSparkle(playerArea);
+      } else if (def.id === "it_bomb") {
+        if (enemiesRow) playAoeWave(enemiesRow, "red");
+      } else if (def.id === "it_purify") {
+        if (playerArea) playHealSparkle(playerArea);
+      } else {
+        if (playerArea) playBuffApply(playerArea);
+      }
+    } else if (def.category === "equipment") {
+      // 装备进槽：黄色光环（在常驻区上）
+      if (playerArea) playEquip(playerArea);
+    }
+  }, 0);
 }
 
 function categoryLabel(c: string): string {
