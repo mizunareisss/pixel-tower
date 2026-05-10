@@ -22,6 +22,7 @@ import {
   applyEnchant,
   skipForge,
   gameSuitPicked,
+  gameSuitPickCanceled,
   skipFloorEvent,
   merchantBuyCard,
   merchantTradeFragments,
@@ -144,6 +145,11 @@ function render() {
   renderStatsPanel();
   renderFragments();
   renderNotifBar();
+
+  // 事件结果对话框（如果有 pending result，弹出，玩家点确认后清掉）
+  if (state.eventResult && !document.getElementById("event-result-overlay")) {
+    showEventResultModal();
+  }
 
   // Player took damage → vita float + 受击动效
   if (_prevVita >= 0 && snapVita < _prevVita) {
@@ -758,6 +764,7 @@ function renderSuitPick() {
   stageEl.innerHTML = `
     <p class="hint">${title}</p>
     <div id="suit-pick-grid"></div>
+    <button class="skip-btn" id="suit-pick-cancel-btn">取消（卡片照样消耗）</button>
   `;
   const grid = $("suit-pick-grid");
   for (const suit of SUITS) {
@@ -769,6 +776,17 @@ function renderSuitPick() {
     btn.addEventListener("click", () => { gameSuitPicked(state, suit as Suit); render(); });
     grid.appendChild(btn);
   }
+  $("suit-pick-cancel-btn").addEventListener("click", () => {
+    showConfirm({
+      title: "取消花色选择",
+      body: "卡片已经打出，<b>无论选不选花色都会消耗</b>。<br>确认放弃这次效果吗？",
+      confirmLabel: "放弃",
+      onConfirm: () => {
+        gameSuitPickCanceled(state);
+        render();
+      },
+    });
+  });
 }
 
 function renderBattleVictory() {
@@ -1216,12 +1234,12 @@ function renderHand() {
   handEl.innerHTML = "";
   if (endTurnBtn) {
     endTurnBtn.style.display = "";
-    endTurnBtn.disabled = _isProcessingTurn;
+    endTurnBtn.disabled = false;  // 总是可用；handleEndTurn 内部用 _isProcessingTurn 防双击
     endTurnBtn.onclick = handleEndTurn;
   }
   if (discardBtn) {
     discardBtn.style.display = "";
-    discardBtn.disabled = _isProcessingTurn || state.player.hand.length === 0;
+    discardBtn.disabled = false;  // 总是可用；空手时弹窗会显示空状态
     discardBtn.onclick = showHandDiscardModal;
   }
   if (state.player.hand.length === 0) {
@@ -1254,6 +1272,9 @@ function showHandDiscardModal() {
   const grid = overlay.querySelector(".hd-grid")!;
   const confirmBtn = overlay.querySelector(".ic-confirm") as HTMLButtonElement;
   const selected = new Set<string>();
+  if (state.player.hand.length === 0) {
+    grid.innerHTML = '<p class="empty" style="color:var(--gray);font-size:11px;text-align:center;padding:20px">手牌已空，无可弃</p>';
+  }
   for (const inst of state.player.hand) {
     const def = CARD_DB[inst.defId];
     const rarity = def.rarity ?? "common";
@@ -1390,6 +1411,46 @@ function showConfirm(opts: ConfirmOpts): void {
   overlay.querySelector(".ic-cancel")!.addEventListener("click", () => { close(); opts.onCancel?.(); });
   overlay.querySelector(".ic-confirm")!.addEventListener("click", () => { close(); opts.onConfirm(); });
   overlay.addEventListener("click", e => { if (e.target === overlay) { close(); opts.onCancel?.(); } });
+  document.body.appendChild(overlay);
+}
+
+// 事件结果对话框（事件影响牌组后展示，带卡牌预览，玩家点确认才回地图）
+function showEventResultModal(): void {
+  const er = state.eventResult;
+  if (!er) return;
+  const overlay = document.createElement("div");
+  overlay.id = "event-result-overlay";
+  overlay.className = "ic-overlay";
+  let cardHtml = "";
+  if (er.cardId) {
+    const def = CARD_DB[er.cardId];
+    if (def) {
+      const rarity = def.rarity ?? "common";
+      cardHtml = `
+        <div class="er-card-preview cat-${def.category} rarity-${rarity}">
+          <div class="er-card-action">${er.cardChange === "gained" ? "+ 加入牌库" : "- 失去"}</div>
+          <div class="er-card-name">${escapeHTML(def.name)}</div>
+          <div class="er-card-cat">${categoryLabel(def.category)} · ${rarityLabel(rarity)}</div>
+          <div class="er-card-desc">${escapeHTML(def.desc)}</div>
+        </div>
+      `;
+    }
+  }
+  overlay.innerHTML = `
+    <div class="ic-modal er-modal er-${er.kind}">
+      <div class="ic-title">${escapeHTML(er.title)}</div>
+      <div class="er-message">${escapeHTML(er.message)}</div>
+      ${cardHtml}
+      <div class="ic-actions">
+        <button class="ic-confirm">确认</button>
+      </div>
+    </div>
+  `;
+  overlay.querySelector(".ic-confirm")!.addEventListener("click", () => {
+    state.eventResult = undefined;
+    overlay.remove();
+    render();
+  });
   document.body.appendChild(overlay);
 }
 

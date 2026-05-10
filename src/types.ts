@@ -403,4 +403,13 @@ export interface GameState {
 
   // 楼层地图（floor_map 阶段时由 map.ts 设置）
   floorMap?: FloorMap;
+
+  // 事件结果对话框（事件完成后展示，玩家点确认才回地图）
+  eventResult?: {
+    title: string;
+    message: string;
+    cardId?: string;        // 加入/失去的卡 id
+    cardChange?: "gained" | "lost";
+    kind: "win" | "lose" | "neutral";
+  };
 }

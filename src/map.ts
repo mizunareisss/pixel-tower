@@ -89,19 +89,27 @@ function pickNodeType(weights: NodeTypeWeights): MapNodeType {
 // ─────────────────────────────────────────────────────────
 
 // 楼层结构：1 个 start + N 个中间层 + 1 个末节点（boss / elite）
-// 中间层数随楼层增长：floor 1-2 → 2 中间层；3-5 → 3；6-8 → 4；9+ → 5
+// 中间层数：基础值 + 随机 ±1 让每张图都不一样
 function getMidLayerCount(floor: number): number {
-  if (floor <= 2) return 2;
-  if (floor <= 5) return 3;
-  if (floor <= 8) return 4;
-  return 5;
+  let base: number;
+  if (floor <= 2) base = 2;
+  else if (floor <= 5) base = 3;
+  else if (floor <= 8) base = 4;
+  else base = 5;
+  // ±1 随机变化（保证至少 2 中间层）
+  const variance = Math.floor(Math.random() * 3) - 1;  // -1 / 0 / +1
+  return Math.max(2, base + variance);
 }
 
-// 每层节点数：start/last = 1；中间层 2-3 随机
+// 每层节点数：start/last = 1；中间层 1-3 随机加权（权重偏向 2-3，偶尔 1 制造瓶颈）
 function getLayerSize(layer: number, totalLayers: number): number {
   if (layer === 0) return 1;
   if (layer === totalLayers - 1) return 1;
-  return 2 + Math.floor(Math.random() * 2);  // 2 or 3
+  // 权重：1 节点 15% / 2 节点 50% / 3 节点 35%
+  const r = Math.random();
+  if (r < 0.15) return 1;
+  if (r < 0.65) return 2;
+  return 3;
 }
 
 export function generateFloorMap(floor: number): FloorMap {

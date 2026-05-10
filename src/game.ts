@@ -271,6 +271,19 @@ export function gameSuitPicked(state: GameState, suit: Suit) {
   }
 }
 
+// 取消手选花色：卡片照样消耗，无效果回到战斗
+export function gameSuitPickCanceled(state: GameState) {
+  if (state.phase !== "suit_pick" || !state.battle) return;
+  state.battle.pendingSuitPick = undefined;
+  pushLog(state, "取消花色选择，卡片浪费。", "system");
+  state.phase = "battle";
+  if (state.battle.phase === "won") onBattleWon(state);
+  else if (state.battle.phase === "lost") {
+    state.phase = "game_over";
+    pushLog(state, `第 ${state.floor} 关倒下。`, "lose");
+  }
+}
+
 export function gameSelectTarget(state: GameState, idx: number) {
   if (state.phase !== "battle" || !state.battle) return;
   selectTarget(state.battle, idx);
@@ -304,11 +317,15 @@ export function gameDiscardArmors(state: GameState) {
 
 function onBattleWon(state: GameState) {
   state.battle = null;
-  // 检查是否打了 boss → 标记关卡完成
-  const cur = state.floorMap ? getNode(state.floorMap, state.floorMap.currentNodeId) : undefined;
-  if (cur?.type === "boss") {
-    pushLog(state, `第 ${state.floor} 关 BOSS 击败！`, "win");
-    state.pendingFloorClear = true;
+  // 关卡末节点（boss 或非 boss 关末的 elite）= 关卡完成
+  if (state.floorMap) {
+    const cur = getNode(state.floorMap, state.floorMap.currentNodeId);
+    const isLastNode = cur?.id === state.floorMap.bossNodeId;
+    if (isLastNode) {
+      const isBoss = cur?.type === "boss";
+      pushLog(state, isBoss ? `第 ${state.floor} 关 BOSS 击败！` : `第 ${state.floor} 关末关击败！`, "win");
+      state.pendingFloorClear = true;
+    }
   }
   state.phase = "battle_victory";
   pushLog(state, "点击「领取战利品」继续。", "system");
@@ -537,8 +554,17 @@ export function gamblerBet(state: GameState, optionIdx: number) {
   if (state.phase !== "floor_event" || state.activeEventId !== "gambler") return;
   const opt = GAMBLER_OPTIONS[optionIdx];
   if (!opt || !opt.available(state)) return;
+  const deckBefore = state.player.deck.length;
   const result = opt.apply(state);
+  const gainedCard = state.player.deck.length > deckBefore ? state.player.deck[state.player.deck.length - 1] : undefined;
   pushLog(state, `🎲 ${opt.label}：${result}`, "player");
+  state.eventResult = {
+    title: `🎲 ${opt.label}`,
+    message: result,
+    cardId: gainedCard?.defId,
+    cardChange: gainedCard ? "gained" : undefined,
+    kind: gainedCard ? "win" : "lose",
+  };
   goAfterFloorEvent(state);
 }
 
@@ -547,8 +573,17 @@ export function shrineSacrifice(state: GameState, optionIdx: number) {
   if (state.phase !== "floor_event" || state.activeEventId !== "shrine") return;
   const opt = SHRINE_OPTIONS[optionIdx];
   if (!opt) return;
+  const deckBefore = state.player.deck.length;
   const result = opt.apply(state);
+  const gainedCard = state.player.deck.length > deckBefore ? state.player.deck[state.player.deck.length - 1] : undefined;
   pushLog(state, `⛲ ${result}`, "player");
+  state.eventResult = {
+    title: "⛲ 古老神龛",
+    message: result,
+    cardId: gainedCard?.defId,
+    cardChange: gainedCard ? "gained" : undefined,
+    kind: "win",
+  };
   goAfterFloorEvent(state);
 }
 
@@ -559,14 +594,30 @@ export function wizardPick(state: GameState, perkUid: string) {
   if (!perk) return;
   applyWizardPick(state, perk);
   pushLog(state, `🐦‍⬛ 获得特性：${CARD_DB[perk.defId].name}（免费赠送）。`, "player");
+  state.eventResult = {
+    title: "🐦‍⬛ 诡异术士",
+    message: `获得特性：${CARD_DB[perk.defId].name}`,
+    cardId: perk.defId,
+    cardChange: "gained",
+    kind: "win",
+  };
   goAfterFloorEvent(state);
 }
 
 // 神秘宝箱
 export function chestOpen(state: GameState) {
   if (state.phase !== "floor_event" || state.activeEventId !== "chest") return;
+  const deckBefore = state.player.deck.length;
   const result = openChest(state);
+  const gainedCard = state.player.deck.length > deckBefore ? state.player.deck[state.player.deck.length - 1] : undefined;
   pushLog(state, `📦 ${result.message}`, result.type === "trap" ? "lose" : "win");
+  state.eventResult = {
+    title: "📦 神秘宝箱",
+    message: result.message,
+    cardId: gainedCard?.defId,
+    cardChange: gainedCard ? "gained" : undefined,
+    kind: result.type === "trap" ? "lose" : "win",
+  };
   goAfterFloorEvent(state);
 }
 

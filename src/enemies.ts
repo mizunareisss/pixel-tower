@@ -259,6 +259,16 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
       if (i.type === "attack") i.value = Math.max(1, Math.round(i.value * wm));
     }
   }
+  // 多怪战每个怪攻击 -X%（避免 2-3 个全威力怪一起打玩家爆死）
+  if (opts.groupSize && opts.groupSize > 1) {
+    const attackMult = 1 / (1 + (opts.groupSize - 1) * 0.45);
+    // 2 怪：每个 ~69% 攻击；3 怪：每个 ~53%
+    for (const i of intents) {
+      if (i.type === "attack" || i.type === "debuff") {
+        i.value = Math.max(1, Math.round(i.value * attackMult));
+      }
+    }
+  }
   let armor = armorForFloor(opts.floor, tier, race);
 
   // 特能（每种族固定 1 种，机制实装：嗜血/战吼/不朽/重甲护体/致命一击）

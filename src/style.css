@@ -2641,3 +2641,71 @@ body.is-touch button:hover:not(:disabled) {
 .map-legend-chip {
   white-space: nowrap;
 }
+
+/* ═══════════════════════════════════════
+   事件结果对话框（带卡牌预览）
+═══════════════════════════════════════ */
+
+.er-modal {
+  max-width: 360px;
+  border-color: var(--purple);
+}
+.er-modal.er-win  { border-color: var(--green); box-shadow: 0 0 24px rgba(77,184,77,0.35); }
+.er-modal.er-lose { border-color: var(--red);   box-shadow: 0 0 24px rgba(230,51,41,0.35); }
+.er-modal.er-neutral { border-color: var(--gray); }
+
+.er-message {
+  color: var(--white);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 6px 0 12px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.04);
+  border-left: 2px solid currentColor;
+}
+
+.er-card-preview {
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-top: 3px solid;  /* 类型色 */
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  position: relative;
+}
+.er-card-preview.cat-attack    { border-top-color: var(--red); }
+.er-card-preview.cat-skill     { border-top-color: var(--purple); }
+.er-card-preview.cat-item      { border-top-color: var(--green); }
+.er-card-preview.cat-equipment { border-top-color: var(--yellow); }
+.er-card-preview.cat-perk      { border-top-color: var(--blue); }
+.er-card-preview.rarity-rare       { background: linear-gradient(140deg, var(--bg-card), rgba(74,144,217,0.18)); }
+.er-card-preview.rarity-super_rare { background: linear-gradient(140deg, var(--bg-card), rgba(155,89,182,0.22)); }
+.er-card-preview.rarity-epic       { background: linear-gradient(140deg, rgba(245,197,24,0.25), rgba(255,140,40,0.20)); animation: epicGlow 2s ease-in-out infinite; }
+
+.er-card-action {
+  position: absolute;
+  top: -10px;
+  right: 8px;
+  background: var(--green);
+  color: var(--white);
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 8px;
+  letter-spacing: 0.06em;
+}
+.er-card-name {
+  color: var(--white);
+  font-weight: 900;
+  font-size: 14px;
+  margin-bottom: 3px;
+}
+.er-card-cat {
+  color: var(--gray);
+  font-size: 10px;
+  margin-bottom: 6px;
+  letter-spacing: 0.06em;
+}
+.er-card-desc {
+  color: var(--white);
+  font-size: 11px;
+  line-height: 1.5;
+}

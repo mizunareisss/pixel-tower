@@ -550,8 +550,8 @@ function removeOneDebuff(c: BattleContext) {
 
 const SK_POISON_BLADE: CardDef = {
   id: "sk_poison_blade", name: "毒刃", category: "skill", target: "single",
-  desc: "目标 +3 层中毒：每回合扣等同层数的 HP，每回合自动 -1 层。",
-  onPlay: (c) => { addStatus(c.target, "poison", "中毒", 3); c.log(`${c.target.name} 中毒 +3。`, "player"); },
+  desc: "目标 +6 层中毒：每回合扣等同层数 HP（合计 21 伤害），每回合自动 -1 层。可叠加施放。",
+  onPlay: (c) => { addStatus(c.target, "poison", "中毒", 6); c.log(`${c.target.name} 中毒 +6。`, "player"); },
 };
 
 const SK_BATTLE_CRY: CardDef = {
