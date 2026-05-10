@@ -61,7 +61,7 @@ export function drawCards(player: PlayerState, n: number, log: (m: string, k?: L
 // 新建战斗
 // ─────────────────────────────────────────────────────────
 
-export function newBattle(player: PlayerState, enemies: EnemyState[]): BattleState {
+export function newBattle(player: PlayerState, enemies: EnemyState[], floor: number = 1): BattleState {
   player.statuses = [];
   player.turnsElapsed = 0;
   // 把上一场残留的手牌/弃牌全部塞回牌库，重新洗
@@ -77,6 +77,7 @@ export function newBattle(player: PlayerState, enemies: EnemyState[]): BattleSta
     targetIndex: enemies.findIndex(e => e.alive),
     attackedThisTurn: false,
     bowAttackStreak: 0,
+    floor,
   };
 }
 
@@ -241,14 +242,32 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     if (enchant?.bypassArmor?.(ctx, dmg)) bypassArmor = true;
   }
 
-  // 敌人 armor 减伤（受 pierce 影响；夺命斩杀绕过）
+  // ★ 穿甲射状态：本次攻击无视全部 armor（一次性）
+  const pierceNext = player.statuses.find(s => s.id === "pierce_next");
+  if (pierceNext) {
+    bypassArmor = true;
+    player.statuses = player.statuses.filter(s => s.id !== "pierce_next");
+    log("穿甲蓄势触发：本次攻击无视护甲。", "player");
+  }
+
+  // 敌人 armor 减伤（受 pierce 影响；夺命斩杀绕过；穿甲射绕过）
   if (!bypassArmor) {
     const enemyArmor = ctx.target.armor ?? 0;
     if (enemyArmor > 0) {
-      const pierce = wDef.pierce ?? 0;
+      // pierce 来源汇总：武器 + 洞察特性（每张 +1）+ 锐利附魔（+floor）+ 破军（动态 50%-70%）
+      let pierce = wDef.pierce ?? 0;
+      const insightStacks = player.perks.filter(p => p.defId === "p_insight").length;
+      pierce += insightStacks;
+      if (player.weaponEnchant === "sharp") pierce += state.floor;
+      if (wDef.id === "raider") {
+        const stacks = Math.min(player.weapons.length, 4);
+        const ratio = [0.50, 0.50, 0.60, 0.70][stacks - 1];
+        pierce += Math.ceil(enemyArmor * ratio);
+      }
       const effective = Math.max(0, enemyArmor - pierce);
-      if (pierce > 0 && enemyArmor > 0) {
-        log(`长剑破甲 ${Math.min(pierce, enemyArmor)}：${ctx.target.name} 实际减伤 ${effective}。`, "player");
+      const actualPierce = Math.min(pierce, enemyArmor);
+      if (actualPierce > 0) {
+        log(`破甲 ${actualPierce}：${ctx.target.name} 实际减伤 ${effective}。`, "player");
       } else if (effective > 0) {
         log(`${ctx.target.name} 护甲减伤 ${effective}。`, "enemy");
       }
@@ -492,7 +511,46 @@ export function discardArmors(state: BattleState, log: (m: string, k?: LogKind) 
 // 玩家受击
 // ─────────────────────────────────────────────────────────
 
+// 当前总闪避概率（百分比）— 来源：意念甲叠加 + p_dodge 特性 + 烟雾弹临时 buff，cap 75%
+export function getCurrentDodgeChance(player: PlayerState): number {
+  let chance = 0;
+  // 意念甲：每层 +10%（×1=10, ×2=20, ×3=30, ×4=40）
+  if (player.armors[0]?.defId === "mind_armor") {
+    const stacks = Math.min(player.armors.length, 4);
+    chance += stacks * 10;
+  }
+  // p_dodge 特性：每张 +3%，cap 50%
+  const dodgePerks = player.perks.filter(p => p.defId === "p_dodge").length;
+  chance += Math.min(50, dodgePerks * 3);
+  // 烟雾弹临时 buff
+  const smoke = player.statuses.find(s => s.id === "smoke_dodge");
+  if (smoke) chance += smoke.stacks;
+  return Math.min(75, chance);
+}
+
 function damagePlayer(state: BattleState, base: number, log: (m: string, k?: LogKind) => void, attackerEnemy?: EnemyState) {
+  // ★ 闪避优先级 1：风步（必定闪避，一次性）
+  const guarantee = state.player.statuses.find(s => s.id === "guaranteed_dodge");
+  if (guarantee) {
+    state.player.statuses = state.player.statuses.filter(s => s.id !== "guaranteed_dodge");
+    log("★ 风步：必定闪避！", "player");
+    if (state.player.weaponEnchant === "phantom") {
+      state.player.statuses.push({ id: "phantom_charge", name: "幻影残像", stacks: 1, duration: -1 });
+    }
+    state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
+    return;
+  }
+  // ★ 闪避优先级 2：闪避概率 roll
+  const dodgeChance = getCurrentDodgeChance(state.player);
+  if (dodgeChance > 0 && Math.random() * 100 < dodgeChance) {
+    log(`★ 闪避！（${dodgeChance}%）`, "player");
+    if (state.player.weaponEnchant === "phantom") {
+      state.player.statuses.push({ id: "phantom_charge", name: "幻影残像", stacks: 1, duration: -1 });
+    }
+    state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
+    return;
+  }
+
   let dmg = base;
   const ctx = getCtx(state, log);
 

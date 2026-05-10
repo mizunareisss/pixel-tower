@@ -136,7 +136,7 @@ function startNextFloor(state: GameState) {
 function startCurrentBattle(state: GameState) {
   const enemies = state.battleGroups[state.battleIndex];
   if (!enemies) return;
-  state.battle = newBattle(state.player, enemies);
+  state.battle = newBattle(state.player, enemies, state.floor);
   state.phase = "battle";
   state.choices = [];
   pushLog(state, `── 战斗 ${state.battleIndex + 1}/${FIGHTS_PER_FLOOR} ──`, "system");

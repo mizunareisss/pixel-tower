@@ -2,7 +2,7 @@ import "./style.css";
 import { getCardIcon } from "./icons.ts";
 import {
   playSlashHit, playSkillBurst, playDebuffApply, playBuffApply,
-  playHealSparkle, playAoeWave, playPlayerHit, playEquip,
+  playHealSparkle, playAoeWave, playPlayerHit, playEquip, playDodgeMiss,
 } from "./animations.ts";
 import {
   newGame,
@@ -25,6 +25,7 @@ import {
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
 import { ABILITY_DESCS } from "./enemies.ts";
+import { getCurrentDodgeChance } from "./battle.ts";
 import { SUIT_SYMBOLS, SUITS, isRedSuit, FIGHTS_PER_FLOOR, STATUS_META, RACES, FRAGMENT_NAMES, FRAGMENT_ICONS,
   ENCHANTS, ENCHANT_NAMES, ENCHANT_DESCS, ENCHANT_RACE, ENCHANT_COST, RACE_NAMES } from "./types.ts";
 import type { EnemyRace, EnchantId, Suit } from "./types.ts";
@@ -132,6 +133,13 @@ function render() {
     showFloatDamagePlayer(_prevVita - snapVita);
     const playerArea = document.querySelector("#player-card") as HTMLElement | null;
     if (playerArea) playPlayerHit(playerArea);
+  }
+
+  // 闪避动效信号（battle.ts 设置 pendingDodgeFx，这里消费）
+  if (state.battle?.pendingDodgeFx && state.battle.pendingDodgeFx > 0) {
+    const playerArea = document.querySelector("#player-card") as HTMLElement | null;
+    if (playerArea) playDodgeMiss(playerArea);
+    state.battle.pendingDodgeFx = 0;
   }
 
   // Enemy HP changes → enemy float
@@ -373,12 +381,17 @@ function renderBattle() {
   const battle = state.battle;
 
   const hpPct = Math.round(state.player.vita / state.player.vitaMax * 100);
+  const dodgePct = getCurrentDodgeChance(state.player);
+  const dodgeChip = dodgePct > 0
+    ? `<span class="pcard-dodge-chip" title="完全闪避概率：每次受击有 ${dodgePct}% 概率跳过整次伤害">🎯 闪避 ${dodgePct}%</span>`
+    : "";
   stageEl.innerHTML = `
     <div id="enemies-row"></div>
     <div id="player-card">
       <div class="pcard-hp-row">
         <span class="pcard-hp-val">HP ${state.player.vita}/${state.player.vitaMax}</span>
         <div class="pcard-hp-bar"><div class="pcard-hp-fill" style="width:${hpPct}%"></div></div>
+        ${dodgeChip}
       </div>
       <div class="pcard-equip-row" id="pcard-equip"></div>
       <div class="pcard-statuses" id="pcard-statuses"></div>

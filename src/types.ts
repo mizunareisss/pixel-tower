@@ -62,7 +62,7 @@ export const STATUS_META: Record<string, StatusMeta> = {
   // 玩家 buff
   battle_cry:     { name: "战吼", desc: "本回合所有攻击 +3 伤。", kind: "buff" },
   double_strike:  { name: "倍击", desc: "下一张攻击伤害 ×2。", kind: "buff" },
-  evasive:        { name: "闪避姿态", desc: "本回合受到伤害减半。", kind: "buff" },
+  evasive:        { name: "屏息", desc: "本回合受到伤害减半（与闪避概率是不同机制：屏息不会跳过伤害，而是减半）。", kind: "buff" },
   sharpened:      { name: "磨刀", desc: "下一张攻击伤害 ×1.5。", kind: "buff" },
   weapon_buff:    { name: "强化药", desc: "本场战斗武器伤害 +stacks。", kind: "buff" },
   shield_block:   { name: "护盾", desc: "吸收下次受到的 stacks 点伤害。", kind: "buff" },
@@ -95,6 +95,13 @@ export const STATUS_META: Record<string, StatusMeta> = {
   no_attack:     { name: "蓄力中", desc: "本回合无法出攻击牌。", kind: "neutral" },
   combat_rhythm: { name: "战斗节奏", desc: "本回合内每打 1 张牌额外摸 1 张。", kind: "buff" },
   time_stop:     { name: "时停", desc: "敌人下一回合无法行动（DoT 仍结算）。", kind: "buff" },
+
+  // 闪避 / 穿甲系统
+  smoke_dodge:      { name: "烟雾", desc: "闪避概率 +stacks%，剩余 duration 回合。", kind: "buff" },
+  guaranteed_dodge: { name: "风步", desc: "下一次受击必定闪避（一次性）。", kind: "buff" },
+  pierce_next:      { name: "穿甲蓄势", desc: "下一次攻击无视目标全部护甲（一次性）。", kind: "buff" },
+  phantom_charge:   { name: "幻影残像", desc: "下一次攻击伤害 ×2（一次性，由幻影附魔触发）。", kind: "buff" },
+  echo:             { name: "复读", desc: "本场战斗：每出 1 张非攻击牌后复制一份回手牌。", kind: "buff" },
 };
 
 // ── 敌人种族 ──────────────────────────────────────────────
@@ -127,7 +134,7 @@ export const FRAGMENT_ICONS: Record<EnemyRace, string> = {
 export const RACES: EnemyRace[] = ["beast", "humanoid", "undead", "giant", "dark"];
 
 // ── 附魔系统 ──────────────────────────────────────────────
-export type EnchantId = "frenzy_e" | "calculated" | "assassinate" | "crushing" | "soul_drain";
+export type EnchantId = "frenzy_e" | "calculated" | "assassinate" | "crushing" | "soul_drain" | "phantom" | "sharp";
 
 export const ENCHANT_NAMES: Record<EnchantId, string> = {
   frenzy_e: "怒涌",
@@ -135,6 +142,8 @@ export const ENCHANT_NAMES: Record<EnchantId, string> = {
   assassinate: "夺命",
   crushing: "碾压",
   soul_drain: "吸魂",
+  phantom: "幻影",
+  sharp: "锐利",
 };
 
 export const ENCHANT_DESCS: Record<EnchantId, string> = {
@@ -143,6 +152,8 @@ export const ENCHANT_DESCS: Record<EnchantId, string> = {
   assassinate: "攻击有 武器叠加×15% 几率（最高 30%）即死目标，无视护甲。",
   crushing: "单次伤害 ≥ 敌人最大 HP 的 10% 时，本次伤害额外 +30%。",
   soul_drain: "击杀敌人时回复最大 HP 的 10%（最少 5 点），并永久 +3 最大 HP。",
+  phantom: "完全闪避后，下一次攻击伤害 ×2。",
+  sharp: "所有攻击额外 +pierce 等于当前楼层数（动态成长）。",
 };
 
 // 附魔来源种族
@@ -152,10 +163,12 @@ export const ENCHANT_RACE: Record<EnchantId, EnemyRace> = {
   assassinate: "undead",
   crushing: "giant",
   soul_drain: "dark",
+  phantom: "dark",
+  sharp: "humanoid",
 };
 
 export const ENCHANT_COST = 3;  // 每个附魔消耗 3 同种族碎片
-export const ENCHANTS: EnchantId[] = ["frenzy_e", "calculated", "assassinate", "crushing", "soul_drain"];
+export const ENCHANTS: EnchantId[] = ["frenzy_e", "calculated", "assassinate", "crushing", "soul_drain", "phantom", "sharp"];
 
 // 卡牌稀有度 4 档：抽卡先 roll 稀有度，再从该档卡池里抽具体卡
 // common 普通 / rare 稀有 / super_rare 超稀有 / epic 史诗
@@ -314,6 +327,8 @@ export interface BattleState {
   attackedThisTurn: boolean;    // 本回合是否已经打出攻击牌（每回合最多 1 张，连弩除外）
   bowAttackStreak: number;      // 连弩连续出攻击牌的回合数（满 2 后下回合弃置）
   pendingSuitPick?: string;     // 等待玩家手选花色的动作 ("dye" | "resonance")
+  floor: number;                // 当前楼层（calcAttackDamage 里的 sharp 附魔需要）
+  pendingDodgeFx?: number;      // 待播放的闪避动效次数（main.ts 渲染时消费）
 }
 
 // ── 游戏阶段 ──────────────────────────────────────────────

@@ -2226,3 +2226,18 @@ body.is-touch button:hover:not(:disabled) {
   font-style: italic;
 }
 .ed-hint b { color: var(--yellow); }
+
+/* 闪避概率芯片（玩家卡 HP 行右侧） */
+.pcard-dodge-chip {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #6ab3ff;
+  background: rgba(74,144,217,0.14);
+  border: 1px solid rgba(74,144,217,0.45);
+  border-radius: 3px;
+  vertical-align: middle;
+}
