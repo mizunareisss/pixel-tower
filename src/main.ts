@@ -29,7 +29,7 @@ import {
   epicReplacementSkip,
   applyForgeRecolor,
   skipFloorEvent,
-  merchantBuyCard,
+  merchantBuyCardMixed,
   merchantTradeFragments,
   merchantLeave,
   gamblerBet,
@@ -1341,12 +1341,12 @@ function renderMerchant(parent: HTMLElement) {
         <div class="merchant-card-name">${escapeHTML(def.name)}</div>
         <div class="merchant-card-rarity">${rarityLabel(rarity)}</div>
         <div class="merchant-card-desc">${escapeHTML(def.desc)}</div>
-        <div class="merchant-card-price">💰 ${price} 碎片（任选种族）</div>
+        <div class="merchant-card-price">💰 ${price} 碎片（可混搭花色）</div>
         <button class="merchant-buy-btn">购买</button>
       `;
       cardEl.querySelector(".merchant-buy-btn")!.addEventListener("click", () => {
-        showRacePicker(`选择支付种族（消耗 ${price} 个）`, race => {
-          if (merchantBuyCard(state, inst.uid, race)) render();
+        showMixedPaymentModal(price, def.name, spend => {
+          if (merchantBuyCardMixed(state, inst.uid, spend)) render();
         });
       });
       grid.appendChild(cardEl);
@@ -1402,6 +1402,86 @@ function showFragmentTradeModal() {
       if (merchantTradeFragments(state, from, to)) render();
     });
   });
+}
+
+// 混搭支付 modal：5 种族 ± 按钮 + 实时校验总额 = 价格
+function showMixedPaymentModal(
+  price: number,
+  cardName: string,
+  onConfirm: (spend: Partial<Record<EnemyRace, number>>) => void,
+) {
+  document.getElementById("mixed-pay-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "mixed-pay-overlay";
+  overlay.className = "ic-overlay";
+  const spend: Partial<Record<EnemyRace, number>> = {};
+  for (const r of RACES) spend[r] = 0;
+
+  const renderRows = (): string => {
+    return RACES.map(r => {
+      const have = state.player.fragments[r] ?? 0;
+      const cur = spend[r] ?? 0;
+      const rare = isRareRace(r);
+      return `
+        <div class="mxpay-row${rare ? " rare" : ""}">
+          <span class="mxpay-icon">${FRAGMENT_ICONS[r]}</span>
+          <span class="mxpay-name">${FRAGMENT_NAMES[r]}</span>
+          <span class="mxpay-have">库存 ${have}</span>
+          <button class="mxpay-minus" data-race="${r}" ${cur <= 0 ? "disabled" : ""}>−</button>
+          <span class="mxpay-cur">${cur}</span>
+          <button class="mxpay-plus" data-race="${r}" ${cur >= have ? "disabled" : ""}>+</button>
+        </div>
+      `;
+    }).join("");
+  };
+
+  const update = () => {
+    overlay.querySelector(".mxpay-rows")!.innerHTML = renderRows();
+    const total = RACES.reduce((s, r) => s + (spend[r] ?? 0), 0);
+    overlay.querySelector(".mxpay-total")!.innerHTML =
+      `已选 <b class="${total === price ? "mxpay-ok" : "mxpay-mismatch"}">${total}</b> / ${price}`;
+    const confirmBtn = overlay.querySelector(".ic-confirm") as HTMLButtonElement;
+    confirmBtn.disabled = total !== price;
+    bindRowButtons();
+  };
+
+  const bindRowButtons = () => {
+    overlay.querySelectorAll<HTMLButtonElement>(".mxpay-plus").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const r = btn.dataset.race as EnemyRace;
+        spend[r] = (spend[r] ?? 0) + 1;
+        update();
+      });
+    });
+    overlay.querySelectorAll<HTMLButtonElement>(".mxpay-minus").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const r = btn.dataset.race as EnemyRace;
+        spend[r] = Math.max(0, (spend[r] ?? 0) - 1);
+        update();
+      });
+    });
+  };
+
+  overlay.innerHTML = `
+    <div class="ic-modal mxpay-modal">
+      <div class="ic-title">💰 购买 ${escapeHTML(cardName)}</div>
+      <div class="mxpay-tip">总价 <b>${price}</b> 碎片，5 种族任意混搭。</div>
+      <div class="mxpay-rows">${renderRows()}</div>
+      <div class="mxpay-total">已选 <b>0</b> / ${price}</div>
+      <div class="ic-actions">
+        <button class="ic-cancel">取消</button>
+        <button class="ic-confirm" disabled>确认支付</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  bindRowButtons();
+  overlay.querySelector(".ic-cancel")!.addEventListener("click", () => overlay.remove());
+  overlay.querySelector(".ic-confirm")!.addEventListener("click", () => {
+    overlay.remove();
+    onConfirm(spend);
+  });
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
 }
 
 function renderGambler(parent: HTMLElement) {
@@ -1496,7 +1576,7 @@ function renderFloorMap() {
     }).join("");
   }).join("");
 
-  // 生成节点 div（可点击）；战斗 / 精英 / Boss 显示种族碎片 emoji，方便玩家选 build
+  // 生成节点 div（可点击）；战斗节点显示种族 emoji，事件节点显示具体事件 icon
   const nodesHtml = map.nodes.map(node => {
     const meta = NODE_TYPE_META[node.type];
     const isCurrent = node.id === map.currentNodeId;
@@ -1518,13 +1598,24 @@ function renderFloorMap() {
       titleExtra = ` · ${raceNames}`;
     }
 
-    const title = meta.label + (isCurrent ? "（当前）" : isReachable ? "（可前往）" : "") + titleExtra;
+    // 事件节点：根据 eventId 显示具体 icon + label，避免"骰子点开是商店"的不一致
+    let displayIcon = meta.icon;
+    let displayLabel = meta.label;
+    if (node.type === "event" && node.eventId) {
+      const eventMeta = EVENT_META[node.eventId as EventId];
+      if (eventMeta) {
+        displayIcon = eventMeta.icon;
+        displayLabel = eventMeta.name;
+      }
+    }
+
+    const title = displayLabel + (isCurrent ? "（当前）" : isReachable ? "（可前往）" : "") + titleExtra;
     return `
       <div class="${cls}"
            data-node-id="${node.id}"
            style="left:${node.x * 100}%;top:${node.y * 100}%;border-color:${meta.color};color:${meta.color}"
            title="${title}">
-        <span class="map-node-icon">${meta.icon}</span>
+        <span class="map-node-icon">${displayIcon}</span>
         ${racesBadge}
       </div>
     `;
@@ -1838,7 +1929,10 @@ function renderHandCard(inst: CardInstance): HTMLElement {
   const rarity = def.rarity ?? "common";
   const isEpic = rarity === "epic";
   const epicSpent = isEpic && (inst.usesRemaining ?? 0) <= 0;
-  el.className = `card hand-card cat-${def.category} rarity-${rarity}${attackUsed ? " disabled" : ""}${epicSpent ? " epic-spent" : ""}`;
+  // 持咒本场已用 → 同名副本灰显
+  const chantSpent = inst.defId === "sk_chant"
+    && !!state.battle?.player.statuses.find(s => s.id === "chanted_used");
+  el.className = `card hand-card cat-${def.category} rarity-${rarity}${attackUsed ? " disabled" : ""}${epicSpent ? " epic-spent" : ""}${chantSpent ? " chant-spent" : ""}`;
   const suitSym = def.attackSuit ? SUIT_SYMBOLS[def.attackSuit]
     : def.equipSuit ? SUIT_SYMBOLS[def.equipSuit] : "";
   if (suitSym) el.setAttribute("data-suit", suitSym);

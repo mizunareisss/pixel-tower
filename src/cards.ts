@@ -661,8 +661,14 @@ const SK_FREEZE: CardDef = {
 
 const SK_REND: CardDef = {
   id: "sk_rend", name: "撕裂", category: "skill", target: "single",
-  desc: "永久降低目标 2 点护甲。",
-  onPlay: (c) => { addStatus(c.target, "rend", "撕裂", 2, -1); c.log(`${c.target.name} 防御 -2。`, "player"); },
+  desc: "永久降低目标 2 点护甲（直接扣层数，扣到 0 为止）。",
+  onPlay: (c) => {
+    const before = c.target.armor ?? 0;
+    const after = Math.max(0, before - 2);
+    c.target.armor = after > 0 ? after : undefined;
+    if (before > 0) c.log(`${c.target.name} 护甲 ${before} → ${after}（撕裂 -${before - after}）。`, "player");
+    else c.log(`${c.target.name} 已无护甲，撕裂无效。`, "system");
+  },
 };
 
 const SK_FOCUS: CardDef = {
@@ -759,10 +765,10 @@ const SK_CHANT: CardDef = {
   },
 };
 
-// 共鸣咒：目标敌人花色变成玩家手选花色（永久，直到被再次改色）
+// 共鸣咒：目标敌人花色变为玩家选定的花色，持续 4 回合后回归原色
 const SK_ATTUNE: CardDef = {
   id: "sk_attune", name: "共鸣咒", category: "skill", target: "single",
-  desc: "目标敌人花色永久变为你选定的花色。",
+  desc: "目标敌人花色变为你选定的花色，持续 4 回合后回归原色。",
   onPlay: (c) => {
     (c as any)._suitPick = "resonance";
     c.log(`共鸣咒：请选择 ${c.target.name} 变为的花色。`, "player");
@@ -1614,11 +1620,19 @@ function pickRarity(floor: number): CardRarity {
   return "common";
 }
 
-// 花色操作牌：奖励池里给 ×3 加权，避免玩家凑专精却卡敌人花色
+// 加权策略（在每档候选池内独立加权）：
+// - 装备（武器/防具）×1.5：稳定的 build 件，玩家拿来 4 叠 / 凑同花色
+// - 花色操作牌 ×1.0：sk_dye/sk_attune/sk_chant/sk_recolor 不再加权（之前 ×3 出现率太高 → 持咒+共鸣几乎每场都能凑齐双锁敌人花色）
+// - 其他 ×1.0
 const SUIT_OPERATION_CARDS = new Set(["sk_dye", "sk_attune", "sk_chant", "sk_recolor"]);
 
 function pickWeightedFromCandidates(candidates: string[]): string {
-  const items = candidates.map(id => ({ id, w: SUIT_OPERATION_CARDS.has(id) ? 3 : 1 }));
+  const items = candidates.map(id => {
+    const def = CARD_DB[id];
+    let w = 1;
+    if (def?.category === "equipment") w = 1.5;
+    return { id, w };
+  });
   const total = items.reduce((s, x) => s + x.w, 0);
   let r = Math.random() * total;
   for (const it of items) {
@@ -1629,21 +1643,41 @@ function pickWeightedFromCandidates(candidates: string[]): string {
 
 /**
  * 关卡奖励抽卡：先 roll 每张候选的稀有度档，再从该档卡池里抽（无放回）
- * 同次奖励里同张卡不会重复。花色操作牌（染色/共鸣/持咒/变色）×3 加权。
+ * - 同次奖励里同张卡不会重复
+ * - 玩家牌库已有 ≥1 张的花色操作牌从候选池中排除（避免反复抽到同名调色卡）
+ * - 装备保底：连续 N 场战斗未拿到装备 → 下一次必出装备（由 game.ts 跨场计数后传入 forceEquipment）
  */
-export function rollRewardChoices(pool: string[], n: number, floor = 0): CardInstance[] {
+export function rollRewardChoices(
+  pool: string[],
+  n: number,
+  floor = 0,
+  ownedDefIds?: Set<string>,
+  forceEquipment = false,
+): CardInstance[] {
   const byRarity: Record<CardRarity, string[]> = { common: [], rare: [], super_rare: [], epic: [] };
   for (const id of pool) {
+    // 过滤：玩家已经有 ≥1 张的花色操作牌从奖励池排除
+    if (ownedDefIds?.has(id) && SUIT_OPERATION_CARDS.has(id)) continue;
     const r = (CARD_DB[id]?.rarity ?? "common") as CardRarity;
     byRarity[r].push(id);
   }
   const result: CardInstance[] = [];
   const used = new Set<string>();
+
+  // 装备保底：第一张候选强制是装备
+  if (forceEquipment) {
+    const allEquip = pool.filter(id => CARD_DB[id]?.category === "equipment");
+    if (allEquip.length > 0) {
+      const pickedId = pickWeightedFromCandidates(allEquip);
+      used.add(pickedId);
+      result.push(makeInstance(pickedId, undefined, floor));
+    }
+  }
+
   // 优先抽，最多回退 1 档
-  for (let i = 0; i < n; i++) {
+  for (let i = result.length; i < n; i++) {
     let tier: CardRarity = pickRarity(floor);
     let candidates: string[];
-    // 回退查找：当前档无可抽 → 依次降级
     const order: CardRarity[] = ["epic", "super_rare", "rare", "common"];
     const startIdx = order.indexOf(tier);
     let pickedId: string | undefined;
