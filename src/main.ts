@@ -905,14 +905,16 @@ function renderGameOver() {
 // ─────────────────────────────────────────────────────────
 
 function renderHand() {
-  handEl.innerHTML = "";
+  const activePanel = document.getElementById("active-panel");
   const endTurnBtn = document.getElementById("end-turn-btn") as HTMLButtonElement | null;
+  // 非战斗阶段：整个手牌面板隐藏（手牌、结束回合、装备 toggle 都不显示）
   if (state.phase !== "battle") {
-    handEl.innerHTML = '<p class="empty">非战斗中</p>';
-    $("active-count").textContent = `${state.player.hand.length} 张`;
+    if (activePanel) activePanel.style.display = "none";
     if (endTurnBtn) endTurnBtn.style.display = "none";
     return;
   }
+  if (activePanel) activePanel.style.display = "";
+  handEl.innerHTML = "";
   if (endTurnBtn) {
     endTurnBtn.style.display = "";
     endTurnBtn.disabled = _isProcessingTurn;
