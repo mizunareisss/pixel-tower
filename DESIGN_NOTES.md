@@ -1,7 +1,22 @@
-# 像素塔 · 设计笔记 / 待办设计
+# 塔牌 · Suitspire — 设计笔记 / 待办设计
 
 > 此文件用来保存"已规划但尚未实现"的设计方向，避免上下文压缩或对话重启后遗忘。
 > 实现某项后请删除对应章节。
+
+## 🌐 部署 / 链接
+
+| 用途 | URL | 分支 |
+|---|---|---|
+| **生产环境**（真人玩） | https://suitspire.netlify.app/ | main |
+| GitHub 仓库 | https://github.com/mizunareisss/pixel-tower | — |
+| 本地 main 测试（局域网稳定版） | http://192.168.1.186:5175/ | main 工作树 |
+| 本地 dev 测试（开发中） | http://192.168.1.186:5176/ | dev 工作树 |
+
+**命名约定**：
+- 品牌名：**塔牌 / Suitspire**（in-game logo + 商店宣传）
+- 技术名（不动）：`pixel-tower`（GitHub repo + 本地目录 + 包名）
+
+**部署链路**：dev → 验证 → 合并 main → push → Netlify 自动部署到 suitspire.netlify.app（约 1-2 分钟）。
 
 ---
 
