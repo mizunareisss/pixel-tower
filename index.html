@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>像素塔</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+
+      <!-- Compact sticky header -->
+      <header id="game-header">
+        <span id="game-title">像素塔</span>
+        <div id="header-right">
+          <span id="vita-display">HP 40/40</span>
+          <span id="floor-display">关 —</span>
+          <button id="log-btn" style="display:none">日志</button>
+          <button id="hamburger-btn">☰</button>
+        </div>
+      </header>
+
+      <!-- Phase indicator bar -->
+      <div id="phase-bar">
+        <span id="phase-display">—</span>
+      </div>
+
+      <!-- Hidden legacy elements (JS compatibility) -->
+      <div id="status" style="display:none"><span></span></div>
+      <div id="log" style="display:none"></div>
+
+      <main>
+
+        <!-- Main stage: battle/choices/rewards -->
+        <section id="stage-panel">
+          <div id="stage"></div>
+        </section>
+
+        <!-- Permanent drawer: equipment + perks (toggled) -->
+        <section id="perks-panel">
+          <div id="perks-header-row">
+            <span class="panel-label">常驻区</span>
+            <span class="slot-count" id="perks-count">0 件</span>
+          </div>
+          <div id="perks"></div>
+        </section>
+
+        <!-- Stats panel (inside perma when open) -->
+        <section id="stats-panel">
+          <div id="stats"></div>
+        </section>
+
+        <!-- Hand area: sticky bottom -->
+        <section id="active-panel">
+          <div id="active-header">
+            <span class="panel-label">手牌</span>
+            <span class="slot-count" id="active-count">0 张</span>
+            <button id="end-turn-btn" style="display:none">结束回合</button>
+            <button id="perma-toggle-btn">装备▾</button>
+          </div>
+          <div id="active"></div>
+        </section>
+
+        <!-- Action bar — hidden, items in hamburger menu -->
+        <div id="action-bar" style="display:none">
+          <button id="restart-btn">重新开始</button>
+        </div>
+
+        <!-- Hidden workbench (JS compatibility) -->
+        <section id="workbench-panel" style="display:none">
+          <div id="workbench">
+            <div class="wb-row"><label>普通</label><input id="wb-common" type="number" value="75"></div>
+            <div class="wb-row"><label>稀有</label><input id="wb-rare" type="number" value="18"></div>
+            <div class="wb-row"><label>高级</label><input id="wb-epic" type="number" value="6"></div>
+            <div class="wb-row"><label>极品</label><input id="wb-legendary" type="number" value="1"></div>
+            <div class="wb-hint" id="wb-hint">权重</div>
+            <button id="wb-apply">应用</button>
+          </div>
+        </section>
+
+        <!-- Hidden log panel (JS compatibility) -->
+        <section id="log-panel" style="display:none">
+          <h2>日志</h2>
+        </section>
+
+      </main>
+
+      <!-- Floating damage number overlay -->
+      <div id="float-overlay"></div>
+
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
