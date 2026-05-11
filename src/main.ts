@@ -835,15 +835,41 @@ function showEnemyDetail(e: EnemyState): void {
   document.body.appendChild(overlay);
 }
 
-// 状态标签（含分色 + tooltip + 点击详情）
+// 状态 → emoji icon 映射（紧凑版状态栏用）
+const STATUS_ICONS: Record<string, string> = {
+  // 玩家 buff
+  battle_cry: "📢", double_strike: "⚔", evasive: "🌬", sharpened: "🔪",
+  weapon_buff: "💪", shield_block: "🛡", shadow_double: "👥", heavy_strike: "💥",
+  counter_stance: "🪞", frenzy: "💢", charged: "⚡", no_attack: "🚫",
+  combat_rhythm: "🥁", time_stop: "⏸",
+  smoke_dodge: "💨", guaranteed_dodge: "🌟", pierce_next: "🎯",
+  phantom_charge: "👤", echo: "🔁",
+  dodge_full_round: "✨", triple_strike: "⚔",
+  // 染色 / 持咒
+  dyed_spade: "♠", dyed_diamond: "♦", dyed_heart: "♥", dyed_club: "♣",
+  chanted_spade: "♠", chanted_diamond: "♦", chanted_heart: "♥", chanted_club: "♣",
+  // debuff
+  poison: "☠", weak: "🤕", vulnerable: "💔",
+  burn: "🔥", rend: "🪓", frozen: "❄", silenced: "🤐", bleed: "🩸",
+  fear: "😱",
+  // 新增附魔状态
+  phalanx_dr: "🛡", swift_dodge_temp: "💨", enc_runic_immune: "🔰",
+  enc_dot_immune: "🕊", warblood_perm_atk: "🩸",
+  blood_pact: "💉", arcane_burst: "🔮", brew_regen: "🌿",
+  no_skill: "🔒", pierce_bonus: "🎯", pierce_perm: "🛢",
+  // 控制 / 累积
+  calc_charge: "🧮", "blood_pact_charge": "💢",
+};
+
+// 紧凑状态 chip（icon-only + stacks）— 用于玩家面板状态栏
 function renderStatusTag(s: StatusEffect): string {
   const meta = STATUS_META[s.id];
   const kind = meta?.kind ?? "neutral";
   const name = meta?.name ?? s.name;
-  const stacksTxt = s.stacks > 1 ? `×${s.stacks}` : "";
-  const durTxt = s.duration > 0 ? ` ${s.duration}回` : "";
+  const icon = STATUS_ICONS[s.id] ?? "·";
+  const stacksTxt = s.stacks > 1 ? `${s.stacks}` : "";
   const tooltip = meta?.desc ?? s.name;
-  return `<span class="status-tag k-${kind}" data-status-id="${escapeHTML(s.id)}" data-status-stacks="${s.stacks}" data-status-duration="${s.duration}" title="${escapeHTML(tooltip)}（点击查看详情）">${escapeHTML(name)}${stacksTxt}${durTxt}</span>`;
+  return `<span class="status-tag k-${kind}" data-status-id="${escapeHTML(s.id)}" data-status-stacks="${s.stacks}" data-status-duration="${s.duration}" title="${escapeHTML(name)}：${escapeHTML(tooltip)}（点击查看详情）"><span class="status-icon">${icon}</span>${stacksTxt ? `<span class="status-stacks">${stacksTxt}</span>` : ""}</span>`;
 }
 
 // 状态详情弹窗
@@ -1226,8 +1252,12 @@ function renderForge() {
     : totalFragments < 3
       ? `<button class="forge-recolor-btn" disabled>碎片不足（需 3 任意）</button>`
       : `<button class="forge-recolor-btn">染色 1 张攻击牌（消耗 3 任意碎片）</button>`;
+  const discountBanner = state.forgeDiscountThisVisit
+    ? `<div id="forge-discount-banner">★ 5 折特惠：本次访问所有附魔配方碎片消耗减半（向上取整）</div>`
+    : "";
   stageEl.innerHTML = `
     <p class="hint">用灵魂碎片为武器附魔。普通附魔（单种族 ×3）/ 复合附魔（2 种族 ×2+×2）。换附魔会覆盖旧的。</p>
+    ${discountBanner}
     <div id="forge-current">当前武器：<b>${escapeHTML(curWeapon)}</b>　|　当前附魔：<b>${cur ? escapeHTML(ENCHANT_NAMES[cur]) : "（无）"}</b></div>
     <div id="forge-recolor-section">
       <div class="forge-recolor-title">🎨 染坊（每次铁匠铺仅可使用 1 次）</div>
@@ -1251,10 +1281,12 @@ function renderForge() {
   }
   const listSingle = $("forge-list-single");
   const listComposite = $("forge-list-composite");
+  const discount = state.forgeDiscountThisVisit === true;
   for (const eid of ENCHANTS) {
     const recipe = ENCHANT_RECIPES[eid];
-    // 校验是否所有材料够
-    const costEntries = Object.entries(recipe.cost) as [import("./types.ts").EnemyRace, number][];
+    // 实际消耗：5 折时减半（向上取整）
+    const costEntries = (Object.entries(recipe.cost) as [import("./types.ts").EnemyRace, number][])
+      .map(([r, n]) => [r, discount ? Math.ceil(n / 2) : n] as [import("./types.ts").EnemyRace, number]);
     const enough = costEntries.every(([r, n]) => (state.player.fragments[r] ?? 0) >= (n ?? 0));
     const isCurrent = cur === eid;
     const branchSym = SUIT_SYMBOLS[recipe.branch];
@@ -1400,6 +1432,8 @@ function renderFloorEvent() {
   const eid = state.activeEventId as EventId | undefined;
   if (!eid) return;
   const meta = EVENT_META[eid];
+  // 商店已经有"离开"按钮，不需要再显示"跳过"
+  const showSkip = eid !== "merchant";
   stageEl.innerHTML = `
     <div class="event-card">
       <div class="event-header">
@@ -1408,7 +1442,7 @@ function renderFloorEvent() {
       </div>
       <p class="event-desc">${escapeHTML(meta.desc)}</p>
       <div class="event-options" id="event-options"></div>
-      <button class="skip-btn" id="event-skip-btn">跳过本次事件</button>
+      ${showSkip ? '<button class="skip-btn" id="event-skip-btn">跳过本次事件</button>' : ""}
     </div>
   `;
   const optionsEl = $("event-options");
@@ -1418,10 +1452,12 @@ function renderFloorEvent() {
   else if (eid === "wizard") renderWizard(optionsEl);
   else if (eid === "chest") renderChest(optionsEl);
 
-  $("event-skip-btn").addEventListener("click", () => {
-    skipFloorEvent(state);
-    render();
-  });
+  if (showSkip) {
+    $("event-skip-btn").addEventListener("click", () => {
+      skipFloorEvent(state);
+      render();
+    });
+  }
 }
 
 // 商人 — 5 张候选购买 + 兑换碎片入口
@@ -1632,23 +1668,27 @@ function showFragmentTradeModal() {
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
 }
 
-// 卖卡 modal：从牌库/手牌/弃牌堆里选 1 张 → 选获得的种族碎片
+// 卖卡 modal：卡牌 grid 风格（仿手牌），每次拜访最多卖 2 张
 function showSellCardModal() {
   document.getElementById("sell-overlay")?.remove();
   const allCards = [...state.player.deck, ...state.player.hand, ...state.player.discard];
-  // 排除起始基础卡（atk_spade 等），避免玩家把基础牌全卖了
   const sellable = allCards.filter(c => {
     const def = CARD_DB[c.defId];
     if (!def) return false;
-    if (c.defId === "short_sword") return false;  // 起始过渡品
-    // atk_* / 起始牌库的 common 基础牌允许卖（玩家自由决定）
+    if (c.defId === "short_sword") return false;
     return true;
   });
   if (sellable.length === 0) {
     showConfirm({ title: "无卡可卖", body: "牌库里没有可卖的卡。", confirmLabel: "知道了", onConfirm: () => {} });
     return;
   }
-  // 按稀有度分组排序：epic → super_rare → rare → common
+  const sold = state.merchantSellsThisVisit ?? 0;
+  const maxSells = 2;
+  if (sold >= maxSells) {
+    showConfirm({ title: "已达上限", body: `本次拜访已卖 ${maxSells} 张，无法继续。下次拜访再来。`, confirmLabel: "知道了", onConfirm: () => {} });
+    return;
+  }
+  // 按稀有度排序
   const rarityOrder: Record<string, number> = { epic: 0, super_rare: 1, rare: 2, common: 3 };
   sellable.sort((a, b) => {
     const ra = rarityOrder[CARD_DB[a.defId].rarity ?? "common"];
@@ -1657,35 +1697,46 @@ function showSellCardModal() {
     return CARD_DB[a.defId].name.localeCompare(CARD_DB[b.defId].name, "zh");
   });
 
-  const overlay = document.createElement("div");
-  overlay.id = "sell-overlay";
-  overlay.className = "ic-overlay";
-
+  // 生成卡牌 grid（用 hand-card 一致的 style，加价格 badge 替代花色 corner）
   const cardItems = sellable.map(inst => {
     const def = CARD_DB[inst.defId];
     const rarity = def.rarity ?? "common";
     const price = MERCHANT_SELL_PRICES[rarity];
+    const suitSym = def.attackSuit ? SUIT_SYMBOLS[def.attackSuit]
+      : def.equipSuit ? SUIT_SYMBOLS[def.equipSuit]
+      : def.defaultSuit ? SUIT_SYMBOLS[def.defaultSuit] : "";
+    const isRed = (def.attackSuit && isRedSuit(def.attackSuit))
+                  || (def.equipSuit && isRedSuit(def.equipSuit))
+                  || (def.defaultSuit && isRedSuit(def.defaultSuit));
+    const corner = suitSym ? `<span class="card-suit-corner${isRed ? " red" : ""}">${suitSym}</span>` : "";
     return `
-      <button class="sell-card-item rarity-${rarity}" data-uid="${inst.uid}">
-        <div class="sell-card-name">${escapeHTML(def.name)}</div>
-        <div class="sell-card-meta">${rarityLabel(rarity)} · ${categoryLabel(def.category)}</div>
-        <div class="sell-card-price">💰 ${price} 碎片</div>
-      </button>
+      <div class="card sell-card cat-${def.category} rarity-${rarity}" data-uid="${inst.uid}">
+        ${corner}
+        <span class="sell-card-price-badge">💰${price}</span>
+        <div class="card-icon">${getCardIcon(def.id, def.category)}</div>
+        <div class="card-name">${escapeHTML(def.name)}</div>
+        <div class="card-desc">${escapeHTML(def.desc)}</div>
+        <span class="cat-tag">${categoryLabel(def.category)}</span>
+      </div>
     `;
   }).join("");
 
+  const overlay = document.createElement("div");
+  overlay.id = "sell-overlay";
+  overlay.className = "ic-overlay";
   overlay.innerHTML = `
     <div class="ic-modal sell-modal">
-      <div class="ic-title">💰 卖卡换碎片</div>
-      <div class="mxpay-tip">选 1 张卡卖给商人换碎片：common = 1，rare = 2，super_rare = 4，epic = 7。</div>
+      <div class="ic-title">💰 卖卡换碎片 <span class="sell-count">${sold}/${maxSells}</span></div>
+      <div class="mxpay-tip">点击卡片卖给商人。每次拜访最多卖 ${maxSells} 张。<br>
+        档位：common 1 / rare 2 / super_rare 4 / epic 7 碎片，玩家自选种族。</div>
       <div class="sell-cards-grid">${cardItems}</div>
-      <div class="ic-actions"><button class="ic-cancel">取消</button></div>
+      <div class="ic-actions"><button class="ic-cancel">关闭</button></div>
     </div>
   `;
   document.body.appendChild(overlay);
-  overlay.querySelectorAll<HTMLButtonElement>(".sell-card-item").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const uid = btn.dataset.uid!;
+  overlay.querySelectorAll<HTMLElement>(".sell-card").forEach(el => {
+    el.addEventListener("click", () => {
+      const uid = el.dataset.uid!;
       const inst = sellable.find(c => c.uid === uid)!;
       const def = CARD_DB[inst.defId];
       const rarity = def.rarity ?? "common";
@@ -1693,13 +1744,18 @@ function showSellCardModal() {
       showRacePicker(`「${def.name}」卖 ${price} 碎片 — 选要哪个种族的`, race => {
         if (merchantSellCard(state, uid, race)) {
           overlay.remove();
-          render();
+          // 卖完后如果还能卖，重开 modal；否则刷新 render
+          if ((state.merchantSellsThisVisit ?? 0) < maxSells) {
+            showSellCardModal();
+          } else {
+            render();
+          }
         }
       });
     });
   });
-  overlay.querySelector(".ic-cancel")!.addEventListener("click", () => overlay.remove());
-  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  overlay.querySelector(".ic-cancel")!.addEventListener("click", () => { overlay.remove(); render(); });
+  overlay.addEventListener("click", e => { if (e.target === overlay) { overlay.remove(); render(); } });
 }
 
 // 混搭支付 modal：5 种族 ± 按钮 + 实时校验总额 = 价格
@@ -1927,7 +1983,6 @@ function renderFloorMap() {
           <span class="floor-map-name">${escapeHTML(map.theme.name)}</span>
         </div>
         <div class="floor-map-flavor">"${escapeHTML(map.theme.flavor)}"</div>
-        <button id="map-loadout-btn" class="map-loadout-btn" title="查看当前装备 / 特性 / 附魔">📋 当前配置</button>
       </div>
       <div class="floor-map-canvas">
         <svg class="floor-map-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
@@ -1942,6 +1997,9 @@ function renderFloorMap() {
           const m = NODE_TYPE_META[t];
           return `<span class="map-legend-chip"><span style="color:${m.color}">${m.icon}</span> ${m.label}</span>`;
         }).join("")}
+      </div>
+      <div class="floor-map-bottom">
+        <button id="map-loadout-btn" class="map-loadout-btn" title="查看当前装备 / 特性 / 附魔">📋 当前配置</button>
       </div>
     </div>
   `;
