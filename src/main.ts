@@ -423,9 +423,21 @@ function renderStarterPerks() {
   const grid = document.createElement("div");
   grid.className = "choice-grid cols-3";
   for (const inst of state.choices) {
-    grid.appendChild(renderChoiceCardEl(inst, () => { pickStarterPerk(state, inst.uid); render(); }));
+    grid.appendChild(renderChoiceCardEl(inst, () => {
+      animateChoicePick(grid, inst.uid, () => { pickStarterPerk(state, inst.uid); render(); });
+    }));
   }
   stageEl.appendChild(grid);
+}
+
+// 选牌动画 helper：标记选中卡 + 触发飞出动画，350ms 后执行实际 pick
+function animateChoicePick(grid: HTMLElement, pickedUid: string, then: () => void) {
+  grid.classList.add("is-picked");
+  const cards = grid.querySelectorAll<HTMLElement>(".card");
+  cards.forEach(c => {
+    if (c.dataset.uid === pickedUid) c.classList.add("picked-card");
+  });
+  setTimeout(then, 380);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -443,11 +455,12 @@ function renderBattle() {
     : "";
   // 单芯片：仅显示当前最高亲和度的花色（点击展开 4 花色面板）
   const affinityChip = renderSuitAffinityChip();
+  const hpLow = hpPct <= 30;
   stageEl.innerHTML = `
     <div id="enemies-row"></div>
-    <div id="player-card">
+    <div id="player-card" class="${hpLow ? "hp-low" : ""}">
       <div class="pcard-hp-row">
-        <span class="pcard-hp-val">HP ${state.player.vita}/${state.player.vitaMax}</span>
+        <span class="pcard-hp-val">${state.player.vita} / ${state.player.vitaMax}</span>
         <div class="pcard-hp-bar"><div class="pcard-hp-fill" style="width:${hpPct}%"></div></div>
         ${dodgeChip}
       </div>
@@ -748,6 +761,7 @@ function renderEnemy(e: EnemyState, idx: number): HTMLElement {
       : "";
   // ⓘ 详情按钮（仅精英 / boss 才有）
   const infoBtn = tier !== "normal" ? `<button class="enemy-info-btn" data-info-idx="${idx}" aria-label="查看机制">i</button>` : "";
+
   wrap.innerHTML = `
     ${tierBadge}
     ${infoBtn}
@@ -920,32 +934,114 @@ function showFloatDamage(enemyIdx: number, delta: number) {
   if (!overlay || !card) return;
   const rect = card.getBoundingClientRect();
   const el = document.createElement("div");
-  el.className = "float-damage";
+  el.className = "float-damage float-damage-big";
   el.textContent = `-${delta}`;
-  el.style.left = `${rect.left + rect.width / 2 - 14}px`;
+  el.style.left = `${rect.left + rect.width / 2 - 18}px`;
   el.style.top = `${rect.top + rect.height * 0.2}px`;
   overlay.appendChild(el);
   el.addEventListener("animationend", () => el.remove());
+
+  // 屏震 + 敌人卡 shake
+  card.classList.remove("shake");
+  void card.offsetWidth;
+  card.classList.add("shake");
+  setTimeout(() => card.classList.remove("shake"), 350);
+  triggerScreenShake(delta >= 8 ? "heavy" : "light");
+
+  // 敌人击杀（HP 归 0）：撒粒子
+  const enemy = state.battle?.enemies[enemyIdx];
+  if (enemy && !enemy.alive) {
+    showDefeatParticles(card);
+    showBigText("DEFEATED", "defeat-text", 700);
+  }
 }
 
 function showFloatDamagePlayer(delta: number) {
   const overlay = document.getElementById("float-overlay");
+  if (!overlay) return;
+  // 玩家受击：HP 数字脉冲
   const vEl = document.getElementById("vita-display");
-  if (!overlay || !vEl) return;
-  // Pulse the vita display
-  vEl.classList.remove("damaged");
-  void vEl.offsetWidth;
-  vEl.classList.add("damaged");
-  setTimeout(() => vEl.classList.remove("damaged"), 500);
-  // Float number
-  const rect = vEl.getBoundingClientRect();
+  if (vEl) {
+    vEl.classList.remove("damaged");
+    void vEl.offsetWidth;
+    vEl.classList.add("damaged");
+    setTimeout(() => vEl.classList.remove("damaged"), 500);
+  }
+  // 玩家面板震动
+  const playerCard = document.getElementById("player-card");
+  if (playerCard) {
+    playerCard.classList.remove("player-hit");
+    void playerCard.offsetWidth;
+    playerCard.classList.add("player-hit");
+    setTimeout(() => playerCard.classList.remove("player-hit"), 320);
+  }
+  // 飘伤害数字（玩家卡上方）
+  const rect = (playerCard ?? vEl!).getBoundingClientRect();
   const el = document.createElement("div");
-  el.className = "float-damage";
+  el.className = "float-damage float-damage-player";
   el.textContent = `-${delta}`;
-  el.style.left = `${rect.left + rect.width / 2 - 14}px`;
-  el.style.top = `${rect.bottom + 4}px`;
+  el.style.left = `${rect.left + rect.width / 2 - 18}px`;
+  el.style.top = `${rect.top + 12}px`;
   overlay.appendChild(el);
   el.addEventListener("animationend", () => el.remove());
+
+  // 屏震 + 全屏红色 vignette
+  triggerScreenShake(delta >= 6 ? "heavy" : "light");
+  triggerRedVignette();
+}
+
+// 全屏震动（轻 / 重）
+function triggerScreenShake(strength: "light" | "heavy" = "light"): void {
+  const app = document.getElementById("app");
+  if (!app) return;
+  const cls = strength === "heavy" ? "screen-shake-heavy" : "screen-shake-light";
+  app.classList.remove(cls);
+  void app.offsetWidth;
+  app.classList.add(cls);
+  setTimeout(() => app.classList.remove(cls), 300);
+}
+
+// 玩家受击全屏红色 vignette
+function triggerRedVignette(): void {
+  const overlay = document.getElementById("float-overlay");
+  if (!overlay) return;
+  const v = document.createElement("div");
+  v.className = "red-vignette";
+  overlay.appendChild(v);
+  v.addEventListener("animationend", () => v.remove());
+}
+
+// 击杀粒子飞溅
+function showDefeatParticles(targetEl: HTMLElement): void {
+  const overlay = document.getElementById("float-overlay");
+  if (!overlay) return;
+  const rect = targetEl.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  for (let i = 0; i < 12; i++) {
+    const p = document.createElement("div");
+    p.className = "defeat-particle";
+    p.style.left = `${cx}px`;
+    p.style.top = `${cy}px`;
+    const angle = (Math.PI * 2 * i) / 12;
+    const dist = 60 + Math.random() * 30;
+    p.style.setProperty("--dx", `${Math.cos(angle) * dist}px`);
+    p.style.setProperty("--dy", `${Math.sin(angle) * dist}px`);
+    p.style.animationDelay = `${i * 12}ms`;
+    overlay.appendChild(p);
+    p.addEventListener("animationend", () => p.remove());
+  }
+}
+
+// 大字飘屏（DEFEATED / CRIT / MISS）
+function showBigText(text: string, kind: "defeat-text" | "crit-text" | "miss-text", duration: number = 800): void {
+  const overlay = document.getElementById("float-overlay");
+  if (!overlay) return;
+  const el = document.createElement("div");
+  el.className = `big-text ${kind}`;
+  el.textContent = text;
+  overlay.appendChild(el);
+  setTimeout(() => el.remove(), duration);
 }
 
 function showPhaseFlash(text: string, extraClass?: string) {
@@ -1015,7 +1111,9 @@ function renderRewardCard() {
   const grid = document.createElement("div");
   grid.className = "choice-grid cols-3";
   for (const inst of state.choices) {
-    grid.appendChild(renderChoiceCardEl(inst, () => { pickRewardCard(state, inst.uid); render(); }));
+    grid.appendChild(renderChoiceCardEl(inst, () => {
+      animateChoicePick(grid, inst.uid, () => { pickRewardCard(state, inst.uid); render(); });
+    }));
   }
   stageEl.appendChild(grid);
   const skip = document.createElement("button");
@@ -1032,7 +1130,9 @@ function renderRewardPerk() {
   const grid = document.createElement("div");
   grid.className = "choice-grid cols-3";
   for (const inst of state.choices) {
-    grid.appendChild(renderChoiceCardEl(inst, () => { pickRewardPerk(state, inst.uid); render(); }));
+    grid.appendChild(renderChoiceCardEl(inst, () => {
+      animateChoicePick(grid, inst.uid, () => { pickRewardPerk(state, inst.uid); render(); });
+    }));
   }
   // HP 上限选项
   const amt = state.vitaUpAmount ?? 10;
@@ -2064,7 +2164,10 @@ function renderHand() {
       handEl.appendChild(renderHandCard(inst));
     }
   }
-  $("active-count").textContent = `${state.player.hand.length}/10 张`;
+  $("active-count").textContent = `${state.player.hand.length}/10`;
+  // 手牌 >4 时显示滑动提示（一屏大概 4-5 张，超过就需要滑）
+  const hint = document.getElementById("hand-scroll-hint");
+  if (hint) hint.classList.toggle("show", state.player.hand.length > 4);
 }
 
 // 弃手牌弹窗：可勾选多张，确认后一并弃到弃牌堆
@@ -2131,6 +2234,7 @@ function renderHandCard(inst: CardInstance): HTMLElement {
   const chantSpent = inst.defId === "sk_chant"
     && !!state.battle?.player.statuses.find(s => s.id === "chanted_used");
   el.className = `card hand-card cat-${def.category} rarity-${rarity}${attackUsed ? " disabled" : ""}${epicSpent ? " epic-spent" : ""}${chantSpent ? " chant-spent" : ""}`;
+  el.setAttribute("data-uid", inst.uid);  // 出牌动画用：飞行选择器需要找到具体的卡 DOM
   const suitSym = def.attackSuit ? SUIT_SYMBOLS[def.attackSuit]
     : def.equipSuit ? SUIT_SYMBOLS[def.equipSuit] : "";
   if (suitSym) el.setAttribute("data-suit", suitSym);
@@ -2202,10 +2306,32 @@ function renderHandCard(inst: CardInstance): HTMLElement {
 // 出装备/打牌的统一入口，封装出牌动效触发
 function playEquipCard(def: import("./types.ts").CardDef, inst: CardInstance): void {
   const targetIdx = state.battle?.targetIndex ?? 0;
-  if (gamePlayCard(state, inst.uid)) {
-    render();
-    triggerCardAnimation(def, targetIdx);
+
+  // 出牌前：给手牌卡加飞行动画（240ms 完成 → render）
+  const handCardEl = document.querySelector<HTMLElement>(`.hand-card[data-uid="${inst.uid}"]`);
+  if (handCardEl) {
+    handCardEl.classList.add("is-playing");
   }
+
+  // 兜底清除 hover sticky：移动端点击后浏览器会把 :hover 留到下一张同位置卡
+  // 短时间禁用手牌容器交互，强制浏览器丢掉 hover 状态
+  const activeEl = document.getElementById("active");
+  if (activeEl) {
+    activeEl.classList.add("no-hover-burst");
+    setTimeout(() => activeEl.classList.remove("no-hover-burst"), 300);
+  }
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+
+  // 延迟一点让飞行动画前半段播完再 render（防止瞬间消失突兀）
+  setTimeout(() => {
+    if (gamePlayCard(state, inst.uid)) {
+      render();
+      triggerCardAnimation(def, targetIdx);
+    } else {
+      // 出牌失败：移除动画类
+      handCardEl?.classList.remove("is-playing");
+    }
+  }, 180);
 }
 
 // 游戏内确认弹窗（替代 native confirm）
@@ -2485,6 +2611,7 @@ function renderChoiceCardEl(inst: CardInstance, onClick: () => void): HTMLElemen
   const el = document.createElement("div");
   const rarity = def.rarity ?? "common";
   el.className = `card choice cat-${def.category} rarity-${rarity}`;
+  el.setAttribute("data-uid", inst.uid);  // 选牌动画需要
   const choiceSuitSym = def.attackSuit ? SUIT_SYMBOLS[def.attackSuit]
     : def.equipSuit ? SUIT_SYMBOLS[def.equipSuit]
     : def.defaultSuit ? SUIT_SYMBOLS[def.defaultSuit] : "";
