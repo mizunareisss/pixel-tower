@@ -468,6 +468,18 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     player.statuses = player.statuses.filter(s => s.id !== "calc_charge");
   }
 
+  // 禁忌权杖（♣ epic 武器）：每张本回合已出 ♣ 牌让攻击 +N 直伤（N 随 stack 决定）
+  if (player.weapons[0]?.defId === "forbidden_scepter") {
+    const stack = Math.min(player.weapons.length, 4);
+    const perClub = [2, 3, 4, 5][stack - 1] ?? 2;
+    const scepterClubs = player.statuses.find(s => s.id === "scepter_clubs");
+    if (scepterClubs && scepterClubs.stacks > 0) {
+      const bonus = scepterClubs.stacks * perClub;
+      dmg += bonus;
+      log(`♣ 禁忌权杖 +${bonus}（${scepterClubs.stacks} 张 ♣ × ${perClub}）。`, "player");
+    }
+  }
+
   // 武器附魔 onAttack（其他附魔效果）
   let bypassArmor = false;
   if (player.weaponEnchant) {
@@ -642,6 +654,13 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
   const dyedActual = getDyedSuit(state.player) ?? baseSuit;
   trackSuitPlayed(state, dyedActual);
 
+  // 禁忌权杖（♣ epic 武器）：♣ 攻击牌也计入计数
+  if (state.player.weapons[0]?.defId === "forbidden_scepter" && dyedActual === "club") {
+    const ex = state.player.statuses.find(s => s.id === "scepter_clubs");
+    if (ex) ex.stacks += 1;
+    else state.player.statuses.push({ id: "scepter_clubs", name: "禁忌权杖蓄势", stacks: 1, duration: 1 });
+  }
+
   // 武器 hits（双刀 hits=2）+ 影袭额外 +1 hit
   const weaponDef = state.player.weapons[0] ? CARD_DB[state.player.weapons[0].defId] : null;
   const weaponHits = weaponDef?.hits ?? 1;
@@ -711,6 +730,15 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
       log(`法杖：${target.name} +易伤（×1.5）。`, "player");
     }
 
+    // 木盾杖（♣ common）：攻击后 +N 临时护盾（×1/2/3/4）
+    if (weaponId === "shield_staff") {
+      const stack = Math.min(state.player.weapons.length, 4);
+      const sh = state.player.statuses.find(s => s.id === "shield_block");
+      if (sh) sh.stacks += stack;
+      else state.player.statuses.push({ id: "shield_block", name: "护盾", stacks: stack, duration: 1 });
+      log(`木盾杖：+${stack} 护盾。`, "player");
+    }
+
     // 链刃：对其他存活敌人溅射，叠加值按 stack 升级 3/4/5/6
     if (weaponId === "chain_whip") {
       const splashByStack = [3, 4, 5, 6];
@@ -771,7 +799,6 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
   }
 
   // A 花色 keyword「♣ 守序」：当 ♣ active T1+ 且本牌花色为 ♣ → 本回合 +1 临时护盾
-  // 检查方式：def.defaultSuit === "club" 或 def 描述里明确 ♣ 关联
   const activeClub = getActiveSpecialty(state);
   if (activeClub === "club" && suitTier(state, "club") >= 1 && def.defaultSuit === "club") {
     const sh = state.player.statuses.find(s => s.id === "shield_block");
@@ -781,6 +808,13 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
       state.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 1, duration: 1 });
     }
     log("♣ 守序 keyword：+1 临时护盾。", "player");
+  }
+
+  // 禁忌权杖（♣ epic 武器）：累计本回合已出 ♣ 牌（含技能/道具/装备/攻击）
+  if (state.player.weapons[0]?.defId === "forbidden_scepter" && def.defaultSuit === "club") {
+    const ex = state.player.statuses.find(s => s.id === "scepter_clubs");
+    if (ex) ex.stacks += 1;
+    else state.player.statuses.push({ id: "scepter_clubs", name: "禁忌权杖蓄势", stacks: 1, duration: 1 });
   }
 
   if (def.onPlay) def.onPlay(ctx);
@@ -885,6 +919,12 @@ function accumulateCalcCharge(state: BattleState, _log: (m: string, k?: LogKind)
 
 function playEquipment(state: BattleState, card: CardInstance, def: CardDef, log: (m: string, k?: LogKind) => void): boolean {
   const player = state.player;
+  // 禁忌权杖：♣ 装备牌也计入计数
+  if (state.player.weapons[0]?.defId === "forbidden_scepter" && def.equipSuit === "club") {
+    const ex = state.player.statuses.find(s => s.id === "scepter_clubs");
+    if (ex) ex.stacks += 1;
+    else state.player.statuses.push({ id: "scepter_clubs", name: "禁忌权杖蓄势", stacks: 1, duration: 1 });
+  }
   if (def.equipKind === "weapon") {
     if (player.weapons.length > 0 && player.weapons[0].defId !== def.id) {
       log(`需要先弃当前武器才能装备 ${def.name}。`, "system");
@@ -987,11 +1027,25 @@ export function getBleedDodgePenalty(player: PlayerState): number {
 }
 
 // 完全闪避后的统一处理：附魔触发 + 风行步连锁
-function onDodgeTriggered(state: BattleState, attackerEnemy?: EnemyState): void {
+function onDodgeTriggered(state: BattleState, attackerEnemy?: EnemyState, log?: (m: string, k?: LogKind) => void): void {
   const e = state.player.weaponEnchant;
   // 旧 phantom 已删除；现在是 e_phantom（暗影 ×3）触发幻影残像
   if (e === "e_phantom") {
     state.player.statuses.push({ id: "phantom_charge", name: "幻影残像", stacks: 1, duration: -1 });
+  }
+
+  // 风刃（♦ epic 武器）：闪避后下张攻击 +1 hit（复用 shadow_double 机制）
+  if (state.player.weapons[0]?.defId === "wind_blade") {
+    state.player.statuses.push({ id: "shadow_double", name: "风刃·+1 hit", stacks: 1, duration: -1 });
+    log?.("♦ 风刃：闪避后下张攻击 +1 hit。", "player");
+  }
+
+  // 幻影披风（♦ epic 防具）：闪避后摸 1-2 张
+  if (state.player.armors[0]?.defId === "phantom_cloak" && log) {
+    const stack = Math.min(state.player.armors.length, 4);
+    const drawN = stack >= 3 ? 2 : 1;
+    drawCards(state.player, drawN, log);
+    log(`♦ 幻影披风：闪避后摸 ${drawN} 张。`, "player");
   }
   // 风行步：闪避后本回合内闪避 +5%（cap 30%）
   if (e === "ec_swift") {
@@ -1026,7 +1080,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   if (guarantee) {
     state.player.statuses = state.player.statuses.filter(s => s.id !== "guaranteed_dodge");
     log("★ 风步：必定闪避！", "player");
-    onDodgeTriggered(state);
+    onDodgeTriggered(state, undefined, log);
     state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
     return;
   }
@@ -1036,7 +1090,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   const activeSuitD = getActiveSpecialty(state);
   if (dodgeChance > 0 && Math.random() * 100 < dodgeChance) {
     log(`★ 闪避！（${dodgeChance}%）`, "player");
-    onDodgeTriggered(state, attackerEnemy);
+    onDodgeTriggered(state, attackerEnemy, log);
     state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
     return;
   }
@@ -1134,7 +1188,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
       state.player.statuses.push({ id: "took_damage_turn", name: "本回合受伤", stacks: 1, duration: -1 });
     }
 
-    // 骑士铠（♠ 防具）：受击后下次攻击充能 +X 直伤（cap 5 stack）
+    // 骑士铠（♠ rare 防具）：受击后下次攻击充能 +X 直伤（cap 5 stack）
     if (state.player.armors[0]?.defId === "knight_plate") {
       const stack = Math.min(state.player.armors.length, 4);
       const bonusByStack = [3, 4, 5, 6];
@@ -1146,6 +1200,36 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
         state.player.statuses.push({ id: "knight_charge", name: `骑士充能 +${bonus}`, stacks: 1, duration: -1 });
       }
       log(`骑士铠充能：下次攻击 +${bonus} 直伤（×${existing?.stacks ?? 1}）。`, "player");
+    }
+
+    // 战甲带（♠ common 防具）：受击后本回合下次攻击 +X 攻击（1 回合内 duration）
+    if (state.player.armors[0]?.defId === "combat_belt") {
+      const stack = Math.min(state.player.armors.length, 4);
+      const bonusByStack = [2, 3, 4, 5];
+      const bonus = bonusByStack[stack - 1] ?? 2;
+      const existing = state.player.statuses.find(s => s.id === "battle_cry");
+      if (existing) existing.stacks += bonus;
+      else state.player.statuses.push({ id: "battle_cry", name: "战甲带激怒", stacks: bonus, duration: 1 });
+      log(`♠ 战甲带：下次攻击 +${bonus}。`, "player");
+    }
+
+    // 斩魂铠（♠ super_rare 防具）：本场每受击 +1/+2 永久攻击（cap 10 次 → 复用 warblood_perm_atk）
+    if (state.player.armors[0]?.defId === "soulreaver_plate") {
+      const stack = Math.min(state.player.armors.length, 4);
+      const permPer = stack >= 3 ? 2 : 1;
+      const existing = state.player.statuses.find(s => s.id === "warblood_perm_atk");
+      if (existing) {
+        if (existing.stacks < 10) existing.stacks = Math.min(10, existing.stacks + permPer);
+      } else {
+        state.player.statuses.push({ id: "warblood_perm_atk", name: "斩魂蓄势", stacks: permPer, duration: -1 });
+      }
+      log(`♠ 斩魂铠：永久攻击 +${permPer}（累计 ${(existing?.stacks ?? 0) + permPer}）。`, "player");
+    }
+
+    // 不朽战甲（♠ epic 防具）：受击后下张攻击 +1 hit（复用 shadow_double）
+    if (state.player.armors[0]?.defId === "immortal_plate") {
+      state.player.statuses.push({ id: "shadow_double", name: "不朽战甲·+1 hit", stacks: 1, duration: -1 });
+      log("♠ 不朽战甲：下张攻击 +1 hit。", "player");
     }
 
     // ★ 花色专精 · 方块 Tier 1（≥5）：受击反弹 +3 — A 强化：+2 → +3
@@ -1380,6 +1464,16 @@ export function endPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) 
   if (state.player.weaponEnchant === "ec_resilient" && state.player.vita < state.player.vitaMax) {
     state.player.vita = Math.min(state.player.vitaMax, state.player.vita + 1);
     log("守护契：+1 HP。", "player");
+  }
+
+  // 生命囊（♥ super_rare 防具）：每回合开始 +3/4/5/6 HP（与 leather_armor 叠加）
+  if (state.player.armors[0]?.defId === "life_pouch" && state.player.vita < state.player.vitaMax) {
+    const stack = Math.min(state.player.armors.length, 4);
+    const healByStack = [3, 4, 5, 6];
+    const heal = healByStack[stack - 1] ?? 3;
+    const before = state.player.vita;
+    state.player.vita = Math.min(state.player.vitaMax, state.player.vita + heal);
+    if (state.player.vita > before) log(`♥ 生命囊：+${state.player.vita - before} HP。`, "player");
   }
 
   // 战狂血誓：根据当前 HP 损失档位维持永久 +X 攻击 stack（cap +5）

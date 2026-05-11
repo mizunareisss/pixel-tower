@@ -224,7 +224,204 @@ const WAR_BOW: CardDef = {
 };
 
 // ─────────────────────────────────────────────────────────
-// 流派资源补全（4 张新卡）：♥ 武器 ×2 / ♠ 防具 ×1 / 无花色桥接武器 ×1
+// 流派资源补全 v2（9 张新武器/防具）：补 ♦/♥/♣ common/epic + ♠ 防具
+// 设计目标：每花色至少 common + rare + super_rare 各 1 张
+// ─────────────────────────────────────────────────────────
+
+// ── 武器：♦ common 飞镖 ──
+const FLYING_DARTS: CardDef = {
+  id: "flying_darts",
+  name: "飞镖",
+  category: "equipment",
+  desc: "装备：基础伤害 4，hits=2（双击入门款）。",
+  equipKind: "weapon",
+  equipSuit: "diamond",
+  baseDmg: 4,
+  hits: 2,
+  equipEffects: [
+    { desc: "基础 4 × 2 次。", stat: "4×2 伤" },
+    { desc: "叠加 ×1.4 × 2 次。", stat: "5.6×2 伤" },
+    { desc: "叠加 ×1.8 × 2 次。", stat: "7.2×2 伤" },
+    { desc: "叠加 ×2.2 × 2 次。", stat: "8.8×2 伤" },
+  ],
+};
+
+// ── 武器：♣ common 木盾杖（防御型武器） ──
+const SHIELD_STAFF: CardDef = {
+  id: "shield_staff",
+  name: "木盾杖",
+  category: "equipment",
+  desc: "装备：基础伤害 5，每次攻击后 +1 本回合临时护盾。",
+  equipKind: "weapon",
+  equipSuit: "club",
+  baseDmg: 5,
+  equipEffects: [
+    { desc: "基础 5 + 攻击后 +1 护盾。", stat: "5 伤 护盾+1" },
+    { desc: "叠加 ×1.4 + 攻击后 +2 护盾。", stat: "7 伤 护盾+2" },
+    { desc: "叠加 ×1.8 + 攻击后 +3 护盾。", stat: "9 伤 护盾+3" },
+    { desc: "叠加 ×2.2 + 攻击后 +4 护盾。", stat: "11 伤 护盾+4" },
+  ],
+};
+
+// ── 武器：♦ epic 风刃 ──
+const WIND_BLADE: CardDef = {
+  id: "wind_blade",
+  name: "风刃",
+  category: "equipment",
+  desc: "装备：基础 8，hits=2；闪避触发后下张攻击 +1 hit。",
+  equipKind: "weapon",
+  equipSuit: "diamond",
+  baseDmg: 8,
+  hits: 2,
+  equipEffects: [
+    { desc: "基础 8 × 2 + 闪避后 +1 hit。", stat: "8×2 伤" },
+    { desc: "叠加 ×1.4 × 2 + 闪避后 +1 hit。", stat: "11.2×2 伤" },
+    { desc: "叠加 ×1.8 × 2 + 闪避后 +1 hit。", stat: "14.4×2 伤" },
+    { desc: "叠加 ×2.2 × 2 + 闪避后 +1 hit。", stat: "17.6×2 伤" },
+  ],
+};
+
+// ── 武器：♥ epic 永生之牙 ──
+const EVERLAST_FANG: CardDef = {
+  id: "everlast_fang",
+  name: "永生之牙",
+  category: "equipment",
+  desc: "装备：基础 8，吸血 60%；击杀目标回 30% maxHP。",
+  equipKind: "weapon",
+  equipSuit: "heart",
+  baseDmg: 8,
+  equipEffects: (() => {
+    const mk = (killPct: number) => ({
+      desc: `基础 8×N + 吸血 60% + 击杀回 ${Math.round(killPct * 100)}% maxHP。`,
+      stat: `吸 60% 击杀+${Math.round(killPct * 100)}%`,
+      onAttack: (ctx: BattleContext, d: number) => {
+        const heal = Math.floor(d * 0.60);
+        if (heal > 0) {
+          ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + heal);
+          ctx.log(`永生之牙吸血 ${heal}。`, "player");
+        }
+        if (ctx.target.alive && ctx.target.hp - d <= 0) {
+          const bonus = Math.floor(ctx.player.vitaMax * killPct);
+          ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + bonus);
+          ctx.log(`永生之牙击杀回血 ${bonus}。`, "player");
+        }
+        return d;
+      },
+    });
+    return [mk(0.30), mk(0.35), mk(0.40), mk(0.50)] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
+  })(),
+};
+
+// ── 武器：♣ epic 禁忌权杖 — 每张已出 ♣ 牌让攻击 +N 直伤（设计修正：不是 ×1.5 倍率） ──
+const FORBIDDEN_SCEPTER: CardDef = {
+  id: "forbidden_scepter",
+  name: "禁忌权杖",
+  category: "equipment",
+  desc: "装备：基础 7。攻击数值 += 本回合已出 ♣ 牌数 × N（N 随 stack 升级）。",
+  equipKind: "weapon",
+  equipSuit: "club",
+  baseDmg: 7,
+  equipEffects: (() => {
+    const mk = (perClubBuff: number, baseStr: string) => ({
+      desc: `基础 ${baseStr} + 每张已出 ♣ 牌 +${perClubBuff}/张直伤。`,
+      stat: `${baseStr} 伤 +${perClubBuff}/♣牌`,
+    });
+    return [
+      mk(2, "7"),
+      mk(3, "9.8"),
+      mk(4, "12.6"),
+      mk(5, "15.4"),
+    ] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
+  })(),
+};
+
+// ── 防具：♠ common 战甲带 ──
+const COMBAT_BELT: CardDef = {
+  id: "combat_belt",
+  name: "战甲带",
+  category: "equipment",
+  desc: "装备：减 1，每次受击让本回合下次攻击 +2 攻击。",
+  equipKind: "armor",
+  equipSuit: "spade",
+  baseReduce: 1,
+  equipEffects: [
+    { desc: "减 1 + 受击后下次攻击 +2。", stat: "-1 受击+2 攻" },
+    { desc: "减 1 + 受击后下次攻击 +3。", stat: "-1 受击+3 攻" },
+    { desc: "减 2 + 受击后下次攻击 +4。", stat: "-2 受击+4 攻" },
+    { desc: "减 2 + 受击后下次攻击 +5。", stat: "-2 受击+5 攻" },
+  ],
+};
+
+// ── 防具：♠ super_rare 斩魂铠 ──
+const SOULREAVER_PLATE: CardDef = {
+  id: "soulreaver_plate",
+  name: "斩魂铠",
+  category: "equipment",
+  desc: "装备：减 3，本场每受击让攻击 +1 永久（cap 10 次受击 → +10 攻）。",
+  equipKind: "armor",
+  equipSuit: "spade",
+  baseReduce: 3,
+  equipEffects: [
+    { desc: "减 3 + 受击 +1 永久攻。", stat: "-3 永久+1/受击" },
+    { desc: "减 4 + 受击 +1 永久攻。", stat: "-4 永久+1/受击" },
+    { desc: "减 5 + 受击 +2 永久攻。", stat: "-5 永久+2/受击" },
+    { desc: "减 6 + 受击 +2 永久攻。", stat: "-6 永久+2/受击" },
+  ],
+};
+
+// ── 防具：♠ epic 不朽战甲 ──
+const IMMORTAL_PLATE: CardDef = {
+  id: "immortal_plate",
+  name: "不朽战甲",
+  category: "equipment",
+  desc: "装备：减 3，受击后下张攻击 hits +1。",
+  equipKind: "armor",
+  equipSuit: "spade",
+  baseReduce: 3,
+  equipEffects: [
+    { desc: "减 3 + 受击后 +1 hit。", stat: "-3 +1 hit/受击" },
+    { desc: "减 4 + 受击后 +1 hit。", stat: "-4 +1 hit/受击" },
+    { desc: "减 5 + 受击后 +1 hit。", stat: "-5 +1 hit/受击" },
+    { desc: "减 6 + 受击后 +1 hit。", stat: "-6 +1 hit/受击" },
+  ],
+};
+
+// ── 防具：♥ super_rare 生命囊 ──
+const LIFE_POUCH: CardDef = {
+  id: "life_pouch",
+  name: "生命囊",
+  category: "equipment",
+  desc: "装备：减 1，每回合开始 +3 HP（与 leather_armor 叠加）。",
+  equipKind: "armor",
+  equipSuit: "heart",
+  baseReduce: 1,
+  equipEffects: [
+    { desc: "减 1 + 每回合 +3 HP。", stat: "-1 +3 HP/回" },
+    { desc: "减 1 + 每回合 +4 HP。", stat: "-1 +4 HP/回" },
+    { desc: "减 2 + 每回合 +5 HP。", stat: "-2 +5 HP/回" },
+    { desc: "减 2 + 每回合 +6 HP。", stat: "-2 +6 HP/回" },
+  ],
+};
+
+// ── 防具：♦ epic 幻影披风 ──
+const PHANTOM_CLOAK: CardDef = {
+  id: "phantom_cloak",
+  name: "幻影披风",
+  category: "equipment",
+  desc: "装备：减 1，闪避触发后摸 1 张。",
+  equipKind: "armor",
+  equipSuit: "diamond",
+  baseReduce: 1,
+  equipEffects: [
+    { desc: "减 1 + 闪避后摸 1 张。", stat: "-1 闪避→摸 1" },
+    { desc: "减 2 + 闪避后摸 1 张。", stat: "-2 闪避→摸 1" },
+    { desc: "减 2 + 闪避后摸 2 张。", stat: "-2 闪避→摸 2" },
+    { desc: "减 3 + 闪避后摸 2 张。", stat: "-3 闪避→摸 2" },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────
+// 流派资源补全 v1（4 张前已加）：♥ 武器 ×2 / ♠ 防具 ×1 / 无花色桥接武器 ×1（已删）
 // ─────────────────────────────────────────────────────────
 
 // ♥ 武器：吸血獠牙（rare）— 高吸血 + 当目标 HP 低时伤害放大
@@ -288,23 +485,6 @@ const KNIGHT_PLATE: CardDef = {
     { desc: "减 2 + 受击充能 +4 伤。", stat: "-2 充能+4" },
     { desc: "减 3 + 受击充能 +5 伤。", stat: "-3 充能+5" },
     { desc: "减 4 + 受击充能 +6 伤。", stat: "-4 充能+6" },
-  ],
-};
-
-// 无花色武器：棒槌（common）— 玩家换装空窗期可用，纯朴素武器，无花色 → 不锁亲和度
-const CRUDE_CLUB: CardDef = {
-  id: "crude_club",
-  name: "棒槌",
-  category: "equipment",
-  desc: "装备：基础伤害 4。无花色 — 不增加任何花色亲和度（适合换装空窗期 / 想保持当前 build 时使用）。",
-  equipKind: "weapon",
-  // 无 equipSuit！这是关键：让玩家不被武器锁花色
-  baseDmg: 4,
-  equipEffects: [
-    { desc: "基础 4，无花色。", stat: "4 伤 无花色" },
-    { desc: "叠加 ×1.4，无花色。", stat: "5.6 伤 无花色" },
-    { desc: "叠加 ×1.8，无花色。", stat: "7.2 伤 无花色" },
-    { desc: "叠加 ×2.2，无花色。", stat: "8.8 伤 无花色" },
   ],
 };
 
@@ -1656,11 +1836,21 @@ export const CARD_DB: Record<string, CardDef> = {
   repeating_bow: REPEATING_BOW,
   raider: RAIDER,
   blood_blade: BLOOD_BLADE,
-  // 流派资源补全 4 张新卡（♥ 武器 ×2 / ♠ 防具 ×1 / 无花色武器 ×1）
+  // 流派资源补全 v1（4 张）：♥ 武器 ×2 / ♠ 防具 ×1
   vampire_fang: VAMPIRE_FANG,
   lifebloom_staff: LIFEBLOOM_STAFF,
   knight_plate: KNIGHT_PLATE,
-  crude_club: CRUDE_CLUB,
+  // 流派资源补全 v2（9 张）：补齐 ♦/♣ common + 各花色 epic + ♠ 防具完整线
+  flying_darts: FLYING_DARTS,
+  shield_staff: SHIELD_STAFF,
+  wind_blade: WIND_BLADE,
+  everlast_fang: EVERLAST_FANG,
+  forbidden_scepter: FORBIDDEN_SCEPTER,
+  combat_belt: COMBAT_BELT,
+  soulreaver_plate: SOULREAVER_PLATE,
+  immortal_plate: IMMORTAL_PLATE,
+  life_pouch: LIFE_POUCH,
+  phantom_cloak: PHANTOM_CLOAK,
   // 防具（9）
   round_shield: ROUND_SHIELD,
   leather_armor: LEATHER_ARMOR,
@@ -1764,8 +1954,13 @@ const _RARITY: Record<string, "rare" | "super_rare" | "epic"> = {
   // ── Rare（稳定的 build 件 / 解 buff / 群攻基础）──────────
   twin_blades: "rare", warhammer: "rare", battle_staff: "rare", chain_whip: "rare",
   raider: "rare", blood_blade: "rare",
-  // 流派补全：vampire_fang/knight_plate rare；lifebloom_staff super_rare；crude_club common（默认 unset）
+  // 流派补全 v1：vampire_fang/knight_plate rare；lifebloom_staff super_rare
   vampire_fang: "rare", knight_plate: "rare", lifebloom_staff: "super_rare",
+  // 流派补全 v2：花色×稀有度 补齐
+  flying_darts: "rare", shield_staff: "rare",  // ♦/♣ common 武器位（设 rare 让池子均衡）
+  wind_blade: "epic", everlast_fang: "epic", forbidden_scepter: "epic",  // ♦/♥/♣ epic 武器
+  combat_belt: "rare", soulreaver_plate: "super_rare", immortal_plate: "epic",  // ♠ 防具完整线
+  life_pouch: "super_rare", phantom_cloak: "epic",  // ♥ super_rare / ♦ epic 防具
   spike_armor: "rare", scale_mail: "rare", full_plate: "rare",
   crown_of_vitality: "rare",
   sk_blast: "rare", sk_shadow_strike: "rare", sk_dye: "rare", sk_attune: "rare", sk_chant: "super_rare",
@@ -1867,14 +2062,25 @@ export const REWARD_CARD_POOL_BASE = [
   // 道具（10 = 原 7 + 速摸 + 药剂 + 穿甲油）
   "it_heal", "it_purify", "it_whetstone", "it_regroup", "it_bomb", "it_elixir", "it_smoke",
   "it_quick_draw", "it_brew", "it_pierce_oil",
-  // 新增 4 张：♥ 流派补强 ×2 + ♠ 防具补 + 无花色桥接武器
-  "vampire_fang",  // ♥ 武器
-  "lifebloom_staff",  // ♥ 武器
-  "knight_plate",  // ♠ 防具
-  "crude_club",  // 无花色武器（桥接）
+  // 流派资源补全 v1（3 张）
+  "vampire_fang",       // ♥ rare 武器
+  "lifebloom_staff",    // ♥ super_rare 武器
+  "knight_plate",       // ♠ rare 防具
+  // 流派资源补全 v2（10 张）：花色×稀有度 补齐
+  "flying_darts",       // ♦ rare 武器
+  "shield_staff",       // ♣ rare 武器
+  "combat_belt",        // ♠ rare 防具
+  "soulreaver_plate",   // ♠ super_rare 防具
+  "life_pouch",         // ♥ super_rare 防具
   // 攻击牌（atk_X）已移出奖励池 — 玩家从奖励里抽到攻击牌体验崩，攻击牌只在起始牌库
   // Epic（极稀有，需要 tier roll 命中才会出现）
   "excalibur", "divine_blade", "undying_heart", "sk_wrath", "it_echo",
+  // 流派资源补全 v2 epic（5 张）：让 ♦/♥/♣ 也有 epic 武器，♠/♦ 有 epic 防具
+  "wind_blade",        // ♦ epic 武器
+  "everlast_fang",     // ♥ epic 武器
+  "forbidden_scepter", // ♣ epic 武器
+  "immortal_plate",    // ♠ epic 防具
+  "phantom_cloak",     // ♦ epic 防具
 ];
 
 // 第 3 关后追加的群攻技能（10 = 9 + 吸血潮）
