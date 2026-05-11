@@ -7,7 +7,7 @@
 //   - 节点之间连接保证可达性
 
 import type { FloorMap, FloorTheme, MapNode, MapNodeType } from "./types.ts";
-import { makeEnemyGroupsForFloor } from "./enemies.ts";
+import { makeEnemyGroupsForFloor, buildFixedBoss } from "./enemies.ts";
 
 let _nodeIdCounter = 0;
 function newNodeId(): string { return `n${++_nodeIdCounter}`; }
@@ -269,8 +269,15 @@ export function generateFloorMap(floor: number): FloorMap {
 // 优雅做法：让 enemies.ts 提供 buildSingleEncounter(floor, type)。这里先用 hack。
 function preRollPayload(node: MapNode, floor: number): void {
   if (node.type === "battle" || node.type === "elite" || node.type === "boss") {
-    // 借用现有 makeEnemyGroupsForFloor，按 type 选 group
-    // group[0]/[1] = normal; group[2] = elite/boss
+    // F9 / F12 Boss 节点使用固定 Boss（亡灵之主 / 无相之主）
+    if (node.type === "boss") {
+      const fixed = buildFixedBoss(floor);
+      if (fixed) {
+        node.enemies = [fixed];
+        return;
+      }
+    }
+    // 其他战斗：借用现有 makeEnemyGroupsForFloor，按 type 选 group
     const groups = makeEnemyGroupsForFloor(floor);
     if (node.type === "boss" || node.type === "elite") {
       node.enemies = groups[2];
