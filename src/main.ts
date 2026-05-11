@@ -55,9 +55,37 @@ import type { EnemyRace, Suit, EnchantId } from "./types.ts";
 import type { GameState, CardInstance, EnemyState, StatusEffect } from "./types.ts";
 
 const ENEMY_EMOJI: Record<string, string> = {
-  "地鼠": "🐭", "哥布林": "👺", "强盗": "🔪", "野狼": "🐺",
-  "科博德": "🦎", "骷髅兵": "💀", "哥布林兵": "👹", "兽人首领": "🐗",
-  "鼠群成员": "🐀", "食尸鬼": "🧟", "巨魔": "🧌", "黑暗骑士": "⚔️",
+  // ── 兽 beast ──
+  "地鼠": "🐭", "野狼": "🐺", "毒蛇": "🐍", "蝙蝠": "🦇", "野猪": "🐗",
+  "黑豹": "🐆", "狂狼": "🐺", "野熊": "🐻", "巨鼠": "🐀", "豺狗": "🐕",
+  "魔狼·首领": "🐺", "巨爪熊王": "🐻", "雷霆狼": "⚡", "毒蛇王": "🐍",
+  "黑龙鳄": "🐊", "霜熊": "🐻‍❄️", "影豹": "🐆",
+  "原初之兽": "🦬", "九尾狐妖": "🦊", "雷神之爪": "🐾", "兽王": "🦁",
+  // ── 人型 humanoid ──
+  "哥布林": "👺", "强盗": "🔪", "盗贼": "🗡️", "野蛮人": "🪓",
+  "异端兵": "🛡️", "佣兵": "⚔️", "刺客": "🗡️", "流浪者": "🧳",
+  "猎人": "🏹", "异端徒": "🕯️",
+  "盗贼头目": "👹", "佣兵队长": "🎖️", "黑暗骑士": "⚔️", "异端祭司": "📿",
+  "野蛮酋长": "🪓", "杀手": "🔪",
+  "哥布林王": "👑", "异端大主教": "📕", "黑暗骑士团长": "🛡️", "战团之王": "⚔️",
+  // ── 不死 undead ──
+  "骷髅兵": "💀", "丧尸": "🧟", "食尸鬼": "🧟", "白骨": "🦴",
+  "墓守": "⚰️", "腐尸": "🧟‍♂️", "亡灵小兵": "💀", "幽魂": "👻", "干尸": "🪦",
+  "亡灵巫师": "🧙", "骨王": "💀", "墓主": "⚰️", "黑暗法师": "🧙‍♂️",
+  "鬼魅猎手": "🏹", "亡魂祭司": "🕯️",
+  "巫妖": "🧙‍♂️", "亡灵之主": "💀", "骨之王座": "🪑", "死灵法师": "🧙",
+  // ── 巨怪 giant ──
+  "小巨人": "🗿", "巨魔": "🧌", "山地野人": "🪨", "石头怪": "🪨",
+  "沼泽巨魔": "🐊", "霜地野人": "❄️",
+  "石巨人": "🗿", "战争巨人": "🗿", "冰霜巨人": "🧊", "石神巨人": "🗿",
+  "山岭哨兵": "⛰️",
+  "山岳之主": "🏔️", "时间巨灵": "⏳", "原始巨人": "🗿", "霜山巨王": "🧊",
+  // ── 暗影 dark ──
+  "影爪": "🌑", "夜魔": "👤", "深渊兽": "🦑", "暗影爪牙": "🌑",
+  "黑暗使者": "👤", "影魂": "👤",
+  "暗影刺客": "🗡️", "暗影王子": "👑", "夜魔领主": "🌑", "深渊使者": "🦑",
+  "影舞者": "🌫️",
+  "黑龙": "🐉", "深渊领主": "🦑", "暗影之主": "🌑", "无相之主": "👁️",
 };
 
 let state: GameState = newGame();
@@ -67,6 +95,9 @@ let _prevVita = -1;
 let _prevEnemyHps: number[] = [];
 let _prevTurn = -1;
 let _isProcessingTurn = false;
+// 战斗 phase 转换追踪 — 用于触发入场/出场动画
+let _prevPhase: import("./types.ts").GamePhase | "" = "";
+let _battleExitInFlight = false;     // 出场动画播放中，render() 被锁，直到动画结束
 
 // Touch detection: add .is-touch to body on first touchstart
 if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
@@ -126,9 +157,25 @@ const floorEl = $("floor-display");
 const phaseEl = $("phase-display");
 
 function render() {
+  // 战斗出场动画拦截：phase 从 battle → battle_victory 时先播销毁动画，再 render 胜利界面
+  if (!_battleExitInFlight && _prevPhase === "battle" && state.phase === "battle_victory") {
+    playBattleExitAnimation();
+    _battleExitInFlight = true;
+    setTimeout(() => {
+      _battleExitInFlight = false;
+      _prevPhase = "battle_victory"; // 标记 phase 已过渡
+      render();
+    }, 560); // 敌人 ~440ms + 手牌 ~280ms (含 delay) 略让最后一帧落定
+    return;
+  }
+  if (_battleExitInFlight) return;
+
   const snapVita = state.player.vita;
   const snapEnemyHps = state.battle ? state.battle.enemies.map(e => e.alive ? e.hp : -1) : [];
   const snapTurn = state.battle?.turn ?? -1;
+
+  // 检测进入战斗（任何 phase → battle）
+  const justEnteredBattle = _prevPhase !== "battle" && state.phase === "battle";
 
   const inBattle = state.phase === "battle";
   vitaEl.innerHTML = `HP ${state.player.vita} / ${state.player.vitaMax}`;
@@ -202,9 +249,33 @@ function render() {
     showPhaseFlash("战斗开始");
   }
 
+  // 战斗入场动画：进入 battle phase 的那一帧给敌人卡 / 手牌 / 玩家卡加 enter class
+  if (justEnteredBattle) {
+    document.querySelectorAll<HTMLElement>("#enemies-row .enemy-card")
+      .forEach(el => el.classList.add("is-entering"));
+    document.querySelectorAll<HTMLElement>("#active .hand-card")
+      .forEach(el => el.classList.add("is-dealing"));
+    document.getElementById("player-card")?.classList.add("is-entering");
+  }
+
   _prevVita = snapVita;
   _prevEnemyHps = snapEnemyHps;
   _prevTurn = snapTurn;
+  _prevPhase = state.phase;
+}
+
+// 战斗出场动画：敌人卡随机三种销毁方式 + 玩家手牌飞向右下牌库
+function playBattleExitAnimation() {
+  const exitClasses = ["exit-burn", "exit-tear", "exit-shatter"];
+  document.querySelectorAll<HTMLElement>("#enemies-row .enemy-card").forEach(el => {
+    // 死敌人也一起销毁掉（视觉一致），但已死的不再加 grayscale 转换
+    const pick = exitClasses[Math.floor(Math.random() * exitClasses.length)];
+    el.classList.add(pick);
+  });
+  document.querySelectorAll<HTMLElement>("#active .hand-card").forEach(el => {
+    el.classList.add("is-collecting");
+  });
+  document.getElementById("player-card")?.classList.add("is-exiting");
 }
 
 // ─────────────────────────────────────────────────────────
@@ -890,32 +961,61 @@ function renderEnemy(e: EnemyState, idx: number): HTMLElement {
   }
 
   const statusTags = e.statuses.map(s => renderStatusTag(s)).join("");
-  const weaponBadge = (e.weaponMult ?? 1) > 1 ? `<span class="enemy-equip-badge" title="持有武器（攻击倍率 ×${e.weaponMult!.toFixed(1)}）">⚔×${e.weaponMult!.toFixed(1)}</span>` : "";
-  const armorBadge = (e.armor ?? 0) > 0 ? `<span class="enemy-equip-badge armor" title="护甲 ${e.armor}（每次受攻击减伤 ${e.armor}）">🛡${e.armor}</span>` : "";
-
+  const sym = SUIT_SYMBOLS[e.suit];
   const emoji = ENEMY_EMOJI[e.name] ?? "👾";
-  wrap.setAttribute("data-suit-symbol", SUIT_SYMBOLS[e.suit]);
+  wrap.setAttribute("data-suit-symbol", sym);
+  wrap.setAttribute("data-suit", sym); // 与手牌一致
   if (isRed) wrap.setAttribute("data-suit-red", "1");
-  const raceTag = `<span class="enemy-race-tag" title="${RACE_NAMES[e.race]} · 击败掉 ${FRAGMENT_NAMES[e.race]} 1 枚">${FRAGMENT_ICONS[e.race]} ${RACE_NAMES[e.race]}</span>`;
-  // 精英 / Boss 标识
+
+  // 装备徽章（合并到 meta 行，省空间）
+  const weaponBadge = (e.weaponMult ?? 1) > 1
+    ? `<span class="ec-equip" title="持有武器（攻击倍率 ×${e.weaponMult!.toFixed(1)}）">⚔×${e.weaponMult!.toFixed(1)}</span>` : "";
+  const armorBadge = (e.armor ?? 0) > 0
+    ? `<span class="ec-equip armor" title="护甲 ${e.armor}">🛡${e.armor}</span>` : "";
+
+  // tier 缩写（左上角标右下角）— 像扑克牌左上 + 右下对角花色
+  const tierMark = tier === "boss" ? "B" : tier === "elite" ? "E" : "";
+  // tier 顶部横条（保留，因为玩家需要一眼识别）
   const tierBadge = tier === "boss"
     ? `<div class="enemy-tier-badge boss">👑 BOSS</div>`
     : tier === "elite"
       ? `<div class="enemy-tier-badge elite">✦ 精英</div>`
       : "";
   // ⓘ 详情按钮（仅精英 / boss 才有）
-  const infoBtn = tier !== "normal" ? `<button class="enemy-info-btn" data-info-idx="${idx}" aria-label="查看机制">i</button>` : "";
+  const infoBtn = tier !== "normal"
+    ? `<button class="enemy-info-btn" data-info-idx="${idx}" aria-label="查看机制">i</button>`
+    : "";
+
+  // HP 单条横条（替代 10 段格子）— 更像手牌的描述紧凑感
+  const hpPct = Math.max(0, Math.min(100, Math.round(e.hp / e.maxHp * 100)));
+  const hpLow = hpPct <= 30;
+  const hpBar = `
+    <div class="ec-hp-bar${hpLow ? " low" : ""}">
+      <div class="ec-hp-fill" style="width:${hpPct}%"></div>
+    </div>
+    <div class="ec-hp-text">${e.hp} / ${e.maxHp}</div>
+  `;
+
+  // 底部"花色标"分类条（仿 .cat-tag）
+  const footLabel = `${tier === "boss" ? "BOSS" : tier === "elite" ? "ELITE" : "敌"} · ${RACE_NAMES[e.race]}`;
 
   wrap.innerHTML = `
     ${tierBadge}
+    <span class="ec-corner ec-corner-tl${isRed ? " red" : ""}">${sym}${tierMark ? `<small>${tierMark}</small>` : ""}</span>
+    <span class="ec-corner ec-corner-br${isRed ? " red" : ""}">${sym}${tierMark ? `<small>${tierMark}</small>` : ""}</span>
     ${infoBtn}
-    <div class="enemy-emoji">${emoji}</div>
-    <div class="enemy-name">${escapeHTML(e.name)}${weaponBadge}${armorBadge}</div>
-    <div class="enemy-race-row">${raceTag}${e.eliteAbility ? `<span class="enemy-ability-tag">★ ${escapeHTML(e.eliteAbility)}</span>` : ""}</div>
-    <div class="enemy-hp-text">HP ${e.hp} / ${e.maxHp}</div>
-    ${renderEnemyHpSegments(e.hp, e.maxHp)}
-    <div class="enemy-status">${statusTags}</div>
-    ${isTarget ? '<div class="target-badge">▼ 目标</div>' : ""}
+    <div class="ec-portrait">${emoji}</div>
+    <div class="ec-name">${escapeHTML(e.name)}</div>
+    <div class="ec-meta">
+      <span class="ec-race" title="${RACE_NAMES[e.race]} · 击败掉 ${FRAGMENT_NAMES[e.race]} 1 枚">${FRAGMENT_ICONS[e.race]}${RACE_NAMES[e.race]}</span>
+      ${weaponBadge}
+      ${armorBadge}
+      ${e.eliteAbility ? `<span class="ec-ability" title="${escapeHTML(ABILITY_DESCS[e.eliteAbility] ?? "")}">★${escapeHTML(e.eliteAbility)}</span>` : ""}
+    </div>
+    ${hpBar}
+    <div class="ec-status">${statusTags}</div>
+    <div class="ec-foot">${escapeHTML(footLabel)}</div>
+    ${isTarget ? '<div class="target-badge">▼</div>' : ""}
   `;
   // info 按钮要拦截冒泡（不要触发"选目标"），并打开机制详情弹窗
   const ib = wrap.querySelector(".enemy-info-btn") as HTMLButtonElement | null;
@@ -1057,17 +1157,6 @@ document.addEventListener("click", (e) => {
   const duration = parseInt(tag.getAttribute("data-status-duration") || "0");
   showStatusInfo(id, stacks, duration);
 });
-
-function renderEnemyHpSegments(hp: number, maxHp: number): string {
-  const SEGS = 10;
-  let html = '<div class="enemy-vita-segs">';
-  for (let i = 0; i < SEGS; i++) {
-    const filled = hp / maxHp > i / SEGS;
-    html += `<span class="hp-seg${filled ? "" : " empty"}"></span>`;
-  }
-  html += "</div>";
-  return html;
-}
 
 // ─────────────────────────────────────────────────────────
 // 动效：通知条 / 浮动伤害 / 阶段闪字
@@ -3117,6 +3206,7 @@ const _AOE_SKILL_IDS = new Set([
   "sk_chain_bolt", "sk_fire_wall", "sk_shockwave", "sk_group_curse",
   "sk_sonic", "sk_mass_weak", "sk_lightning", "sk_curse_vortex",
   "sk_chroma_wave", "sk_wrath",
+  "sk_drain_wave",  // ♥ 吸血潮（target=all）原本漏在单体分类，修正
 ]);
 
 // 图鉴 tab 过滤逻辑

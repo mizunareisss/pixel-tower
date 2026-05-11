@@ -30,7 +30,7 @@ export const SUIT_TIER_DESCS: Record<Suit, { tier1: string; tier2: string; tier3
   },
   diamond: {
     tier1: "闪避 +5%；受击反弹 +2 伤害。",
-    tier2: "攻击 25% 概率额外 +1 hit。",
+    tier2: "攻击 35% 概率额外 +1 hit。",
     tier3: "可释放大招（消耗 10 亲和）。",
     ult: "本回合敌人攻击全部闪避，下次攻击 hits ×3。",
   },
