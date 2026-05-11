@@ -379,7 +379,7 @@ export function buildFixedBoss(floor: number): EnemyState | null {
   if (floor === 9) {
     const e = buildRandomEnemy({
       floor, tier: "boss", race: "undead",
-      hpMultOverride: 1.3,  // 比普通 boss × 1.3（sim 显示 1.6 → 死亡率 80.6%，砍到 1.3）
+      hpMultOverride: 1.55,  // v5：1.30 → 1.55（曲线增厚，配合真人最优 build 大幅碾压 boss 的问题）
     });
     e.name = "亡灵之主 · 不朽君王";
     e.weaponMult = 1.2;
@@ -391,7 +391,7 @@ export function buildFixedBoss(floor: number): EnemyState | null {
   if (floor === 12) {
     const e = buildRandomEnemy({
       floor, tier: "boss", race: "dark",
-      hpMultOverride: 1.4,  // 比普通 boss × 1.4（sim 显示 2.0 → 100% 死亡率，砍到 1.4）
+      hpMultOverride: 1.85,  // v5：1.40 → 1.85（曲线增厚，让 F12 boss 真人最强 build 也需要 12+ 刀）
     });
     e.name = "无相之主 · 终末注视";
     e.weaponMult = 1.3;

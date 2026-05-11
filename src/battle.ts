@@ -480,15 +480,15 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     player.statuses = player.statuses.filter(s => s.id !== "calc_charge");
   }
 
-  // 禁忌权杖（♣ epic 武器）：每张本回合已出 ♣ 牌让攻击 +N 直伤（nerf 5→3 at 4 stack）
+  // 禁忌权杖（♣ epic 武器）：每张本回合已出 ♣ 牌让攻击 +N 直伤（v5 加 cap +20/回合，防止与奥术爆裂双叠加爆炸）
   if (player.weapons[0]?.defId === "forbidden_scepter") {
     const stack = Math.min(player.weapons.length, 4);
     const perClub = [1, 2, 2, 3][stack - 1] ?? 1;
     const scepterClubs = player.statuses.find(s => s.id === "scepter_clubs");
     if (scepterClubs && scepterClubs.stacks > 0) {
-      const bonus = scepterClubs.stacks * perClub;
+      const bonus = Math.min(20, scepterClubs.stacks * perClub);  // cap 20
       dmg += bonus;
-      log(`♣ 禁忌权杖 +${bonus}（${scepterClubs.stacks} 张 ♣ × ${perClub}）。`, "player");
+      log(`♣ 禁忌权杖 +${bonus}（${scepterClubs.stacks} 张 ♣ × ${perClub}，cap 20）。`, "player");
     }
   }
 
@@ -577,9 +577,17 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
         const ratio = [0.50, 0.50, 0.60, 0.70][stacks - 1];
         pierce += Math.ceil(enemyArmor * ratio);
       }
-      // ♠ Tier 2：pierce += 楼层数（仅激活的黑桃专精生效）
+      // 王者之剑（excalibur, ♠ epic）：v5 nerf，动态破甲 70% armor（同 raider 模式但固定 70%）
+      if (wDef.id === "excalibur") {
+        pierce += Math.ceil(enemyArmor * 0.7);
+      }
+      // ♠ Tier 2：pierce += ceil(楼层/3)（v5 nerf：原 += floor 让 boss armor 完全失效）
       if (activeSuit === "spade" && activeTier >= 2) {
-        pierce += state.floor;
+        pierce += Math.ceil(state.floor / 3);
+      }
+      // ♦ Tier 2：v5 新增 — +3 pierce（修复 ♦ 流被 armor 卡死的核心问题）
+      if (activeSuit === "diamond" && activeTier >= 2) {
+        pierce += 3;
       }
       // ♠ keyword「锐利」：当 ♠ active T1+ 且本攻击花色为 ♠ → 额外 +1 pierce
       if (activeSuit === "spade" && activeTier >= 1 && ctx.attackSuit === "spade") {
@@ -742,13 +750,16 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
       log(`法杖：${target.name} +易伤（×1.5）。`, "player");
     }
 
-    // 木盾杖（♣ common）：攻击后 +N 临时护盾（×1/2/3/4）
+    // 木盾杖（♣ common）：攻击后 +(2 + floor/3) × stackMult 临时护盾
+    // v5：护盾随楼层缩放，让中后期 F6+ 仍有意义（boss 一招 25+ 伤）
     if (weaponId === "shield_staff") {
       const stack = Math.min(state.player.weapons.length, 4);
+      const stackMult = [1, 1, 2, 2][stack - 1] ?? 1;
+      const shieldVal = (2 + Math.floor(state.floor / 3)) * stackMult;
       const sh = state.player.statuses.find(s => s.id === "shield_block");
-      if (sh) sh.stacks += stack;
-      else state.player.statuses.push({ id: "shield_block", name: "护盾", stacks: stack, duration: 1 });
-      log(`木盾杖：+${stack} 护盾。`, "player");
+      if (sh) sh.stacks += shieldVal;
+      else state.player.statuses.push({ id: "shield_block", name: "护盾", stacks: shieldVal, duration: 1 });
+      log(`木盾杖：+${shieldVal} 护盾。`, "player");
     }
 
     // 链刃：对其他存活敌人溅射，叠加值按 stack 升级 3/4/5/6
@@ -875,13 +886,14 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
     log("法袍：摸 1 张。", "player");
   }
 
-  // 生机长杖：出技能/道具时回 (1×stack) HP
+  // 生机长杖：出技能/道具时回 maxHP × 2-5%（按 stack 1-4 升级）— v5 改 % 缩放保持后期价值
   if (state.player.weapons[0]?.defId === "lifebloom_staff") {
     const stack = Math.min(state.player.weapons.length, 4);
-    const heal = stack;  // 1/2/3/4 HP per stack
+    const pctByStack = [0.02, 0.03, 0.04, 0.05][stack - 1] ?? 0.02;
+    const heal = Math.max(1, Math.ceil(state.player.vitaMax * pctByStack));
     const before = state.player.vita;
     state.player.vita = Math.min(state.player.vitaMax, state.player.vita + heal);
-    if (state.player.vita > before) log(`生机长杖：回 ${state.player.vita - before} HP。`, "player");
+    if (state.player.vita > before) log(`生机长杖：回 ${state.player.vita - before} HP（${(pctByStack*100).toFixed(0)}% maxHP）。`, "player");
   }
 
   // 战斗节奏：本回合内每出 1 张牌额外摸 1 张
@@ -1243,18 +1255,18 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
       state.player.statuses.push({ id: "took_damage_turn", name: "本回合受伤", stacks: 1, duration: -1 });
     }
 
-    // 骑士铠（♠ rare 防具）：受击后下次攻击充能 +X 直伤（cap 5 stack）
+    // 骑士铠（♠ rare 防具）：受击后下次攻击充能 +X 直伤（v5 cap 5 → 3，防止 5 击换 +30 burst）
     if (state.player.armors[0]?.defId === "knight_plate") {
       const stack = Math.min(state.player.armors.length, 4);
       const bonusByStack = [3, 4, 5, 6];
       const bonus = bonusByStack[stack - 1] ?? 3;
       const existing = state.player.statuses.find(s => s.id === "knight_charge");
       if (existing) {
-        existing.stacks = Math.min(5, existing.stacks + 1);
+        existing.stacks = Math.min(3, existing.stacks + 1);  // cap 3
       } else {
         state.player.statuses.push({ id: "knight_charge", name: `骑士充能 +${bonus}`, stacks: 1, duration: -1 });
       }
-      log(`骑士铠充能：下次攻击 +${bonus} 直伤（×${existing?.stacks ?? 1}）。`, "player");
+      log(`骑士铠充能：下次攻击 +${bonus} 直伤（×${existing?.stacks ?? 1}，cap 3）。`, "player");
     }
 
     // 战甲带（♠ common 防具）：受击后本回合下次攻击 +X 攻击（1 回合内 duration）

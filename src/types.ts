@@ -24,13 +24,13 @@ export const SUIT_TIER_NAMES: Record<Suit, { tier1: string; tier2: string; tier3
 export const SUIT_TIER_DESCS: Record<Suit, { tier1: string; tier2: string; tier3: string; ult: string }> = {
   spade: {
     tier1: "攻击 +10%；额外 5% 概率暴击 ×2；激活『锐利』keyword — 所有 ♠ 攻击 +1 pierce。",
-    tier2: "破甲 +当前楼层数；真伤 +3。",
+    tier2: "破甲 +⌈楼层/3⌉（F3=1 / F12=4）；真伤 +3。",
     tier3: "可释放大招（消耗 8 亲和）。",
     ult: "对当前目标造成其当前 HP 50% 的真实伤害（无视护甲）。",
   },
   diamond: {
     tier1: "闪避 +8%；受击反弹 +3 伤害；激活『迅捷』keyword — 所有 ♦ 攻击 25% 概率额外 +1 hit（与 T2 叠加）。",
-    tier2: "攻击 40% 概率额外 +1 hit（叠加 ♦ 迅捷）。",
+    tier2: "攻击 40% 概率额外 +1 hit（叠加 ♦ 迅捷）；+3 破甲。",
     tier3: "可释放大招（消耗 8 亲和）。",
     ult: "本回合敌人攻击全部闪避，下次攻击 hits ×3。",
   },

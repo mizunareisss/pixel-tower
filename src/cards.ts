@@ -228,38 +228,39 @@ const WAR_BOW: CardDef = {
 // 设计目标：每花色至少 common + rare + super_rare 各 1 张
 // ─────────────────────────────────────────────────────────
 
-// ── 武器：♦ common 飞镖 ──
+// ── 武器：♦ common 飞镖（v5 base 4 → 5，配合 ♦ T2 破甲修复后才有竞争力）──
 const FLYING_DARTS: CardDef = {
   id: "flying_darts",
   name: "飞镖",
   category: "equipment",
-  desc: "装备：基础伤害 4，hits=2（双击入门款）。",
+  desc: "装备：基础伤害 5，hits=2（双击入门款）。",
   equipKind: "weapon",
   equipSuit: "diamond",
-  baseDmg: 4,
+  baseDmg: 5,
   hits: 2,
   equipEffects: [
-    { desc: "基础 4 × 2 次。", stat: "4×2 伤" },
-    { desc: "叠加 ×1.4 × 2 次。", stat: "5.6×2 伤" },
-    { desc: "叠加 ×1.8 × 2 次。", stat: "7.2×2 伤" },
-    { desc: "叠加 ×2.2 × 2 次。", stat: "8.8×2 伤" },
+    { desc: "基础 5 × 2 次。", stat: "5×2 伤" },
+    { desc: "叠加 ×1.4 × 2 次。", stat: "7×2 伤" },
+    { desc: "叠加 ×1.8 × 2 次。", stat: "9×2 伤" },
+    { desc: "叠加 ×2.2 × 2 次。", stat: "11×2 伤" },
   ],
 };
 
-// ── 武器：♣ common 木盾杖（防御型武器） ──
+// ── 武器：♣ common 木盾杖（v5：护盾按 (2+楼层/3) 缩放，让 F6+ 仍有价值）──
 const SHIELD_STAFF: CardDef = {
   id: "shield_staff",
   name: "木盾杖",
   category: "equipment",
-  desc: "装备：基础伤害 5，每次攻击后 +1 本回合临时护盾。",
+  desc: "装备：基础伤害 5，每次攻击后 +(2 + 楼层/3) 本回合临时护盾（×stack）。",
   equipKind: "weapon",
   equipSuit: "club",
   baseDmg: 5,
+  // 实际护盾值在 battle.ts 里读取 stack + floor 计算
   equipEffects: [
-    { desc: "基础 5 + 攻击后 +1 护盾。", stat: "5 伤 护盾+1" },
-    { desc: "叠加 ×1.4 + 攻击后 +2 护盾。", stat: "7 伤 护盾+2" },
-    { desc: "叠加 ×1.8 + 攻击后 +3 护盾。", stat: "9 伤 护盾+3" },
-    { desc: "叠加 ×2.2 + 攻击后 +4 护盾。", stat: "11 伤 护盾+4" },
+    { desc: "基础 5 + 攻击后楼层缩放护盾。", stat: "5 伤 护盾(2+f/3)" },
+    { desc: "叠加 ×1.4。", stat: "7 伤 护盾×1" },
+    { desc: "叠加 ×1.8。", stat: "9 伤 护盾×2" },
+    { desc: "叠加 ×2.2。", stat: "11 伤 护盾×2" },
   ],
 };
 
@@ -454,20 +455,20 @@ const VAMPIRE_FANG: CardDef = {
   })(),
 };
 
-// ♥ 武器：生机长杖（super_rare）— 出技能/道具时回血，攻击较弱但续航爆表
+// ♥ 武器：生机长杖（super_rare）— v5：回血改 maxHP% 缩放（2%/3%/4%/5%），名字"生机"保留生机能力
 const LIFEBLOOM_STAFF: CardDef = {
   id: "lifebloom_staff",
   name: "生机长杖",
   category: "equipment",
-  desc: "装备：基础伤害 5；每出 1 张技能/道具 +1 HP（叠满到 +4 HP/张）。",
+  desc: "装备：基础伤害 5；每出 1 张技能/道具回 maxHP × 2-5%（按 stack 升级）。",
   equipKind: "weapon",
   equipSuit: "heart",
   baseDmg: 5,
   equipEffects: [
-    { desc: "基础 5 + 技能/道具回 1 HP/张。", stat: "5 伤 回 1HP/技能" },
-    { desc: "叠加 ×1.4 + 回 2 HP/技能。", stat: "7 伤 回 2HP/技能" },
-    { desc: "叠加 ×1.8 + 回 3 HP/技能。", stat: "9 伤 回 3HP/技能" },
-    { desc: "叠加 ×2.2 + 回 4 HP/技能。", stat: "11 伤 回 4HP/技能" },
+    { desc: "基础 5 + 技能/道具回 2% maxHP/张。", stat: "5 伤 回 2%/技能" },
+    { desc: "叠加 ×1.4 + 回 3% maxHP/张。", stat: "7 伤 回 3%/技能" },
+    { desc: "叠加 ×1.8 + 回 4% maxHP/张。", stat: "9 伤 回 4%/技能" },
+    { desc: "叠加 ×2.2 + 回 5% maxHP/张。", stat: "11 伤 回 5%/技能" },
   ],
 };
 
@@ -741,23 +742,19 @@ const HEAVY_ARMOR: CardDef = {
   id: "heavy_armor",
   name: "重甲",
   category: "equipment",
-  desc: "装备：受击 -4，但出攻击伤害 -1（笨重）。",
+  desc: "装备：受击 -4 / -5 / -7 / -9（叠加）。v5 去掉攻击 -1 副作用。",
   equipKind: "armor",
   equipSuit: "club",
   baseReduce: 4,
   equipEffects: [
-    { desc: "受击 -4，攻击 -1。", stat: "-4 受击 攻-1",
-      onTakeDamage: (_c, d) => Math.max(0, d - 4),
-      postAttack: (_c, d) => Math.max(0, d - 1) },
-    { desc: "受击 -5，攻击 -1。", stat: "-5 受击 攻-1",
-      onTakeDamage: (_c, d) => Math.max(0, d - 5),
-      postAttack: (_c, d) => Math.max(0, d - 1) },
-    { desc: "受击 -7，攻击 -1。", stat: "-7 受击 攻-1",
-      onTakeDamage: (_c, d) => Math.max(0, d - 7),
-      postAttack: (_c, d) => Math.max(0, d - 1) },
-    { desc: "受击 -9，攻击 -1。", stat: "-9 受击 攻-1",
-      onTakeDamage: (_c, d) => Math.max(0, d - 9),
-      postAttack: (_c, d) => Math.max(0, d - 1) },
+    { desc: "受击 -4。", stat: "-4 受击",
+      onTakeDamage: (_c, d) => Math.max(0, d - 4) },
+    { desc: "受击 -5。", stat: "-5 受击",
+      onTakeDamage: (_c, d) => Math.max(0, d - 5) },
+    { desc: "受击 -7。", stat: "-7 受击",
+      onTakeDamage: (_c, d) => Math.max(0, d - 7) },
+    { desc: "受击 -9。", stat: "-9 受击",
+      onTakeDamage: (_c, d) => Math.max(0, d - 9) },
   ],
 };
 
@@ -807,23 +804,19 @@ const FULL_PLATE: CardDef = {
   id: "full_plate",
   name: "重铠",
   category: "equipment",
-  desc: "装备：受击 -5，但出攻击伤害 -2（笨重）。比重甲更极端。",
+  desc: "装备：受击 -5 / -7 / -9 / -12（叠加）。v5 去掉攻击 -2 副作用，纯减伤极致。",
   equipKind: "armor",
   equipSuit: "club",
   baseReduce: 5,
   equipEffects: [
-    { desc: "-5 受击，攻击 -2。", stat: "-5 受击 攻-2",
-      onTakeDamage: (_c, d) => Math.max(0, d - 5),
-      postAttack: (_c, d) => Math.max(0, d - 2) },
-    { desc: "-7 受击，攻击 -2。", stat: "-7 受击 攻-2",
-      onTakeDamage: (_c, d) => Math.max(0, d - 7),
-      postAttack: (_c, d) => Math.max(0, d - 2) },
-    { desc: "-9 受击，攻击 -2。", stat: "-9 受击 攻-2",
-      onTakeDamage: (_c, d) => Math.max(0, d - 9),
-      postAttack: (_c, d) => Math.max(0, d - 2) },
-    { desc: "-12 受击，攻击 -2。", stat: "-12 受击 攻-2",
-      onTakeDamage: (_c, d) => Math.max(0, d - 12),
-      postAttack: (_c, d) => Math.max(0, d - 2) },
+    { desc: "-5 受击。", stat: "-5 受击",
+      onTakeDamage: (_c, d) => Math.max(0, d - 5) },
+    { desc: "-7 受击。", stat: "-7 受击",
+      onTakeDamage: (_c, d) => Math.max(0, d - 7) },
+    { desc: "-9 受击。", stat: "-9 受击",
+      onTakeDamage: (_c, d) => Math.max(0, d - 9) },
+    { desc: "-12 受击。", stat: "-12 受击",
+      onTakeDamage: (_c, d) => Math.max(0, d - 12) },
   ],
 };
 
@@ -960,15 +953,7 @@ const SK_AEGIS: CardDef = {
   },
 };
 
-const SK_CHARGE: CardDef = {
-  id: "sk_charge", name: "蓄力", category: "skill", target: "self",
-  desc: "本回合 + 下回合都无法出攻击牌，但之后下次攻击 ×2.5（nerf：×3 → ×2.5）。",
-  onPlay: (c) => {
-    addStatus(c.player, "no_attack", "蓄力中", 1, 2);
-    addStatus(c.player, "charged", "已蓄力", 1, -1);
-    c.log("蓄力中（2 回合不能攻击）。", "player");
-  },
-};
+// sk_charge 蓄力 — v5 直接删除（×2.5 + 2 回合 cost 在 1 攻/回规则下数学负值）
 
 const SK_WEAKENING_BOLT: CardDef = {
   id: "sk_weakening_bolt", name: "虚弱箭", category: "skill", target: "single",
@@ -996,12 +981,12 @@ const SK_COUNTER_STANCE: CardDef = {
 
 const SK_BLAST: CardDef = {
   id: "sk_blast", name: "爆裂术", category: "skill", target: "single",
-  desc: "自损 5% 生命上限，对目标造成其当前 HP 30% 的直接伤害。",
+  desc: "自损 5% 生命上限，对目标造成其当前 HP 20% 的直接伤害。",
   onPlay: (c) => {
     const selfDmg = Math.max(1, Math.round(c.player.vitaMax * 0.05));
     c.player.vita = Math.max(0, c.player.vita - selfDmg);
     c.log(`爆裂术：自损 ${selfDmg} HP（5% 上限）。`, "player");
-    const enemyDmg = Math.max(1, Math.round(c.target.hp * 0.30));
+    const enemyDmg = Math.max(1, Math.round(c.target.hp * 0.20));  // v5 nerf：30% → 20%
     dealDirectDamage(c, c.target, enemyDmg);
   },
 };
@@ -1445,19 +1430,21 @@ const PERK_ARMOR_BREAK: CardDef = {
 // Epic 武器 1：王者之剑 — 顶级输出，无视护甲，全攻击 +30%
 const EXCALIBUR: CardDef = {
   id: "excalibur", name: "王者之剑", category: "equipment",
-  desc: "基础 10，无视全部护甲，攻击 +30%。",
+  desc: "基础 10，破甲 = ⌈目标护甲 × 70%⌉（自适应），攻击 +30%。",
   equipKind: "weapon",
   equipSuit: "spade",
   baseDmg: 10,
-  pierce: 99,
+  // v5 nerf：原 pierce 99（永远无视所有 armor）→ 改为动态 70% armor（boss armor 还剩 30%）
+  // 实际 pierce 在 battle.ts calcAttackDamage 里特判（同 raider 模式）
+  pierce: 0,
   equipEffects: [
-    { desc: "基础 10，无视护甲，攻击 +30%。", stat: "10 伤 破甲 攻+30%",
+    { desc: "基础 10，破甲 70% armor，攻击 +30%。", stat: "10 伤 破70% 攻+30%",
       onAttack: (_c, d) => Math.round(d * 1.30) },
-    { desc: "叠加 ×1.4。", stat: "14 伤 破甲 攻+30%",
+    { desc: "叠加 ×1.4。", stat: "14 伤 破70% 攻+30%",
       onAttack: (_c, d) => Math.round(d * 1.30) },
-    { desc: "叠加 ×1.8。", stat: "18 伤 破甲 攻+30%",
+    { desc: "叠加 ×1.8。", stat: "18 伤 破70% 攻+30%",
       onAttack: (_c, d) => Math.round(d * 1.30) },
-    { desc: "叠加 ×2.2。", stat: "22 伤 破甲 攻+30%",
+    { desc: "叠加 ×2.2。", stat: "22 伤 破70% 攻+30%",
       onAttack: (_c, d) => Math.round(d * 1.30) },
   ],
 };
@@ -1872,7 +1859,6 @@ export const CARD_DB: Record<string, CardDef> = {
   sk_rend: SK_REND,
   sk_focus: SK_FOCUS,
   sk_aegis: SK_AEGIS,
-  sk_charge: SK_CHARGE,
   sk_weakening_bolt: SK_WEAKENING_BOLT,
   sk_shadow_strike: SK_SHADOW_STRIKE,
   sk_quick_draw: SK_QUICK_DRAW,
@@ -2051,7 +2037,7 @@ export const REWARD_CARD_POOL_BASE = [
   // 单体技能（24 = 22 + 风步 + 穿甲射）
   "sk_poison_blade", "sk_battle_cry", "sk_evasive", "sk_frenzy",
   "sk_silence", "sk_freeze", "sk_rend", "sk_focus",
-  "sk_aegis", "sk_charge", "sk_weakening_bolt", "sk_shadow_strike",
+  "sk_aegis", "sk_weakening_bolt", "sk_shadow_strike",  // sk_charge v5 删除
   "sk_quick_draw", "sk_counter_stance", "sk_blast", "sk_dbl_pummel",
   "sk_dye", "sk_attune", "sk_recolor", "sk_chant",
   "sk_curse_blood", "sk_rhythm", "sk_time_stop",
