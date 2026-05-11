@@ -95,6 +95,164 @@ const repeating_bow = icf(`
   <polygon points="31,18 26,15 26,21" fill="currentColor" stroke="none"/>
 `);
 
+// EPIC 武器（先前没有 icon，会回退到通用 equipment 盾牌 → 视觉错位）
+
+// 王者之剑：双锋长剑 + 顶部三尖王冠 + 剑柄宝石
+const excalibur = icf(`
+  <line x1="18" y1="6" x2="18" y2="28" stroke-width="2.4"/>
+  <polyline points="14,9 18,5 22,9" stroke-width="1.6"/>
+  <line x1="12" y1="26" x2="24" y2="26" stroke-width="2"/>
+  <line x1="14" y1="29" x2="22" y2="29" stroke-width="1.6"/>
+  <circle cx="18" cy="32" r="2" fill="currentColor" stroke="none"/>
+  <polyline points="10,11 13,8 13,14" stroke-width="1.4"/>
+  <polyline points="26,11 23,8 23,14" stroke-width="1.4"/>
+  <polyline points="15,7 18,4 21,7" stroke-width="1.4"/>
+  <circle cx="18" cy="14" r="1.4" fill="currentColor" stroke="none"/>
+`);
+
+// 天命之刃：稍弯的太刀 + 顶部星芒（天命）
+const divine_blade = icf(`
+  <path d="M9 30 Q14 22 22 12 Q26 8 28 6" stroke-width="2.4"/>
+  <line x1="12" y1="22" x2="6" y2="28" stroke-width="1.8"/>
+  <circle cx="6" cy="30" r="2" fill="currentColor" stroke="none"/>
+  <polyline points="22,4 24,7 27,5 25,8 28,10 25,11 27,14 24,12 23,15 22,12 19,13 21,10 19,7 22,8 Z" stroke-width="1.3"/>
+`);
+
+// 血裂刃：直剑 + 剑身血滴
+const blood_blade = icf(`
+  <line x1="8" y1="28" x2="26" y2="10" stroke-width="2.2"/>
+  <line x1="12" y1="20" x2="6" y2="26"/>
+  <line x1="20" y1="12" x2="26" y2="6"/>
+  <circle cx="6" cy="30" r="2" fill="currentColor" stroke="none"/>
+  <circle cx="16" cy="20" r="1.6" fill="currentColor" stroke="none"/>
+  <circle cx="20" cy="16" r="1.2" fill="currentColor" stroke="none"/>
+  <circle cx="13" cy="24" r="1" fill="currentColor" stroke="none"/>
+`);
+
+// ── 流派资源补全 v2（9 张）icons ──
+
+// 飞镖 (♦ common 武器)：4 把小飞刀分散
+const flying_darts = icf(`
+  <line x1="5" y1="5" x2="14" y2="14" stroke-width="1.8"/>
+  <line x1="31" y1="5" x2="22" y2="14" stroke-width="1.8"/>
+  <line x1="5" y1="31" x2="14" y2="22" stroke-width="1.8"/>
+  <line x1="31" y1="31" x2="22" y2="22" stroke-width="1.8"/>
+  <polygon points="14,14 12,12 12,16" fill="currentColor" stroke="none"/>
+  <polygon points="22,14 24,12 24,16" fill="currentColor" stroke="none"/>
+  <polygon points="14,22 12,20 12,24" fill="currentColor" stroke="none"/>
+  <polygon points="22,22 24,20 24,24" fill="currentColor" stroke="none"/>
+`);
+
+// 木盾杖 (♣ common 武器)：杖 + 顶部小盾
+const shield_staff = icf(`
+  <line x1="18" y1="14" x2="18" y2="32"/>
+  <line x1="13" y1="32" x2="23" y2="32"/>
+  <path d="M11 6 L25 6 L23 14 Q18 18 13 14 Z" stroke-width="1.8"/>
+  <line x1="18" y1="9" x2="18" y2="13" stroke-width="1.4"/>
+`);
+
+// 风刃 (♦ epic 武器)：弯曲风形剑刃
+const wind_blade = icf(`
+  <path d="M6 28 Q14 10 30 6" stroke-width="2.4"/>
+  <path d="M6 32 Q12 18 24 12" stroke-width="1.8" opacity="0.7"/>
+  <polyline points="22,11 26,8 24,14" stroke-width="1.4"/>
+  <circle cx="6" cy="30" r="2" fill="currentColor" stroke="none"/>
+`);
+
+// 永生之牙 (♥ epic 武器)：双弯獠牙 + 心形装饰
+const everlast_fang = icf(`
+  <path d="M12 6 Q10 18 14 28 Q16 22 16 14 Z" stroke-width="2"/>
+  <path d="M24 6 Q26 18 22 28 Q20 22 20 14 Z" stroke-width="2"/>
+  <path d="M18 16 Q14 12 16 8 Q18 12 18 14 Q18 12 20 8 Q22 12 18 16 Z" fill="currentColor" stroke="none"/>
+`);
+
+// 禁忌权杖 (♣ epic 武器)：法杖 + 顶端禁忌符号
+const forbidden_scepter = icf(`
+  <line x1="18" y1="16" x2="18" y2="32" stroke-width="2.4"/>
+  <line x1="12" y1="32" x2="24" y2="32"/>
+  <path d="M12 12 L24 12 L21 4 L15 4 Z" stroke-width="2"/>
+  <line x1="13" y1="8" x2="23" y2="8"/>
+  <circle cx="18" cy="10" r="1.6" fill="currentColor" stroke="none"/>
+`);
+
+// 战甲带 (♠ common 防具)：带状腰甲 + 中央纹饰
+const combat_belt = icf(`
+  <rect x="5" y="13" width="26" height="10" rx="2" stroke-width="2"/>
+  <line x1="5" y1="18" x2="31" y2="18"/>
+  <rect x="14" y="10" width="8" height="16" rx="1" stroke-width="1.6"/>
+  <line x1="18" y1="13" x2="18" y2="23"/>
+`);
+
+// 斩魂铠 (♠ super_rare 防具)：板甲 + 镰刀形纹
+const soulreaver_plate = icf(`
+  <path d="M10 8 L26 8 L24 28 Q18 32 12 28 Z" stroke-width="2.2"/>
+  <path d="M14 12 Q18 16 22 12" stroke-width="1.6"/>
+  <path d="M14 16 Q18 22 22 16" stroke-width="1.4"/>
+  <line x1="18" y1="20" x2="18" y2="24"/>
+  <circle cx="18" cy="24" r="1.6" fill="currentColor" stroke="none"/>
+`);
+
+// 不朽战甲 (♠ epic 防具)：环形铠 + 顶部星芒
+const immortal_plate = icf(`
+  <path d="M9 8 L27 8 L25 28 Q18 32 11 28 Z" stroke-width="2.4"/>
+  <polyline points="14,4 18,8 22,4" stroke-width="1.4"/>
+  <line x1="18" y1="6" x2="18" y2="2" stroke-width="1.4"/>
+  <line x1="14" y1="14" x2="22" y2="14"/>
+  <line x1="14" y1="18" x2="22" y2="18"/>
+  <line x1="14" y1="22" x2="22" y2="22"/>
+`);
+
+// 生命囊 (♥ super_rare 防具)：药囊形 + 心形点缀
+const life_pouch = icf(`
+  <path d="M9 12 L27 12 L29 30 Q18 34 7 30 Z" stroke-width="2"/>
+  <line x1="13" y1="12" x2="13" y2="6" stroke-width="1.4"/>
+  <line x1="23" y1="12" x2="23" y2="6" stroke-width="1.4"/>
+  <line x1="13" y1="6" x2="23" y2="6"/>
+  <path d="M18 22 Q15 18 13 20 Q15 24 18 26 Q21 24 23 20 Q21 18 18 22 Z" fill="currentColor" stroke="none"/>
+`);
+
+// 幻影披风 (♦ epic 防具)：飘动披风轮廓
+const phantom_cloak = icf(`
+  <path d="M10 6 Q6 16 8 30 Q14 24 18 30 Q22 24 28 30 Q30 16 26 6 Q22 10 18 8 Q14 10 10 6 Z" stroke-width="2"/>
+  <path d="M14 10 Q12 16 14 24" stroke-width="1.4" opacity="0.7"/>
+  <path d="M22 10 Q24 16 22 24" stroke-width="1.4" opacity="0.7"/>
+`);
+
+// 破军：粗大弯刀 + 锯齿口
+const raider = icf(`
+  <path d="M8 30 Q18 24 28 8" stroke-width="2.6"/>
+  <polyline points="26,10 24,12 25,14 23,15 24,17 22,18 23,20" stroke-width="1.3"/>
+  <line x1="12" y1="26" x2="7" y2="31"/>
+  <circle cx="7" cy="32" r="2" fill="currentColor" stroke="none"/>
+`);
+
+// 流派资源补全：4 张新卡 icon
+// 吸血獠牙 (♥ rare)：弯曲尖牙 + 血滴
+const vampire_fang = icf(`
+  <path d="M14 6 Q14 20 18 28 Q22 20 22 6 Z" stroke-width="2"/>
+  <line x1="10" y1="6" x2="26" y2="6" stroke-width="2"/>
+  <circle cx="18" cy="32" r="2" fill="currentColor" stroke="none"/>
+  <circle cx="15" cy="31" r="1" fill="currentColor" stroke="none"/>
+  <circle cx="21" cy="31" r="1" fill="currentColor" stroke="none"/>
+`);
+
+// 生机长杖 (♥ super_rare)：长杖 + 顶部叶芽 / 心形
+const lifebloom_staff = icf(`
+  <line x1="18" y1="14" x2="18" y2="32" stroke-width="2.2"/>
+  <line x1="12" y1="32" x2="24" y2="32"/>
+  <path d="M18 14 Q12 9 15 5 Q18 8 18 12" stroke-width="1.6"/>
+  <path d="M18 14 Q24 9 21 5 Q18 8 18 12" stroke-width="1.6"/>
+  <circle cx="18" cy="9" r="2.5" fill="currentColor" stroke="none"/>
+`);
+
+// 骑士铠 (♠ rare)：胸甲 + 十字星
+const knight_plate = icf(`
+  <path d="M10 8 L26 8 L24 28 Q18 32 12 28 Z" stroke-width="2.2"/>
+  <line x1="18" y1="12" x2="18" y2="24" stroke-width="1.6"/>
+  <line x1="13" y1="18" x2="23" y2="18" stroke-width="1.6"/>
+  <circle cx="18" cy="18" r="2" fill="currentColor" stroke="none"/>
+`);
+
 // ─────────────────────────────────────────────────────────
 // 防具
 // ─────────────────────────────────────────────────────────
@@ -164,6 +322,13 @@ const mind_armor = icf(`
   <circle cx="18" cy="18" r="2" fill="currentColor" stroke="none"/>
   <line x1="18" y1="6" x2="18" y2="4"/>
   <line x1="25" y1="9" x2="27" y2="7"/>
+`);
+
+// 不灭之心（EPIC ♥ armor）：心形 + 内部跳动光点
+const undying_heart = icf(`
+  <path d="M18 32 C8 24 4 18 6 12 C8 6 14 6 18 12 C22 6 28 6 30 12 C32 18 28 24 18 32 Z" stroke-width="2"/>
+  <circle cx="18" cy="18" r="3" fill="currentColor" stroke="none"/>
+  <path d="M14 16 Q18 14 22 16" stroke-width="1.4"/>
 `);
 
 // ─────────────────────────────────────────────────────────
@@ -369,6 +534,14 @@ const sk_chroma_wave = ic(`
   <path d="M4 22 Q10 14 18 22 Q26 30 32 22"/>
 `);
 
+// 众神之怒（EPIC skill）：天空裂开 + 闪电劈下
+const sk_wrath = icf(`
+  <path d="M4 8 L10 12 L8 18 L14 20 L11 26 L16 28 L13 33" stroke-width="2.4"/>
+  <polyline points="22,4 26,12 22,12 28,22 23,22 30,32" stroke-width="2.2"/>
+  <line x1="6" y1="4" x2="14" y2="4" stroke-width="1.4"/>
+  <line x1="22" y1="6" x2="32" y2="6" stroke-width="1.4"/>
+`);
+
 // ─────────────────────────────────────────────────────────
 // 道具
 // ─────────────────────────────────────────────────────────
@@ -411,6 +584,14 @@ const it_elixir = icf(`
   <line x1="14" y1="4" x2="22" y2="4"/>
   <circle cx="18" cy="22" r="5" fill="currentColor" fill-opacity="0.4"/>
   <line x1="18" y1="10" x2="18" y2="15"/>
+`);
+
+// 复读机（EPIC item）：两个重叠的回环箭头
+const it_echo = icf(`
+  <path d="M8 14 Q8 6 18 6 Q28 6 28 14" stroke-width="2"/>
+  <polyline points="28,14 28,9 33,12" stroke-width="1.6"/>
+  <path d="M28 22 Q28 30 18 30 Q8 30 8 22" stroke-width="2"/>
+  <polyline points="8,22 8,27 3,24" stroke-width="1.6"/>
 `);
 
 // ─────────────────────────────────────────────────────────
@@ -539,9 +720,18 @@ const CARD_ICONS: Record<string, string> = {
   // 武器
   short_sword, long_sword, dagger, war_bow, twin_blades, warhammer,
   battle_staff, chain_whip, berserker_blade, wizard_staff, repeating_bow,
+  // 新加武器 + EPIC 武器（之前漏 → 回退到通用 equipment 盾牌图标）
+  raider, blood_blade, excalibur, divine_blade,
+  // 流派资源补全 4 张
+  vampire_fang, lifebloom_staff, knight_plate,
+  // 流派资源补全 v2 (10 张)
+  flying_darts, shield_staff, wind_blade, everlast_fang, forbidden_scepter,
+  combat_belt, soulreaver_plate, immortal_plate, life_pouch, phantom_cloak,
   // 防具
   round_shield, leather_armor, spike_armor, heavy_armor, mage_robe,
   cloak, full_plate, scale_mail, mind_armor,
+  // EPIC 防具
+  undying_heart,
   // 技能
   sk_poison_blade, sk_battle_cry, sk_frenzy, sk_evasive, sk_silence,
   sk_freeze, sk_rend, sk_focus, sk_aegis, sk_charge, sk_weakening_bolt,
@@ -549,8 +739,12 @@ const CARD_ICONS: Record<string, string> = {
   sk_dbl_pummel, sk_dye, sk_attune,
   sk_chain_bolt, sk_fire_wall, sk_shockwave, sk_group_curse, sk_sonic,
   sk_mass_weak, sk_lightning, sk_curse_vortex, sk_chroma_wave,
+  // EPIC 技能
+  sk_wrath,
   // 道具
   it_heal, it_purify, it_whetstone, it_regroup, it_bomb, it_elixir,
+  // EPIC 道具
+  it_echo,
   // 特性
   p_bleed, p_dodge, p_regen, p_crit, p_tough, p_vampire, p_thorns,
   p_iron_will, p_lifetap, p_overload, p_executioner, p_resonance, p_coldblood,

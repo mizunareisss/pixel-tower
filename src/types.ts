@@ -20,30 +20,30 @@ export const SUIT_TIER_NAMES: Record<Suit, { tier1: string; tier2: string; tier3
   club:    { tier1: "魔法庇护", tier2: "护体真言", tier3: "禁咒蓄能", ult: "群体禁咒" },
 };
 
-// 各档与大招的具体效果描述
+// 各档与大招的具体效果描述（v3 强化版 — 花色构筑 fantasy 才能立稳）
 export const SUIT_TIER_DESCS: Record<Suit, { tier1: string; tier2: string; tier3: string; ult: string }> = {
   spade: {
-    tier1: "攻击 +5%；额外 5% 概率暴击 ×2。",
-    tier2: "破甲 +当前楼层数。",
-    tier3: "可释放大招（消耗 10 亲和）。",
+    tier1: "攻击 +10%；额外 5% 概率暴击 ×2；激活『锐利』keyword — 所有 ♠ 攻击 +1 pierce。",
+    tier2: "破甲 +⌈楼层/3⌉（F3=1 / F12=4）；真伤 +3。",
+    tier3: "可释放大招（消耗 8 亲和）。",
     ult: "对当前目标造成其当前 HP 50% 的真实伤害（无视护甲）。",
   },
   diamond: {
-    tier1: "闪避 +5%；受击反弹 +2 伤害。",
-    tier2: "攻击 35% 概率额外 +1 hit。",
-    tier3: "可释放大招（消耗 10 亲和）。",
+    tier1: "闪避 +8%；受击反弹 +3 伤害；激活『迅捷』keyword — 所有 ♦ 攻击 25% 概率额外 +1 hit（与 T2 叠加）。",
+    tier2: "攻击 40% 概率额外 +1 hit（叠加 ♦ 迅捷）；+3 破甲。",
+    tier3: "可释放大招（消耗 8 亲和）。",
     ult: "本回合敌人攻击全部闪避，下次攻击 hits ×3。",
   },
   heart: {
-    tier1: "每回合开始 +1 HP；攻击吸血 5%。",
-    tier2: "HP <50% 受击 -30%；HP <25% 攻击 +25%。",
-    tier3: "可释放大招（消耗 10 亲和）。",
+    tier1: "每回合开始 +2 HP；攻击吸血 8%；激活『贪婪』keyword — 所有 ♥ 攻击 + ♥ 装备 吸血 +5%。",
+    tier2: "HP <50% 受击 -35%；HP <25% 攻击 +30%。",
+    tier3: "可释放大招（消耗 8 亲和）。",
     ult: "HP 回满，永久 maxHP +5。",
   },
   club: {
-    tier1: "受击 -1。",
-    tier2: "受击再 -2（共 -3）。",
-    tier3: "可释放大招（消耗 10 亲和）。",
+    tier1: "受击 -2；激活『守序』keyword — 每出 1 张 ♣ 牌本回合 +1 临时护盾。",
+    tier2: "受击再 -3（共 -5）。",
+    tier3: "可释放大招（消耗 8 亲和）。",
     ult: "对全体敌人 +3 沉默 +3 易伤 +3 中毒。",
   },
 };
@@ -174,6 +174,11 @@ export const STATUS_META: Record<string, StatusMeta> = {
   enc_runic_immune:  { name: "符文护盾", desc: "本场战斗第 1 次受击免疫（由符文护盾附魔提供）。", kind: "buff" },
   enc_dot_immune:    { name: "圣化", desc: "中毒 / 燃烧 / 出血对你无效（由符文护盾附魔提供）。", kind: "buff" },
   warblood_perm_atk: { name: "血誓积累", desc: "本场战斗：每损 10% maxHP，攻击 +1（cap +5，由战狂血誓附魔触发）。", kind: "buff" },
+  // 新加装备触发的 status（v2 流派资源补全）
+  knight_charge:     { name: "骑士充能", desc: "受击充能：下次攻击 +N 直伤（N 由骑士铠 stack 决定，骑士铠 cap 5 stack）。", kind: "buff" },
+  scepter_clubs:     { name: "禁忌权杖蓄势", desc: "本回合已出 ♣ 牌数（攻击/技能/道具/装备均计入）。本回合内攻击伤害 += stacks × (N 由禁忌权杖 stack 决定，1/2/2/3)。", kind: "buff" },
+  took_damage_turn:  { name: "本回合受伤", desc: "（内部状态，玩家无需关注）本回合受到过伤害，用于附魔机制末段判断。", kind: "neutral" },
+  calc_charge:       { name: "法术蓄能", desc: "本回合已出非攻击牌数。配合法师杖 / 算计附魔 / 凝神附魔 / 奥术爆裂 → 下次攻击 +X 直伤。", kind: "buff" },
 };
 
 // ── 敌人种族 ──────────────────────────────────────────────
@@ -320,6 +325,7 @@ export interface BattleContext {
   log: (msg: string, kind?: LogKind) => void;
   attackSuit?: Suit;         // 当前打出的攻击牌花色（用于伤害公式）
   slotScale: number;         // 武器叠加倍率（计算时设置）
+  floor: number;             // 当前楼层，用于技能/道具数值缩放
 }
 
 // ── 装备效果 / 特性效果（4 级叠加） ─────────────────────
@@ -427,8 +433,13 @@ export interface PlayerState {
   // 装备保底：连续未在 reward_card 拿到装备的场次，达 3 次下场必出装备
   battlesSinceEquipReward?: number;
 
-  // 花色专精大招的整局使用次数（跨战斗保留；目前仅 ♥ 生命洪流限 3 次）
+  // 花色专精大招的整局使用次数（跨战斗保留；4 花色都限 3 次）
   ultsUsed?: Record<Suit, number>;
+
+  // EPIC 临时装备机制：装备 EPIC 武器/防具时把当前装备暂存到 backup，
+  // EPIC 用尽（3 次）后自动恢复 backup。比"替换 modal"更灵活，玩家不丢原装备
+  tempWeaponBackup?: CardInstance[];
+  tempArmorBackup?: CardInstance[];
 }
 
 // ── 敌人 ──────────────────────────────────────────────────
@@ -442,6 +453,24 @@ export interface EnemyIntent {
   debuffName?: string;
   debuffDuration?: number;    // -1 表示由 stacks 自衰减（如中毒），>0 表示固定回合
 }
+
+// Boss AI 流派 ID（5 基础 + 5 复合 + 1 演化）
+// 隐式行为，无视觉提示；玩家只能通过观察 boss 招式偏好推断
+export type BossAIId =
+  // 基础（5）
+  | "berserker"        // 狂战士：HP 越低越猛
+  | "hunter"           // 猎手：看玩家 HP 切策略
+  | "builder"          // 构筑者：前堆 buff 后爆发
+  | "healer"           // 医者：慢性 dot 耗死
+  | "reactor"          // 报复者：隐式 react
+  // 复合（5）
+  | "dual_berserk"     // 双面狂战 = 狂战 + 构筑
+  | "cold_hunter"      // 冷血猎手 = 猎手 + 医者
+  | "fake_builder"     // 假动作构筑 = 构筑 + 报复（30% 假动作）
+  | "unstoppable_healer" // 不朽医者 = 医者 + 狂战
+  | "necro_hunter"     // 死灵猎手 = 报复 + 猎手 + 医者（三流派）
+  // F12 专属
+  | "evolving";        // 演化型 = 3 阶段切复合流派
 
 export interface EnemyState {
   id: string;
@@ -460,6 +489,16 @@ export interface EnemyState {
   eliteAbility?: string;    // 精英特能名称（显示用）
   // 共鸣咒：保存原始花色，4 回合后回归
   originalSuit?: Suit;
+  // Boss AI 行为流派（精英 + boss 装备），普通敌人不带；详见 bossAI.ts
+  ai?: BossAIId;
+  // AI 内部状态机（如演化型当前 phase、累积怒火 stack 等），对玩家不可见
+  aiState?: {
+    phase?: number;          // 当前阶段（演化型用）
+    lastPlayerDmg?: number;  // 上回合玩家输出（报复者用）
+    lastPlayerBuffs?: number; // 上回合玩家上的 buff 数（报复者用）
+    turnCount?: number;      // 战斗回合计数（构筑者用，前 N 回合堆 buff）
+    flavorShownPhases?: number[]; // 已显示过 flavor log 的 phase（避免重复）
+  };
 }
 
 // ── 战斗状态 ──────────────────────────────────────────────
@@ -476,6 +515,12 @@ export interface BattleState {
   pendingSuitPick?: string;     // 等待玩家手选花色的动作 ("dye" | "resonance")
   floor: number;                // 当前楼层（calcAttackDamage 里的 sharp 附魔需要）
   pendingDodgeFx?: number;      // 待播放的闪避动效次数（main.ts 渲染时消费）
+
+  // 战斗开始时的骰子先手机制：roll 1d6，单数玩家先手 / 双数敌人先手
+  // diceRoll 由 game.ts startNodeBattle 设置；main.ts 渲染时显示骰子动画
+  diceRoll?: number;            // 1-6 骰子点数
+  enemyFirst?: boolean;         // true = 敌人先手（diceRoll 为偶数）
+  diceAnimationShown?: boolean; // main.ts 标记是否已播过骰子动画（避免重复）
 
   // 花色专精：玩家手动指定的激活花色（仅在多花色亲和度并列时有效）
   activeSpecialtyOverride?: Suit;

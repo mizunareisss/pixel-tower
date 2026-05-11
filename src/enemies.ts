@@ -270,7 +270,7 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
   // HP
   let hp = baseHpForFloor(opts.floor) * RACE_HP_MULT[race];
   if (tier === "elite") hp *= 1.40;  // 之前 ×1.6
-  if (tier === "boss")  hp *= 2.20;  // 之前 ×2.60；模拟器显示 F3 死亡率 62%，再砍 15%
+  if (tier === "boss")  hp *= 2.00;  // 之前 ×2.20；2000 局 sim 显示 F3 死亡率仍 58.7% / F6 54.6%，再砍 10%
   if (opts.groupSize && opts.groupSize > 1) {
     hp = hp / (1 + (opts.groupSize - 1) * 0.5);
   }
@@ -324,6 +324,26 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
     ? Math.floor(Math.random() * intents.length)
     : 0;
 
+  // Boss AI 分配（隐式行为）— 按楼层 + tier 梯度
+  // 普通敌人：无 AI（保留 telegraph + 简单循环招式）
+  // 精英 / Boss：装备对应 AI 流派
+  let ai: import("./types.ts").BossAIId | undefined;
+  if (tier === "elite") {
+    if (opts.floor <= 5) ai = undefined;          // F1-5 精英不带 AI（前期热身）
+    else if (opts.floor <= 8) ai = "berserker";   // F6-8 精英简版「狂战士」
+    else if (opts.floor <= 10) ai = "dual_berserk"; // F9-10 精英复合「双面狂战」
+    else if (opts.floor === 11) ai = "cold_hunter"; // F11 精英复合「冷血猎手」
+    else ai = "necro_hunter";                      // F12+ 精英复合「死灵猎手」
+  } else if (tier === "boss") {
+    // F3/F6 普通 boss：基础 AI（每场随机一种，避免单调）
+    if (opts.floor <= 3) {
+      ai = ["berserker", "hunter", "builder"][Math.floor(Math.random() * 3)] as import("./types.ts").BossAIId;
+    } else if (opts.floor <= 6) {
+      ai = ["berserker", "hunter", "builder", "healer"][Math.floor(Math.random() * 4)] as import("./types.ts").BossAIId;
+    }
+    // F9 / F12 boss 由 buildFixedBoss 单独覆写
+  }
+
   return {
     id: newEnemyId(name),
     name,
@@ -339,6 +359,7 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
     weaponMult: wm,
     tier,
     eliteAbility,
+    ai,
   };
 }
 
@@ -379,31 +400,31 @@ export function buildFixedBoss(floor: number): EnemyState | null {
   if (floor === 9) {
     const e = buildRandomEnemy({
       floor, tier: "boss", race: "undead",
-      hpMultOverride: 1.6,  // 比普通 boss × 1.6
+      hpMultOverride: 1.55,  // v5：1.30 → 1.55（曲线增厚，配合真人最优 build 大幅碾压 boss 的问题）
     });
     e.name = "亡灵之主 · 不朽君王";
     e.weaponMult = 1.2;
-    // 招式池全开（6 招 undead 全用），招式开始位置随机
     e.intents = generateAllIntents("undead", floor, "boss");
     e.intentIndex = Math.floor(Math.random() * e.intents.length);
+    e.ai = "unstoppable_healer";  // F9 boss：复合「不朽医者」(dot 越 HP 低越浓)
     return e;
   }
   if (floor === 12) {
     const e = buildRandomEnemy({
       floor, tier: "boss", race: "dark",
-      hpMultOverride: 2.0,  // 比普通 boss × 2
+      hpMultOverride: 1.85,  // v5：1.40 → 1.85（曲线增厚，让 F12 boss 真人最强 build 也需要 12+ 刀）
     });
     e.name = "无相之主 · 终末注视";
     e.weaponMult = 1.3;
-    // 招式池全开（7 招 dark） + 追加一招"终末注视"（极重击）
     const baseIntents = generateAllIntents("dark", floor, "boss");
     baseIntents.push({
       type: "attack",
-      value: Math.max(1, Math.round(scaleAttack(14, floor, "boss") * 1.3)),
+      value: Math.max(1, Math.round(scaleAttack(10, floor, "boss") * 1.1)),
       desc: "终末注视（极重击）",
     });
     e.intents = baseIntents;
     e.intentIndex = Math.floor(Math.random() * e.intents.length);
+    e.ai = "evolving";  // F12 终末三式：3 阶段切复合流派 + flavor log
     return e;
   }
   return null;

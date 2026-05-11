@@ -10,6 +10,7 @@ import {
   gamePlayCard,
   gameSelectTarget,
   gameEndTurn,
+  gameEnemyFirstStrike,
   gameDiscardWeapons,
   gameDiscardArmors,
   pickRewardCard,
@@ -165,11 +166,13 @@ function render() {
       && state.phase !== "suit_pick") {
     playBattleExitAnimation();
     _battleExitInFlight = true;
+    // 时序：0ms 敌人销毁开始 → 220ms 胜利 banner 入场 → 480ms 手牌收回开始
+    //       → 880ms banner 淡出 → 1050ms render reward_card
     setTimeout(() => {
       _battleExitInFlight = false;
-      _prevPhase = state.phase; // 标记 phase 已过渡
+      _prevPhase = state.phase;
       render();
-    }, 560); // 敌人 ~440ms + 手牌 ~280ms (含 delay) 略让最后一帧落定
+    }, 1050);
     return;
   }
   if (_battleExitInFlight) return;
@@ -260,6 +263,21 @@ function render() {
     document.querySelectorAll<HTMLElement>("#active .hand-card")
       .forEach(el => el.classList.add("is-dealing"));
     document.getElementById("player-card")?.classList.add("is-entering");
+
+    // 战斗开始骰子先手动画：roll 1d6，单数玩家先手 / 双数敌人先手
+    // 入场动画后 800ms 出骰子（避免视觉冲突），骰子动画 1.6s
+    // 注：先放一个占位"骰子锁"全屏阻止玩家在 800ms 等待期间出牌/操作
+    if (state.battle?.diceRoll && !state.battle.diceAnimationShown) {
+      state.battle.diceAnimationShown = true;
+      const lock = document.createElement("div");
+      lock.id = "dice-lock";
+      lock.style.cssText = "position:fixed;inset:0;z-index:9499;pointer-events:auto;background:transparent;";
+      document.body.appendChild(lock);
+      setTimeout(() => {
+        lock.remove();
+        showDiceRoll(state.battle!.diceRoll!);
+      }, 800);
+    }
   }
 
   _prevVita = snapVita;
@@ -268,18 +286,93 @@ function render() {
   _prevPhase = state.phase;
 }
 
-// 战斗出场动画：敌人卡随机三种销毁方式 + 玩家手牌飞向右下牌库
+// 战斗开始骰子先手动画：1.6s 翻滚 + 显示结果
+// 单数玩家先手 / 双数敌人先手；播完后如果是敌人先手则触发 gameEnemyFirstStrike
+function showDiceRoll(finalRoll: number): void {
+  document.getElementById("dice-overlay")?.remove();
+  const enemyFirst = finalRoll % 2 === 0;
+  const overlay = document.createElement("div");
+  overlay.id = "dice-overlay";
+  overlay.innerHTML = `
+    <div class="dice-container">
+      <div class="dice-3d-mount"></div>
+      <div class="dice-result" style="display:none">
+        <div class="dr-num">${finalRoll}</div>
+        <div class="dr-side ${enemyFirst ? "enemy" : "player"}">${enemyFirst ? "敌 人 先 手" : "你 先 手"}</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const mount = overlay.querySelector(".dice-3d-mount") as HTMLElement;
+
+  // 用 Three.js 渲染真 3D 骰子（dice3d.ts）
+  // 翻滚 700ms → ease-out cubic 衰减到最终面
+  import("./dice3d.ts").then(({ rollDice3D }) => {
+    const handle = rollDice3D({
+      container: mount,
+      finalRoll,
+      duration: 700,
+      size: 160,
+      onComplete: () => {
+        // 翻滚完成后 250ms 显示结果文字
+        setTimeout(() => {
+          const r = overlay.querySelector(".dice-result") as HTMLElement | null;
+          if (r) r.style.display = "flex";
+        }, 200);
+        // 750ms 淡出 + 触发敌人先手（如果是双数）
+        setTimeout(() => {
+          overlay.classList.add("fade-out");
+          handle.dispose();
+          setTimeout(() => overlay.remove(), 240);
+          if (enemyFirst) {
+            gameEnemyFirstStrike(state);
+            render();
+          }
+        }, 750);
+      },
+    });
+  });
+}
+
+// 战斗出场动画 — 分三阶段，节奏感更强，玩家能看清"击杀"
+//   阶段 A (0-440ms)：敌人卡随机销毁方式（烧毁/撕毁/炸碎）
+//   阶段 B (220ms 起)：大胜利 banner 浮出
+//   阶段 C (480ms 起)：玩家手牌飞向右下牌库 + 玩家卡左滑淡出
+//   阶段 D (880ms 起)：banner 淡出
 function playBattleExitAnimation() {
+  // 阶段 A：敌人立即销毁
   const exitClasses = ["exit-burn", "exit-tear", "exit-shatter"];
   document.querySelectorAll<HTMLElement>("#enemies-row .enemy-card").forEach(el => {
-    // 死敌人也一起销毁掉（视觉一致），但已死的不再加 grayscale 转换
     const pick = exitClasses[Math.floor(Math.random() * exitClasses.length)];
     el.classList.add(pick);
   });
-  document.querySelectorAll<HTMLElement>("#active .hand-card").forEach(el => {
-    el.classList.add("is-collecting");
-  });
-  document.getElementById("player-card")?.classList.add("is-exiting");
+
+  // 阶段 B：220ms 后展示胜利 banner
+  setTimeout(() => {
+    document.getElementById("victory-banner-overlay")?.remove();
+    const banner = document.createElement("div");
+    banner.id = "victory-banner-overlay";
+    banner.innerHTML = `
+      <div class="vb-inner">
+        <div class="vb-sub">★ ★ ★</div>
+        <div class="vb-title">胜 利</div>
+        <div class="vb-sub">VICTORY</div>
+      </div>
+    `;
+    document.body.appendChild(banner);
+    // 880ms 时让 banner 淡出，1050ms 自动移除
+    setTimeout(() => banner.classList.add("vb-fade"), 660);
+    setTimeout(() => banner.remove(), 850);
+  }, 220);
+
+  // 阶段 C：480ms 后开始手牌收回 + 玩家卡淡出
+  setTimeout(() => {
+    document.querySelectorAll<HTMLElement>("#active .hand-card").forEach(el => {
+      el.classList.add("is-collecting");
+    });
+    document.getElementById("player-card")?.classList.add("is-exiting");
+  }, 480);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -676,7 +769,7 @@ function renderBattle() {
   const battle = state.battle;
 
   const hpPct = Math.round(state.player.vita / state.player.vitaMax * 100);
-  const dodgePct = getCurrentDodgeChance(state.player);
+  const dodgePct = getCurrentDodgeChance(state.player, battle);
   const dodgeChip = dodgePct > 0
     ? `<span class="pcard-dodge-chip" title="闪避概率 ${dodgePct}%">🎯${dodgePct}%</span>`
     : "";
@@ -707,6 +800,21 @@ function renderBattle() {
   const row = $("enemies-row");
   for (let i = 0; i < battle.enemies.length; i++) {
     row.appendChild(renderEnemy(battle.enemies[i], i));
+  }
+
+  // F12 boss flavor log — evolving AI 切 phase 时显示文字（一次性）+ banner flash
+  for (const e of battle.enemies) {
+    if (e.ai === "evolving" && e.alive) {
+      import("./bossAI.ts").then(({ getF12FlavorLog }) => {
+        const flavor = getF12FlavorLog(e);
+        if (flavor) {
+          // 加到 log（玩家可以回看）
+          state.log.push({ msg: `★ ${flavor}`, kind: "win" });
+          // 短暂 banner flash
+          showPhaseFlash(flavor);
+        }
+      });
+    }
   }
 
   // 大招按钮绑定（含 v3 悬浮版 + legacy）
@@ -753,13 +861,44 @@ function renderBattle() {
   }
 
   // Player card — status row
+  // 隐藏内部状态：took_damage_turn / 类似 marker 玩家不关心的内部 flag
+  const HIDDEN_STATUSES = new Set([
+    "took_damage_turn", "busi_triggered", "chanted_used",
+  ]);
   const ps = $("pcard-statuses");
-  if (state.player.statuses.length === 0) {
+  const visibleStatuses = state.player.statuses.filter(s => !HIDDEN_STATUSES.has(s.id));
+  if (visibleStatuses.length === 0) {
     ps.innerHTML = '<span class="status-empty">—</span>';
   } else {
-    ps.innerHTML = state.player.statuses.map(s => renderStatusTag(s)).join("");
+    ps.innerHTML = visibleStatuses.map(s => renderStatusTag(s)).join("");
   }
 
+  // 花色专精激活的 keyword chip — 加在状态栏开头
+  // 显示当前激活花色 + tier + keyword 名（点击展开详情）
+  const activeSuit = getActiveSpecialty(battle);
+  if (activeSuit) {
+    const tier = suitTier(battle, activeSuit);
+    if (tier >= 1) {
+      const chips: string[] = [];
+      // 4 花色 keyword 名映射
+      const keywordNames: Record<Suit, string> = {
+        spade: "锐利", diamond: "迅捷", heart: "贪婪", club: "守序",
+      };
+      const sym = SUIT_SYMBOLS[activeSuit];
+      const kw = keywordNames[activeSuit];
+      // T1 激活的 keyword chip
+      chips.push(`<span class="keyword-chip k-suit-${activeSuit}" data-suit-kw="${activeSuit}" title="${SUIT_THEMES[activeSuit].name} 专精 T${tier} · ${kw} keyword 激活中（点击查看详情）"><span class="kc-sym">${sym}</span><span class="kc-name">${kw}</span><span class="kc-tier">T${tier}</span></span>`);
+      // 把 keyword chip 插到 status chips 之前
+      ps.innerHTML = chips.join("") + ps.innerHTML;
+      // 点击 keyword chip 打开 suit specialty panel
+      ps.querySelectorAll<HTMLElement>("[data-suit-kw]").forEach(chip => {
+        chip.addEventListener("click", e => {
+          e.stopPropagation();
+          showSuitSpecialtyPanel();
+        });
+      });
+    }
+  }
 }
 
 async function handleEndTurn() {
@@ -1033,12 +1172,23 @@ function renderEnemy(e: EnemyState, idx: number): HTMLElement {
 }
 
 // 敌人机制详情弹窗（精英 / Boss 专属）
+// 带 AI 的敌人（精英/boss）只显示已用过的招式 — 让玩家通过观察推断 boss 行为
+// 普通敌人显示完整招式池
 function showEnemyDetail(e: EnemyState): void {
   document.getElementById("enemy-detail-overlay")?.remove();
   const tier = e.tier ?? "normal";
   const emoji = ENEMY_EMOJI[e.name] ?? "👾";
   const tierLabel = tier === "boss" ? "👑 BOSS" : tier === "elite" ? "✦ 精英" : "普通";
-  const intentItems = e.intents.map(it => {
+
+  // AI 敌人：只显示玩家已见过的招式（用 _seenIntents 跟踪）
+  // 普通敌人：完整池
+  const hasAI = !!e.ai;
+  const seenIndices = (e as any)._seenIntents as number[] | undefined;
+  const visibleIntents = hasAI && seenIndices
+    ? seenIndices.map(i => e.intents[i]).filter(Boolean)
+    : e.intents;
+
+  const intentItems = visibleIntents.map(it => {
     const valStr = it.type === "attack"
       ? `⚔ ${it.value}${it.hits && it.hits > 1 ? ` × ${it.hits}` : ""}`
       : it.type === "debuff"
@@ -1048,6 +1198,12 @@ function showEnemyDetail(e: EnemyState): void {
           : "";
     return `<li><span class="ed-intent-name">${escapeHTML(it.desc)}</span><span class="ed-intent-val">${escapeHTML(valStr)}</span></li>`;
   }).join("");
+
+  // AI 敌人未展示过的招式 → 显示 ??? 隐藏条目
+  const hiddenCount = hasAI && seenIndices ? e.intents.length - seenIndices.length : 0;
+  const hiddenItems = hiddenCount > 0
+    ? Array.from({ length: hiddenCount }).map(() => `<li class="ed-intent-hidden"><span class="ed-intent-name">？？？</span><span class="ed-intent-val">未观察到</span></li>`).join("")
+    : "";
   const overlay = document.createElement("div");
   overlay.id = "enemy-detail-overlay";
   overlay.innerHTML = `
@@ -1072,8 +1228,8 @@ function showEnemyDetail(e: EnemyState): void {
         </div>
       ` : ""}
       <div class="ed-hp">HP <b>${e.hp}</b> / ${e.maxHp}</div>
-      <div class="ed-section-title">招式${tier === "boss" ? "（随机抽取）" : ""}</div>
-      <ul class="ed-intent-list">${intentItems}</ul>
+      <div class="ed-section-title">招式${hasAI ? "（已观察）" : tier === "boss" ? "（随机抽取）" : ""}</div>
+      <ul class="ed-intent-list">${intentItems}${hiddenItems}</ul>
       <p class="ed-hint">击败可获得 ${FRAGMENT_ICONS[e.race]} <b>${FRAGMENT_NAMES[e.race]}</b> ×1${tier === "boss" ? " · 战利品保底 1 张史诗" : ""}</p>
     </div>
   `;
@@ -1089,6 +1245,8 @@ const STATUS_ICONS: Record<string, string> = {
   battle_cry: "📢", double_strike: "⚔", evasive: "🌬", sharpened: "🔪",
   weapon_buff: "💪", shield_block: "🛡", shadow_double: "👥", heavy_strike: "💥",
   counter_stance: "🪞", frenzy: "💢", charged: "⚡", no_attack: "🚫",
+  // 新加装备触发
+  knight_charge: "⚡", scepter_clubs: "🔮",
   combat_rhythm: "🥁", time_stop: "⏸",
   smoke_dodge: "💨", guaranteed_dodge: "🌟", pierce_next: "🎯",
   phantom_charge: "👤", echo: "🔁",
@@ -1123,8 +1281,8 @@ function renderStatusTag(s: StatusEffect): string {
 // 状态详情弹窗
 function showStatusInfo(id: string, stacks: number, duration: number) {
   if (document.getElementById("status-info-overlay")) return;
-  const meta = STATUS_META[id];
-  if (!meta) return;
+  // 兜底：没注册的 status 也允许点击，显示 id 作为名字 + 提示"未注册"
+  const meta = STATUS_META[id] ?? { name: id, desc: `（此状态尚未在 STATUS_META 注册，请联系开发者）`, kind: "neutral" as const };
   const overlay = document.createElement("div");
   overlay.id = "status-info-overlay";
   const durationText =
@@ -2528,7 +2686,14 @@ function renderHandCard(inst: CardInstance): HTMLElement {
   // 持咒本场已用 → 同名副本灰显
   const chantSpent = inst.defId === "sk_chant"
     && !!state.battle?.player.statuses.find(s => s.id === "chanted_used");
-  el.className = `card hand-card cat-${def.category} rarity-${rarity}${attackUsed ? " disabled" : ""}${epicSpent ? " epic-spent" : ""}${chantSpent ? " chant-spent" : ""}`;
+  // 装备槽满 4 张同款 → 第 5 张该卡置灰（同槽不同款仍允许点击触发"替换"modal）
+  const slotFull = def.category === "equipment" && !!state.battle && (
+    (def.equipKind === "weapon" && state.player.weapons.length >= 4
+      && state.player.weapons[0]?.defId === def.id) ||
+    (def.equipKind === "armor" && state.player.armors.length >= 4
+      && state.player.armors[0]?.defId === def.id)
+  );
+  el.className = `card hand-card cat-${def.category} rarity-${rarity}${attackUsed ? " disabled" : ""}${epicSpent ? " epic-spent" : ""}${chantSpent ? " chant-spent" : ""}${slotFull ? " disabled slot-full" : ""}`;
   el.setAttribute("data-uid", inst.uid);  // 出牌动画用：飞行选择器需要找到具体的卡 DOM
   const suitSym = def.attackSuit ? SUIT_SYMBOLS[def.attackSuit]
     : def.equipSuit ? SUIT_SYMBOLS[def.equipSuit] : "";
@@ -2548,6 +2713,7 @@ function renderHandCard(inst: CardInstance): HTMLElement {
 
   const catTag = `<span class="cat-tag">${categoryLabel(def.category)}</span>`;
   const usedTag = attackUsed ? `<span class="used-tag">本回合已攻击</span>` : "";
+  const slotFullTag = slotFull ? `<span class="used-tag slot-full-tag">穿戴已达上限</span>` : "";
   const epicUsesTag = isEpic
     ? `<span class="epic-uses-tag${epicSpent ? " spent" : ""}" title="史诗卡每场限 3 次，用尽后回到牌库">★ ${inst.usesRemaining ?? 0}/3</span>`
     : "";
@@ -2559,11 +2725,16 @@ function renderHandCard(inst: CardInstance): HTMLElement {
     <div class="card-name">${escapeHTML(def.name)}</div>
     <div class="card-desc">${escapeHTML(def.desc)}</div>
     ${usedTag}
+    ${slotFullTag}
     ${catTag}
   `;
   el.addEventListener("click", () => {
+    // 装备槽已满（同款 4 张）：点击直接无效（视觉已经置灰 + "穿戴已达上限"）
+    // 不进入 playEquipCard 避免触发飞出动画
+    if (slotFull) return;
     // 装备牌：换装确认（游戏内弹窗）
-    if (def.category === "equipment") {
+    // EPIC 装备是临时覆写机制（用尽自动恢复原装备），不弹替换 modal，直接装上
+    if (def.category === "equipment" && def.rarity !== "epic") {
       if (def.equipKind === "weapon" && state.player.weapons.length > 0 && state.player.weapons[0].defId !== def.id) {
         const cur = CARD_DB[state.player.weapons[0].defId].name;
         const cnt = state.player.weapons.length;
@@ -2600,7 +2771,8 @@ function renderHandCard(inst: CardInstance): HTMLElement {
 
 // 出装备/打牌的统一入口，封装出牌动效触发
 function playEquipCard(def: import("./types.ts").CardDef, inst: CardInstance): void {
-  const targetIdx = state.battle?.targetIndex ?? 0;
+  // snapshot 攻击前的 targetIndex（用于克隆动画起飞位置）
+  const targetIdxPre = state.battle?.targetIndex ?? 0;
 
   // 出牌前：克隆手牌卡到 body 层做飞行动画，使 render 可立即执行而动画照常播放
   const handCardEl = document.querySelector<HTMLElement>(`.hand-card[data-uid="${inst.uid}"]`);
@@ -2634,8 +2806,12 @@ function playEquipCard(def: import("./types.ts").CardDef, inst: CardInstance): v
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 
   if (gamePlayCard(state, inst.uid)) {
+    // 关键修复：battle.ts playAttack 攻击前会调 ensureValidTarget，如果原 targetIndex
+    // 已死会自动切到下一个活着的敌人。所以 hit 动画的目标必须用攻击 *后* 的 targetIndex，
+    // 否则多敌人战斗里第一只死后默认换 2 号目标时，hit 动画还会播在 1 号尸体上。
+    const realIdx = state.battle?.targetIndex ?? targetIdxPre;
     render();
-    triggerCardAnimation(def, targetIdx);
+    triggerCardAnimation(def, realIdx);
   }
 }
 

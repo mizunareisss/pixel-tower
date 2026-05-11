@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Suitspire · 主场景</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Noto+Sans+SC:wght@400;500&family=JetBrains+Mono:wght@500&display=swap" />
+  <style>
+    :root {
+      --bg: #050308;
+      --gold: #fbbf24;
+      --gold-dim: #c8a14a;
+      --text: rgba(244,244,245,0.88);
+      --text-dim: rgba(244,244,245,0.5);
+    }
+    html, body { margin: 0; padding: 0; overflow: hidden; background: var(--bg); color: var(--text);
+      font-family: 'Noto Sans SC', sans-serif; }
+    main { position: fixed; inset: 0; }
+    canvas { display: block; }
+    /* 顶栏 */
+    .topbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+      padding: 20px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      background: linear-gradient(180deg, rgba(5,3,8,0.95), rgba(5,3,8,0) 100%);
+      pointer-events: none;
+    }
+    .brand {
+      font-family: 'Cinzel', serif; font-weight: 700;
+      font-size: 14px; letter-spacing: 4px;
+      color: var(--gold-dim);
+    }
+    .floor-info {
+      text-align: center;
+    }
+    .floor-num {
+      font-family: 'Cinzel', serif; font-weight: 900;
+      font-size: 36px; letter-spacing: 4px; color: var(--gold);
+      line-height: 1;
+    }
+    .floor-name {
+      font-size: 14px; letter-spacing: 3px;
+      color: var(--text-dim); margin-top: 4px;
+    }
+    .floor-en {
+      font-family: 'Cinzel', serif; font-size: 11px;
+      letter-spacing: 2px; color: rgba(252, 211, 77, 0.5);
+      margin-top: 2px;
+    }
+    .seed-badge {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      color: var(--text-dim); letter-spacing: 1px;
+      background: rgba(20, 20, 28, 0.6);
+      padding: 6px 12px; border-radius: 999px;
+      border: 1px solid rgba(252, 211, 77, 0.18);
+      pointer-events: auto;
+    }
+    .seed-badge .reroll {
+      margin-left: 8px; color: var(--gold); cursor: pointer;
+      transition: color .2s;
+    }
+    .seed-badge .reroll:hover { color: #ffe080; }
+
+    /* 侧边关卡选择 */
+    .sidenav {
+      position: fixed; right: 24px; top: 50%; transform: translateY(-50%); z-index: 10;
+      display: flex; flex-direction: column; gap: 4px;
+      background: rgba(15, 12, 20, 0.55);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      padding: 10px 8px; border-radius: 24px;
+      border: 1px solid rgba(252, 211, 77, 0.15);
+      max-height: 80vh; overflow-y: auto;
+    }
+    .sidenav::-webkit-scrollbar { display: none; }
+    .sidenav button {
+      width: 38px; height: 32px; border: 0; background: transparent;
+      color: var(--text-dim); cursor: pointer; border-radius: 8px;
+      font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 1px;
+      transition: all .2s;
+    }
+    .sidenav button:hover { background: rgba(252, 211, 77, 0.1); color: var(--gold); }
+    .sidenav button.active {
+      background: linear-gradient(135deg, #fbbf24, #c8a14a);
+      color: #1a1408; font-weight: 700;
+      box-shadow: 0 0 12px rgba(252, 211, 77, 0.35);
+    }
+    .sidenav button.boss.active {
+      background: linear-gradient(135deg, #ff5e5e, #c83838);
+      color: #1a0a0a;
+      box-shadow: 0 0 12px rgba(255, 94, 94, 0.4);
+    }
+    .sidenav .div {
+      height: 1px; background: rgba(252, 211, 77, 0.1); margin: 2px 0;
+    }
+
+    /* 路径面板 */
+    .pathbar {
+      position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 10;
+      display: flex; gap: 24px; align-items: center;
+      background: rgba(15, 12, 20, 0.6);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      padding: 14px 24px; border-radius: 18px;
+      border: 1px solid rgba(252, 211, 77, 0.18);
+      font-size: 12px;
+    }
+    .pathbar .label {
+      font-family: 'Cinzel', serif; color: var(--gold-dim);
+      letter-spacing: 2px; font-size: 11px;
+    }
+    .pathbar .paths {
+      display: flex; gap: 24px;
+    }
+    .pathbar .path {
+      display: flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 999px;
+      background: rgba(0,0,0,0.25);
+    }
+    .pathbar .node {
+      display: inline-block; width: 16px; height: 16px;
+      border-radius: 50%; line-height: 16px;
+      text-align: center; font-size: 11px;
+    }
+    .node-battle { background: #e63329; box-shadow: 0 0 8px rgba(230,51,41,0.5); }
+    .node-elite { background: #ff8c28; box-shadow: 0 0 8px rgba(255,140,40,0.6); }
+    .node-boss { background: #ffd460; color: #1a0a08; font-weight: 700; box-shadow: 0 0 12px rgba(255,212,96,0.7); }
+    .node-event { background: #9b59b6; box-shadow: 0 0 8px rgba(155,89,182,0.5); }
+    .node-shop { background: #4db84d; box-shadow: 0 0 8px rgba(77,184,77,0.5); }
+    .node-forge { background: #f5c518; box-shadow: 0 0 8px rgba(245,197,24,0.6); }
+
+    /* 全景视角按钮 */
+    .overview-btn {
+      position: fixed; left: 24px; bottom: 28px; z-index: 10;
+      padding: 10px 18px; border-radius: 999px;
+      background: rgba(15, 12, 20, 0.65);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(252, 211, 77, 0.18);
+      color: var(--gold); cursor: pointer;
+      font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 2px;
+      transition: all .2s;
+    }
+    .overview-btn:hover { background: rgba(252, 211, 77, 0.15); }
+    .overview-btn.active { background: linear-gradient(135deg, #fbbf24, #c8a14a); color: #1a1408; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">SUITSPIRE · 塔牌</div>
+    <div class="floor-info">
+      <div class="floor-num" id="floorNum">F 1</div>
+      <div class="floor-name" id="floorName">荒野边缘</div>
+      <div class="floor-en" id="floorEn">WILDLANDS</div>
+    </div>
+    <div class="seed-badge">SEED <span id="seedVal">000000</span> <span class="reroll" id="reroll">↻ Reroll</span></div>
+  </div>
+
+  <nav class="sidenav" id="sidenav"></nav>
+
+  <button class="overview-btn" id="overviewBtn">⛓ 全景</button>
+
+  <div class="pathbar">
+    <span class="label">本关路径</span>
+    <div class="paths" id="paths"></div>
+  </div>
+
+  <main></main>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+    // ============ Seed-based RNG ============
+    function mulberry32(seed) {
+      return function() {
+        let t = seed += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+    function pickRng(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
+
+    // ============ Toon material ============
+    function makeGradientMap(stops) {
+      const c = document.createElement('canvas');
+      c.width = stops.length; c.height = 1;
+      const ctx = c.getContext('2d');
+      stops.forEach((s, i) => { ctx.fillStyle = s; ctx.fillRect(i, 0, 1, 1); });
+      const tex = new THREE.CanvasTexture(c);
+      tex.minFilter = tex.magFilter = THREE.NearestFilter;
+      tex.generateMipmaps = false; return tex;
+    }
+    const gradientMap = makeGradientMap(['#1a161e', '#4a444e', '#988090', '#d8c8a0', '#f8e8b0']);
+
+    function toon(color, emissive = 0x000000, emissiveIntensity = 0) {
+      return new THREE.MeshToonMaterial({ color, emissive, emissiveIntensity, gradientMap });
+    }
+    function block(w, h, d, color, opts = {}) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+        toon(color, opts.emissive || 0, opts.emissiveIntensity || 0));
+      m.castShadow = true; m.receiveShadow = true;
+      return m;
+    }
+    function cyl(rt, rb, h, color, opts = {}) {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, opts.seg || 12),
+        toon(color, opts.emissive || 0, opts.emissiveIntensity || 0));
+      m.castShadow = true; m.receiveShadow = true;
+      return m;
+    }
+    function cone(r, h, color, seg = 8, opts = {}) {
+      const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, seg),
+        toon(color, opts.emissive || 0, opts.emissiveIntensity || 0));
+      m.castShadow = true;
+      return m;
+    }
+    function glow(r, color) {
+      return new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10),
+        new THREE.MeshBasicMaterial({ color }));
+    }
+
+    // ============ 12 关主题（来自 SUITSPIRE_WORLD.md） ============
+    const FLOOR_THEMES = [
+      // F1-F2 荒野边缘
+      { idx: 1, name: '荒野边缘', en: 'WILDLANDS · DAWN',
+        stone: '#a87c50', accent: '#d4a64a', dark: '#5a3818', glow: 0xfbbf24, sky: '#3a2818', amb: 0x6a4828 },
+      { idx: 2, name: '荒野边缘', en: 'WILDLANDS · DUSK',
+        stone: '#8a6840', accent: '#d4a64a', dark: '#4a2818', glow: 0xff8838, sky: '#2a1818', amb: 0x6a3818 },
+      // F3-F5 哥布林洞窟
+      { idx: 3, name: '哥布林洞窟', en: 'GOBLIN CAVE I',
+        stone: '#6a4868', accent: '#b87fd0', dark: '#2a1828', glow: 0xb87fd0, sky: '#180a1a', amb: 0x4a2838 },
+      { idx: 4, name: '哥布林洞窟', en: 'GOBLIN CAVE II',
+        stone: '#5a3858', accent: '#c868d8', dark: '#1a0a18', glow: 0xb87fd0, sky: '#100610', amb: 0x4a2848 },
+      { idx: 5, name: '哥布林洞窟', en: 'GOBLIN CAVE III',
+        stone: '#4a2848', accent: '#d878e0', dark: '#1a0818', glow: 0xc868ff, sky: '#0a040a', amb: 0x3a1838 },
+      // F6-F8 亡灵祭坛
+      { idx: 6, name: '亡灵祭坛', en: 'UNDEAD ALTAR I',
+        stone: '#4a5a78', accent: '#5b9fd8', dark: '#1a2438', glow: 0x80c8ff, sky: '#0a1428', amb: 0x3848a0 },
+      { idx: 7, name: '亡灵祭坛', en: 'UNDEAD ALTAR II',
+        stone: '#3a4a68', accent: '#80b8e8', dark: '#1a2030', glow: 0xa8d8ff, sky: '#080f1c', amb: 0x3858b0 },
+      { idx: 8, name: '亡灵祭坛', en: 'UNDEAD ALTAR III',
+        stone: '#2a3a58', accent: '#a0c8f0', dark: '#101828', glow: 0xc8e0ff, sky: '#06081a', amb: 0x4868c0 },
+      // F9-F11 暗影禁地
+      { idx: 9, name: '暗影禁地', en: 'DARK SANCTUM I',
+        stone: '#3a2030', accent: '#ff5e5e', dark: '#180810', glow: 0xff3838, sky: '#150408', amb: 0x6a1828 },
+      { idx: 10, name: '暗影禁地', en: 'DARK SANCTUM II',
+        stone: '#2a1424', accent: '#ff3838', dark: '#100408', glow: 0xff2828, sky: '#0a0204', amb: 0x6a1018 },
+      { idx: 11, name: '暗影禁地', en: 'DARK SANCTUM III',
+        stone: '#1a0a18', accent: '#ff2828', dark: '#080204', glow: 0xff1818, sky: '#050102', amb: 0x6a0810 },
+      // F12 塔顶
+      { idx: 12, name: '塔顶 · 决战', en: 'THE SPIRE · FINAL',
+        stone: '#4a3a58', accent: '#fcd34d', dark: '#1a0c20', glow: 0xfcd34d, sky: '#0a0418', amb: 0x6848a0 },
+    ];
+
+    const FLOOR_HEIGHT = 3.2;       // 每层高度
+    const TOWER_BASE_Y = 0;         // 底座 y
+    const FLOOR0_Y = TOWER_BASE_Y + 1.0;  // F1 楼面 y
+    function floorY(idx) { return FLOOR0_Y + (idx - 1) * FLOOR_HEIGHT; }
+
+    // ============ Scene / Renderer ============
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#0a0410');
+    scene.fog = new THREE.Fog('#0a0410', 25, 80);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    document.querySelector('main').appendChild(renderer.domElement);
+
+    const aspect = window.innerWidth / window.innerHeight;
+    let camD = 7;
+    const camera = new THREE.OrthographicCamera(-camD * aspect, camD * aspect, camD, -camD, 0.1, 200);
+    camera.position.set(28, 30, 28);
+    camera.lookAt(0, FLOOR0_Y, 0);
+
+    // 后处理
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloom = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.55, 0.6, 0.6);
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+
+    // ============ 主光照 ============
+    const ambient = new THREE.AmbientLight(0xffeac8, 0.35);
+    scene.add(ambient);
+    const hemi = new THREE.HemisphereLight(0xfff0d0, 0x1a0a1a, 0.45);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xffe8c0, 1.1);
+    sun.position.set(18, 28, 14);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 40, bottom: -10, near: 1, far: 80 });
+    sun.shadow.bias = -0.0003;
+    sun.shadow.radius = 5;
+    scene.add(sun);
+    // 月亮 - 顶部冷光
+    const moonLight = new THREE.DirectionalLight(0xc8d8ff, 0.4);
+    moonLight.position.set(-10, 38, -5);
+    scene.add(moonLight);
+
+    // ============ 容器 ============
+    let towerGroup = new THREE.Group(); scene.add(towerGroup);
+    let envGroup = new THREE.Group(); scene.add(envGroup);
+    let pathGroup = new THREE.Group(); scene.add(pathGroup);
+    let updaters = [];
+
+    function disposeGroup(g) {
+      g.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+      });
+      g.clear();
+    }
+
+    // ============ 节点类型 ============
+    const NODE_TYPES = {
+      battle: { color: 0xe63329, key: '⚔', label: '战斗', w: 60 },
+      elite:  { color: 0xff8c28, key: '✦', label: '精英', w: 14 },
+      event:  { color: 0x9b59b6, key: '🎲', label: '事件', w: 12 },
+      shop:   { color: 0x4db84d, key: '💎', label: '商店', w: 7 },
+      forge:  { color: 0xf5c518, key: '⚒', label: '铁匠', w: 7 },
+      boss:   { color: 0xffd460, key: '👑', label: 'BOSS', w: 0 },
+    };
+
+    function rollNodeType(rng, allowBoss = false) {
+      if (allowBoss) return 'boss';
+      const pool = [
+        ['battle', 60], ['elite', 14], ['event', 12], ['shop', 7], ['forge', 7]
+      ];
+      const total = pool.reduce((s, p) => s + p[1], 0);
+      let r = rng() * total;
+      for (const [t, w] of pool) { if ((r -= w) < 0) return t; }
+      return 'battle';
+    }
+
+    // ============ 单层楼造型生成器 ============
+    // 每个楼层是一个 group：主体（房间/平台）+ 装饰
+    function buildFloor(theme, rng) {
+      const g = new THREE.Group();
+      const styleRoll = rng();
+
+      // 主体形状：octagon 八边形房间 or square 方形 or 平台 or 漂浮
+      let shape;
+      if (theme.idx === 12) {
+        shape = 'open_platform';  // 塔顶开放
+      } else if (theme.idx === 1) {
+        shape = 'gate_room';      // 第一关入口
+      } else if (styleRoll < 0.4) {
+        shape = 'octagon';
+      } else if (styleRoll < 0.75) {
+        shape = 'square';
+      } else {
+        shape = 'mixed';
+      }
+
+      const w = 5.2;          // 房间宽
+      const wallH = FLOOR_HEIGHT - 0.25;  // 墙高（留 0.25 给楼板缝）
+      const wallT = 0.25;     // 墙厚
+
+      // —— 楼板 ——
+      const floorPlate = block(w + 0.3, 0.15, w + 0.3, theme.dark);
+      floorPlate.position.y = -wallH/2 - 0.075;
+      g.add(floorPlate);
+      const floorTrim = block(w + 0.4, 0.05, w + 0.4, theme.accent);
+      floorTrim.position.y = -wallH/2; g.add(floorTrim);
+
+      // —— 主体（按形状）——
+      if (shape === 'octagon') {
+        const main = new THREE.Mesh(
+          new THREE.CylinderGeometry(w/2 + 0.1, w/2 + 0.1, wallH, 8),
+          toon(theme.stone));
+        main.position.y = 0; main.castShadow = true; main.receiveShadow = true;
+        g.add(main);
+        // 8 个面挖窗
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          if (i % 2 === 0) continue; // 隔一个窗
+          const win = block(0.6, wallH * 0.5, 0.1, theme.dark, { emissive: theme.glow, emissiveIntensity: 1.2 });
+          win.position.set(Math.cos(a) * (w/2 + 0.12), 0, Math.sin(a) * (w/2 + 0.12));
+          win.rotation.y = -a; g.add(win);
+        }
+        // 顶部装饰环
+        const cap = new THREE.Mesh(
+          new THREE.CylinderGeometry(w/2 + 0.2, w/2 + 0.2, 0.15, 8),
+          toon(theme.accent));
+        cap.position.y = wallH/2 + 0.075; g.add(cap);
+      } else if (shape === 'square') {
+        const main = block(w, wallH, w, theme.stone);
+        g.add(main);
+        // 4 个窗洞（每面 1 个）
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * Math.PI * 2;
+          const win = block(0.6, wallH * 0.55, 0.08, theme.dark, { emissive: theme.glow, emissiveIntensity: 1.0 });
+          win.position.set(Math.cos(a) * (w/2 + 0.01), 0.1, Math.sin(a) * (w/2 + 0.01));
+          win.rotation.y = -a + Math.PI / 2; g.add(win);
+        }
+        // 顶金边
+        const cap = block(w + 0.3, 0.12, w + 0.3, theme.accent);
+        cap.position.y = wallH/2 + 0.06; g.add(cap);
+      } else if (shape === 'mixed') {
+        // 半圆 + 半方
+        const main = block(w * 0.85, wallH, w, theme.stone);
+        g.add(main);
+        const round = new THREE.Mesh(
+          new THREE.CylinderGeometry(w/2, w/2, wallH, 16, 1, false, 0, Math.PI),
+          toon(theme.stone));
+        round.position.x = -w/2 * 0.85; round.rotation.y = Math.PI / 2;
+        round.castShadow = true; g.add(round);
+        // 装饰窗
+        const win = block(0.5, wallH * 0.5, 0.08, theme.dark, { emissive: theme.glow, emissiveIntensity: 1.0 });
+        win.position.set(0, 0.1, w/2 + 0.01); g.add(win);
+        const cap = block(w + 0.3, 0.1, w + 0.3, theme.accent);
+        cap.position.y = wallH/2 + 0.05; g.add(cap);
+      } else if (shape === 'gate_room') {
+        // F1 入口塔门
+        const main = block(w, wallH, w, theme.stone);
+        g.add(main);
+        // 大塔门（前侧）
+        const doorFrame = block(1.6, wallH * 0.85, 0.15, theme.accent);
+        doorFrame.position.set(0, -wallH * 0.05, w/2 + 0.05); g.add(doorFrame);
+        const doorInner = block(1.3, wallH * 0.75, 0.05, theme.dark, { emissive: theme.glow, emissiveIntensity: 0.6 });
+        doorInner.position.set(0, -wallH * 0.05, w/2 + 0.12); g.add(doorInner);
+        // 拱顶
+        const arch = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.8, 0.8, 0.1, 16, 1, false, 0, Math.PI),
+          toon(theme.accent));
+        arch.position.set(0, wallH * 0.32, w/2 + 0.05);
+        arch.rotation.z = -Math.PI/2; arch.rotation.y = Math.PI/2; g.add(arch);
+        // 两侧火把
+        for (const x of [-1.1, 1.1]) {
+          const torch = makeTorch(theme); torch.position.set(x, -0.3, w/2 + 0.15); g.add(torch);
+        }
+        const cap = block(w + 0.3, 0.12, w + 0.3, theme.accent);
+        cap.position.y = wallH/2 + 0.06; g.add(cap);
+      } else if (shape === 'open_platform') {
+        // F12 塔顶开放
+        const plat = new THREE.Mesh(
+          new THREE.CylinderGeometry(w/2 + 0.3, w/2 + 0.5, 0.5, 8),
+          toon(theme.stone));
+        plat.position.y = -wallH/2 + 0.25; plat.castShadow = true; plat.receiveShadow = true; g.add(plat);
+        const platTrim = new THREE.Mesh(
+          new THREE.CylinderGeometry(w/2 + 0.4, w/2 + 0.4, 0.1, 8),
+          toon(theme.accent));
+        platTrim.position.y = -wallH/2 + 0.55; g.add(platTrim);
+        // 4 角护栏柱
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * Math.PI * 2 + Math.PI/4;
+          const post = block(0.22, 1.0, 0.22, theme.dark);
+          post.position.set(Math.cos(a) * (w/2 - 0.1), 0, Math.sin(a) * (w/2 - 0.1));
+          g.add(post);
+          const tip = cone(0.16, 0.3, theme.accent, 4);
+          tip.position.set(Math.cos(a) * (w/2 - 0.1), 0.65, Math.sin(a) * (w/2 - 0.1));
+          g.add(tip);
+        }
+        // 中央祭坛
+        const altar = block(1.2, 0.6, 1.2, theme.dark);
+        altar.position.y = -wallH/2 + 0.8; g.add(altar);
+        const altarTop = block(1.3, 0.08, 1.3, theme.accent);
+        altarTop.position.y = -wallH/2 + 1.14; g.add(altarTop);
+        // 顶部大水晶（漂浮 + 旋转环）
+        const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.55),
+          toon('#fff0a0', theme.glow, 1.8));
+        crystal.position.y = wallH/2 + 0.8; g.add(crystal);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.04, 8, 32),
+          toon(theme.accent, theme.glow, 1.2));
+        ring.position.y = wallH/2 + 0.8; g.add(ring);
+        const haloOnPlat = new THREE.Mesh(
+          new THREE.RingGeometry(0.85, 1.0, 32),
+          new THREE.MeshBasicMaterial({ color: theme.glow, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
+        haloOnPlat.rotation.x = -Math.PI/2;
+        haloOnPlat.position.y = -wallH/2 + 1.2; g.add(haloOnPlat);
+        g.userData = { crystal, ring };
+      }
+
+      // —— 主题装饰（火把 / 苔藓 / 骨头 / 红裂缝） ——
+      if (shape !== 'open_platform' && shape !== 'gate_room') {
+        addMoodDecor(g, theme, rng);
+      }
+
+      return g;
+    }
+
+    // 火把
+    function makeTorch(theme) {
+      const g = new THREE.Group();
+      const pole = cyl(0.04, 0.04, 0.5, '#2a1810'); pole.position.y = 0.25; g.add(pole);
+      const flame = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10),
+        toon('#fff0a0', theme.glow, 2.5));
+      flame.position.y = 0.55; g.add(flame);
+      const flameInner = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 10),
+        new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      flameInner.position.y = 0.55; g.add(flameInner);
+      g.userData = { flame };
+      return g;
+    }
+
+    function addMoodDecor(g, theme, rng) {
+      const wallH = FLOOR_HEIGHT - 0.25;
+      // 4 角火把（所有楼层）
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        const torch = makeTorch(theme);
+        torch.position.set(Math.cos(a) * 2.4, -wallH/2 + 0.1, Math.sin(a) * 2.4);
+        g.add(torch);
+      }
+      // 主题特定装饰
+      if (theme.idx >= 3 && theme.idx <= 5) {
+        // 洞窟：苔藓块（绿色斑点）
+        for (let i = 0; i < 6; i++) {
+          const moss = block(0.2 + rng() * 0.15, 0.04, 0.2 + rng() * 0.15, '#3a6a3a');
+          const a = rng() * Math.PI * 2;
+          moss.position.set(Math.cos(a) * 2.7, -wallH/2 + rng() * 1.5, Math.sin(a) * 2.7);
+          g.add(moss);
+        }
+      } else if (theme.idx >= 6 && theme.idx <= 8) {
+        // 祭坛：浮空骨头
+        for (let i = 0; i < 3; i++) {
+          const bone = cyl(0.04, 0.04, 0.4, '#d8d0bc');
+          const a = rng() * Math.PI * 2;
+          bone.position.set(Math.cos(a) * 1.5, rng() * 0.8 - 0.3, Math.sin(a) * 1.5);
+          bone.rotation.z = rng() * Math.PI; bone.rotation.x = rng() * Math.PI;
+          g.add(bone);
+        }
+      } else if (theme.idx >= 9 && theme.idx <= 11) {
+        // 禁地：红色裂缝（地板发光线）
+        for (let i = 0; i < 3; i++) {
+          const crack = block(0.08, 0.02, 1.5 + rng() * 0.8,
+            '#ff2828', { emissive: 0xff2828, emissiveIntensity: 2.0 });
+          crack.position.set((rng() - 0.5) * 3, -wallH/2 + 0.06, (rng() - 0.5) * 3);
+          crack.rotation.y = rng() * Math.PI;
+          g.add(crack);
+        }
+      } else if (theme.idx <= 2) {
+        // 荒野：木箱 / 草堆装饰
+        if (rng() < 0.6) {
+          const crate = block(0.4, 0.4, 0.4, '#7a4828');
+          crate.position.set((rng() - 0.5) * 2, -wallH/2 + 0.2, (rng() - 0.5) * 2);
+          g.add(crate);
+        }
+      }
+    }
+
+    // ============ 楼梯/桥连接 ============
+    function makeStair(themeFrom, themeTo, fromY) {
+      const g = new THREE.Group();
+      const steps = 6;
+      const span = FLOOR_HEIGHT;
+      const angle = -Math.PI * 0.18; // 楼梯绕塔外侧角度
+      for (let i = 0; i < steps; i++) {
+        const t = i / steps;
+        const step = block(0.7, 0.2, 0.45, themeFrom.dark);
+        const a = angle * (1 - t) + (angle + Math.PI * 0.35) * t;
+        const r = 3.6;
+        step.position.set(Math.cos(a) * r, fromY + t * span, Math.sin(a) * r);
+        step.rotation.y = -a; g.add(step);
+      }
+      return g;
+    }
+
+    // ============ 整塔构建 ============
+    let currentSeed = Math.floor(Math.random() * 999999);
+    let currentFloor = 1;
+    let overview = false;
+    let allFloorMeshes = [];   // index 0..11
+    let currentPathData = null;
+
+    function buildTower(seed) {
+      disposeGroup(towerGroup);
+      disposeGroup(envGroup);
+      updaters = [];
+      allFloorMeshes = [];
+      const rng = mulberry32(seed);
+
+      // —— 塔基底 ——
+      const baseGround = new THREE.Mesh(
+        new THREE.CircleGeometry(14, 64), toon('#2a1818'));
+      baseGround.rotation.x = -Math.PI / 2;
+      baseGround.position.y = TOWER_BASE_Y - 1.0;
+      baseGround.receiveShadow = true;
+      envGroup.add(baseGround);
+      // 同心圆装饰
+      for (const r of [7, 10, 13]) {
+        const ring = new THREE.Mesh(new THREE.RingGeometry(r - 0.06, r, 64),
+          new THREE.MeshBasicMaterial({ color: 0x5a3818, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = TOWER_BASE_Y - 0.99;
+        envGroup.add(ring);
+      }
+      // 塔基（粗大底座）
+      const basePillar = new THREE.Mesh(
+        new THREE.CylinderGeometry(4.2, 4.6, 1.0, 8),
+        toon('#5a4838'));
+      basePillar.position.y = TOWER_BASE_Y - 0.5;
+      basePillar.castShadow = true; basePillar.receiveShadow = true;
+      envGroup.add(basePillar);
+      const basePillarTrim = new THREE.Mesh(
+        new THREE.CylinderGeometry(4.3, 4.3, 0.1, 8),
+        toon('#fbbf24'));
+      basePillarTrim.position.y = TOWER_BASE_Y + 0.05;
+      envGroup.add(basePillarTrim);
+
+      // —— 12 层 ——
+      for (let i = 0; i < 12; i++) {
+        const theme = FLOOR_THEMES[i];
+        const floor = buildFloor(theme, rng);
+        floor.position.y = floorY(i + 1);
+        towerGroup.add(floor);
+        allFloorMeshes.push(floor);
+        // 楼梯（从下层到当前层）
+        if (i > 0 && i < 11) {
+          const stair = makeStair(FLOOR_THEMES[i - 1], theme, floorY(i) + FLOOR_HEIGHT/2 - 0.5);
+          towerGroup.add(stair);
+        }
+      }
+
+      // —— 顶部塔尖（在 F12 之上）——
+      const spireBase = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.6, 2.2, 0.8, 8),
+        toon('#3a2840'));
+      spireBase.position.y = floorY(12) + FLOOR_HEIGHT/2 + 0.4;
+      spireBase.castShadow = true;
+      towerGroup.add(spireBase);
+      const spireTip = cone(1.4, 3.0, '#3a2840', 8);
+      spireTip.position.y = floorY(12) + FLOOR_HEIGHT/2 + 2.3;
+      spireTip.castShadow = true;
+      towerGroup.add(spireTip);
+      const spireGold = cone(0.4, 0.8, '#fbbf24', 8);
+      spireGold.position.y = floorY(12) + FLOOR_HEIGHT/2 + 4.2;
+      towerGroup.add(spireGold);
+      // 顶尖发光球
+      const tipGlow = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 12),
+        toon('#fff0a0', 0xfcd34d, 2.5));
+      tipGlow.position.y = floorY(12) + FLOOR_HEIGHT/2 + 4.7;
+      towerGroup.add(tipGlow);
+
+      // —— 远景：漂浮岛、云、星 ——
+      buildEnvironment(rng);
+
+      // —— 路径节点（在每层楼板上）——
+      buildPaths(rng);
+    }
+
+    function buildEnvironment(rng) {
+      // 远处漂浮岛（围绕塔不同高度）
+      for (let i = 0; i < 8; i++) {
+        const ang = rng() * Math.PI * 2;
+        const r = 16 + rng() * 8;
+        const y = 3 + rng() * 30;
+        const size = 0.6 + rng() * 0.7;
+        const island = new THREE.Group();
+        const top = block(2 * size, 0.4 * size, 2 * size, '#2a1c28');
+        island.add(top);
+        const bot = cone(size, size * 1.4, '#1a0c1a', 4);
+        bot.rotation.y = Math.PI/4; bot.position.y = -size; island.add(bot);
+        island.position.set(Math.cos(ang) * r, y, Math.sin(ang) * r);
+        envGroup.add(island);
+        const baseY = y;
+        updaters.push((t) => {
+          island.position.y = baseY + Math.sin(t * 0.6 + i) * 0.3;
+        });
+      }
+      // 远处大山（背景轮廓）
+      for (let i = 0; i < 5; i++) {
+        const mtn = cone(4 + rng() * 3, 8 + rng() * 5, '#0a0410', 4);
+        const ang = (i / 5) * Math.PI * 2 + rng() * 0.3;
+        mtn.position.set(Math.cos(ang) * 35, 3, Math.sin(ang) * 35);
+        mtn.rotation.y = rng() * Math.PI;
+        envGroup.add(mtn);
+      }
+      // 星空（顶部上方散布）
+      for (let i = 0; i < 80; i++) {
+        const star = new THREE.Mesh(
+          new THREE.SphereGeometry(0.04 + rng() * 0.08, 8, 6),
+          new THREE.MeshBasicMaterial({ color: rng() > 0.7 ? 0xfff0c0 : 0xa8c8ff }));
+        const ang = rng() * Math.PI * 2;
+        const r = 25 + rng() * 15;
+        const yy = 25 + rng() * 25;
+        star.position.set(Math.cos(ang) * r, yy, Math.sin(ang) * r);
+        envGroup.add(star);
+        const phase = rng() * Math.PI * 2;
+        updaters.push((t) => { star.scale.setScalar(1 + Math.sin(t * 1.5 + phase) * 0.4); });
+      }
+      // 月亮（左上）
+      const moon = new THREE.Mesh(new THREE.SphereGeometry(1.4, 32, 24),
+        new THREE.MeshBasicMaterial({ color: 0xfff0d8 }));
+      moon.position.set(-22, 40, -18);
+      envGroup.add(moon);
+    }
+
+    // ============ 路径生成（每层 2-3 条路径）============
+    function buildPaths(rng) {
+      disposeGroup(pathGroup);
+      currentPathData = [];
+      // 每层 2-3 个节点
+      for (let i = 1; i <= 12; i++) {
+        if (i === 12) {
+          currentPathData.push([{ type: 'boss', x: 0, z: 0 }]);
+          continue;
+        }
+        const nodeCount = 2 + Math.floor(rng() * 2);  // 2 or 3
+        const nodes = [];
+        for (let n = 0; n < nodeCount; n++) {
+          const a = (n / nodeCount) * Math.PI * 2 + rng() * 0.2;
+          const r = 1.5;
+          nodes.push({
+            type: rollNodeType(rng),
+            x: Math.cos(a) * r,
+            z: Math.sin(a) * r,
+          });
+        }
+        currentPathData.push(nodes);
+      }
+
+      // 渲染节点
+      for (let i = 0; i < 12; i++) {
+        const floorData = currentPathData[i];
+        const y = floorY(i + 1) - FLOOR_HEIGHT/2 + 0.25;
+        floorData.forEach((node, idx) => {
+          const def = NODE_TYPES[node.type];
+          const orb = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 12),
+            toon('#fff0a0', def.color, 1.8));
+          orb.position.set(node.x, y + 0.3, node.z);
+          pathGroup.add(orb);
+          // 光环
+          const halo = new THREE.Mesh(
+            new THREE.RingGeometry(0.22, 0.3, 16),
+            new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
+          halo.rotation.x = -Math.PI/2;
+          halo.position.set(node.x, y - 0.15, node.z);
+          pathGroup.add(halo);
+          // 节点之间连线（如果有下一个）
+          if (idx < floorData.length - 1) {
+            const nx = floorData[idx + 1];
+            const lineGeo = new THREE.BufferGeometry().setFromPoints([
+              new THREE.Vector3(node.x, y + 0.3, node.z),
+              new THREE.Vector3(nx.x, y + 0.3, nx.z),
+            ]);
+            const line = new THREE.Line(lineGeo,
+              new THREE.LineBasicMaterial({ color: def.color, transparent: true, opacity: 0.45 }));
+            pathGroup.add(line);
+          }
+          // 浮动动画
+          const baseY = y + 0.3;
+          const phase = idx + i;
+          updaters.push((t) => {
+            orb.position.y = baseY + Math.sin(t * 2 + phase) * 0.08;
+          });
+        });
+      }
+      updatePathBar();
+    }
+
+    // ============ 镜头 ============
+    function focusOnFloor(idx) {
+      currentFloor = idx;
+      overview = false;
+      document.getElementById('overviewBtn').classList.remove('active');
+      const theme = FLOOR_THEMES[idx - 1];
+      // 切换楼层时，场景背景色用主题 sky
+      scene.background = new THREE.Color(theme.sky);
+      scene.fog.color = new THREE.Color(theme.sky);
+      ambient.color = new THREE.Color(theme.amb);
+      // 更新 UI
+      document.getElementById('floorNum').textContent = `F ${idx}`;
+      document.getElementById('floorName').textContent = theme.name;
+      document.getElementById('floorEn').textContent = theme.en;
+      document.querySelectorAll('.sidenav button').forEach(b => b.classList.remove('active'));
+      const btn = document.querySelector(`.sidenav button[data-floor="${idx}"]`);
+      if (btn) btn.classList.add('active');
+      updatePathBar();
+    }
+    function setOverview() {
+      overview = true;
+      document.getElementById('overviewBtn').classList.add('active');
+      document.querySelectorAll('.sidenav button').forEach(b => b.classList.remove('active'));
+      scene.background = new THREE.Color('#0a0418');
+      scene.fog.color = new THREE.Color('#0a0418');
+      document.getElementById('floorNum').textContent = '全景';
+      document.getElementById('floorName').textContent = 'OVERVIEW';
+      document.getElementById('floorEn').textContent = '整塔俯瞰';
+    }
+
+    // 平滑相机
+    const camLookTarget = new THREE.Vector3(0, FLOOR0_Y, 0);
+    const camPosTarget = new THREE.Vector3(28, 30, 28);
+    let camDTarget = 7;
+    function tickCamera(dt) {
+      if (overview) {
+        camLookTarget.set(0, floorY(6.5), 0);
+        camPosTarget.set(40, floorY(7), 40);
+        camDTarget = 22;
+      } else {
+        const y = floorY(currentFloor);
+        camLookTarget.set(0, y + 0.3, 0);
+        camPosTarget.set(28, y + 5, 28);
+        camDTarget = 7;
+      }
+      const lerp = 1 - Math.exp(-dt * 3);
+      camera.position.lerp(camPosTarget, lerp);
+      const cur = new THREE.Vector3(0, FLOOR0_Y, 0).copy(camera.position).lerp(camLookTarget, lerp);
+      camera.lookAt(cur);
+      camD += (camDTarget - camD) * lerp;
+      const a = window.innerWidth / window.innerHeight;
+      camera.left = -camD * a; camera.right = camD * a;
+      camera.top = camD; camera.bottom = -camD;
+      camera.updateProjectionMatrix();
+    }
+
+    // ============ UI 构建 ============
+    const sidenav = document.getElementById('sidenav');
+    for (let i = 1; i <= 12; i++) {
+      const b = document.createElement('button');
+      b.textContent = i === 12 ? 'BOSS' : i;
+      b.dataset.floor = i;
+      if (i === 12) b.classList.add('boss');
+      if (i === 1) b.classList.add('active');
+      b.onclick = () => focusOnFloor(i);
+      sidenav.appendChild(b);
+      // 分组隔线（每 3 层）
+      if (i === 2 || i === 5 || i === 8 || i === 11) {
+        const div = document.createElement('div'); div.className = 'div'; sidenav.appendChild(div);
+      }
+    }
+    document.getElementById('overviewBtn').onclick = setOverview;
+
+    document.getElementById('reroll').onclick = () => {
+      currentSeed = Math.floor(Math.random() * 999999);
+      buildTower(currentSeed);
+      document.getElementById('seedVal').textContent = String(currentSeed).padStart(6, '0');
+    };
+
+    function updatePathBar() {
+      const paths = document.getElementById('paths');
+      paths.innerHTML = '';
+      if (!currentPathData) return;
+      const nodes = currentPathData[currentFloor - 1];
+      if (!nodes) return;
+      // 当前关卡显示 N 个路径节点（每个节点一个标签）
+      const pathEl = document.createElement('div');
+      pathEl.className = 'path';
+      nodes.forEach(node => {
+        const ndef = NODE_TYPES[node.type];
+        const dot = document.createElement('span');
+        dot.className = `node node-${node.type}`;
+        dot.textContent = ndef.key;
+        pathEl.appendChild(dot);
+        const labelText = document.createElement('span');
+        labelText.style.cssText = 'color:rgba(244,244,245,0.6); font-size: 11px;';
+        labelText.textContent = ndef.label;
+        pathEl.appendChild(labelText);
+      });
+      paths.appendChild(pathEl);
+    }
+
+    // ============ 启动 ============
+    buildTower(currentSeed);
+    document.getElementById('seedVal').textContent = String(currentSeed).padStart(6, '0');
+    focusOnFloor(1);
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+      const t = clock.getElapsedTime();
+      for (const fn of updaters) fn(t);
+      // F12 水晶旋转
+      const f12 = allFloorMeshes[11];
+      if (f12 && f12.userData.crystal) {
+        f12.userData.crystal.rotation.y = t * 0.6;
+        f12.userData.crystal.position.y = floorY(12) + FLOOR_HEIGHT/2 + 0.8 - f12.position.y + Math.sin(t) * 0.1;
+        f12.userData.ring.rotation.z = t * 1.4;
+        f12.userData.ring.rotation.x = Math.PI/2 + Math.sin(t * 0.5) * 0.2;
+      }
+      tickCamera(dt);
+      composer.render();
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      const a = window.innerWidth / window.innerHeight;
+      camera.left = -camD * a; camera.right = camD * a;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

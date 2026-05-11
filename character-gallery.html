@@ -1,0 +1,2031 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Suitspire · 角色画廊</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Noto+Sans+SC:wght@400;500&display=swap" />
+  <style>
+    :root {
+      --bg: #0a0a0e;
+      --gold: #fbbf24;
+      --gold-dim: #c8a14a;
+      --text: rgba(244,244,245,0.85);
+      --text-dim: rgba(244,244,245,0.55);
+    }
+    html, body { margin: 0; padding: 0; overflow: hidden; background: var(--bg); color: var(--text);
+      font-family: 'Noto Sans SC', sans-serif; }
+    header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+      padding: 14px 24px 8px;
+      background: linear-gradient(180deg, rgba(10,10,14,0.95), rgba(10,10,14,0.6) 80%, transparent);
+    }
+    .brand {
+      font-family: 'Cinzel', serif; font-weight: 700;
+      font-size: 18px; letter-spacing: 4px;
+      color: var(--gold); margin: 0;
+    }
+    .sub {
+      font-size: 11px; letter-spacing: 1.5px;
+      color: var(--text-dim); margin-top: 4px;
+    }
+    nav.sections {
+      position: fixed; top: 64px; left: 0; right: 0;
+      display: flex; justify-content: center; gap: 4px; flex-wrap: wrap;
+      padding: 8px 16px; z-index: 10;
+    }
+    nav.sections button {
+      border: 1px solid rgba(252, 211, 77, 0.18);
+      background: rgba(20, 20, 28, 0.65);
+      backdrop-filter: blur(10px);
+      padding: 8px 18px; border-radius: 999px;
+      color: var(--text-dim); cursor: pointer;
+      transition: all .25s; font-size: 13px;
+      font-family: 'Noto Sans SC', sans-serif;
+    }
+    nav.sections button:hover { color: var(--gold); border-color: var(--gold-dim); }
+    nav.sections button.active {
+      background: linear-gradient(135deg, #fbbf24, #c8a14a);
+      color: #1a1408; border-color: var(--gold);
+      box-shadow: 0 0 16px rgba(252, 211, 77, 0.3);
+      font-weight: 600;
+    }
+    .section-info {
+      position: fixed; top: 124px; left: 0; right: 0;
+      text-align: center; z-index: 9; pointer-events: none;
+    }
+    .section-info h2 {
+      font-family: 'Cinzel', serif; font-weight: 500;
+      font-size: 22px; letter-spacing: 3px;
+      color: var(--gold); margin: 0;
+    }
+    .section-info p {
+      font-size: 12px; letter-spacing: 1px;
+      color: var(--text-dim); margin: 4px 0 0;
+    }
+    main { position: fixed; inset: 0; }
+    canvas { display: block; }
+    .labels {
+      position: fixed; bottom: 32px; left: 0; right: 0;
+      display: grid; grid-template-columns: repeat(6, 1fr);
+      padding: 0 24px; gap: 12px;
+      pointer-events: none;
+    }
+    .labels .cell {
+      text-align: center;
+      padding: 12px 8px;
+      background: rgba(20, 20, 28, 0.55);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(252, 211, 77, 0.12);
+      border-radius: 12px;
+    }
+    .labels .cell.boss { border-color: rgba(255, 94, 94, 0.3); }
+    .labels .name {
+      font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 1.5px;
+      color: var(--gold); margin-bottom: 4px;
+    }
+    .labels .cell.boss .name { color: #ff8888; }
+    .labels .desc { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
+    .labels .badge {
+      display: inline-block; margin-top: 6px;
+      font-size: 9px; letter-spacing: 1.5px;
+      padding: 2px 8px; border-radius: 999px;
+      background: rgba(252, 211, 77, 0.15); color: var(--gold-dim);
+    }
+    .labels .cell.boss .badge {
+      background: rgba(255, 94, 94, 0.15); color: #ff8888;
+    }
+    #modeToggle {
+      position: fixed; top: 16px; right: 20px; z-index: 11;
+      background: rgba(20, 20, 28, 0.7);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(252, 211, 77, 0.25);
+      color: var(--gold); cursor: pointer;
+      padding: 8px 14px; border-radius: 999px;
+      font: 11px 'Cinzel', sans-serif; letter-spacing: 1.5px;
+      transition: all .25s;
+    }
+    #modeToggle:hover { background: rgba(252, 211, 77, 0.15); }
+    #modeToggle .dot {
+      display: inline-block; width: 8px; height: 8px;
+      border-radius: 50%; background: var(--gold);
+      margin-right: 8px; vertical-align: middle;
+      box-shadow: 0 0 8px var(--gold);
+    }
+    #modeToggle.ambient .dot { background: #ff5e5e; box-shadow: 0 0 8px #ff5e5e; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <header>
+    <h1 class="brand">SUITSPIRE · CHARACTER GALLERY</h1>
+    <div class="sub">角色形象设计 · 备选方案 / Character Design Drafts</div>
+  </header>
+  <button id="modeToggle"><span class="dot"></span>展示模式 / GALLERY</button>
+
+  <nav class="sections" id="sections">
+    <button data-key="player" class="active">玩家</button>
+    <button data-key="beast">兽族</button>
+    <button data-key="humanoid">人型</button>
+    <button data-key="undead">不死</button>
+    <button data-key="giant">巨怪</button>
+    <button data-key="merchant">商人</button>
+    <button data-key="gambler">赌徒</button>
+    <button data-key="shrine">神龛</button>
+    <button data-key="sorcerer">术士</button>
+    <button data-key="chest">宝箱</button>
+    <button data-key="forge">铁匠</button>
+  </nav>
+
+  <div class="section-info">
+    <h2 id="title">—</h2>
+    <p id="desc">—</p>
+  </div>
+
+  <main></main>
+  <div class="labels" id="labels"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+    // ============ Gradient & Material ============
+    function makeGradientMap(stops) {
+      const c = document.createElement('canvas');
+      c.width = stops.length; c.height = 1;
+      const ctx = c.getContext('2d');
+      stops.forEach((s, i) => { ctx.fillStyle = s; ctx.fillRect(i, 0, 1, 1); });
+      const tex = new THREE.CanvasTexture(c);
+      tex.minFilter = tex.magFilter = THREE.NearestFilter;
+      tex.generateMipmaps = false; return tex;
+    }
+    const gradientMap = makeGradientMap(['#2a2630', '#5e5868', '#a89888', '#d8c8a0', '#f8e8b0']);
+
+    function toon(color, emissive = 0x000000, emissiveIntensity = 0) {
+      return new THREE.MeshToonMaterial({ color, emissive, emissiveIntensity, gradientMap });
+    }
+    function block(w, h, d, color, opts = {}) {
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        toon(color, opts.emissive || 0, opts.emissiveIntensity || 0)
+      );
+      m.castShadow = true; m.receiveShadow = true;
+      return m;
+    }
+    function cyl(rt, rb, h, color, opts = {}) {
+      const m = new THREE.Mesh(
+        new THREE.CylinderGeometry(rt, rb, h, opts.seg || 12),
+        toon(color, opts.emissive || 0, opts.emissiveIntensity || 0)
+      );
+      m.castShadow = true; m.receiveShadow = true;
+      return m;
+    }
+    function sph(r, color, opts = {}) {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(r, opts.wSeg || 18, opts.hSeg || 14),
+        toon(color, opts.emissive || 0, opts.emissiveIntensity || 0)
+      );
+      m.castShadow = true;
+      return m;
+    }
+    function cone(r, h, color, seg = 8, opts = {}) {
+      const m = new THREE.Mesh(
+        new THREE.ConeGeometry(r, h, seg),
+        toon(color, opts.emissive || 0, opts.emissiveIntensity || 0)
+      );
+      m.castShadow = true;
+      return m;
+    }
+    // 发光点（用 MeshBasic 不受光，给 bloom 抓住）
+    function glow(r, color) {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 10, 8),
+        new THREE.MeshBasicMaterial({ color })
+      );
+      return m;
+    }
+    function addEyes(g, y, z, spacing, color = 0xfcd34d, size = 0.025) {
+      const eyeL = glow(size, color); eyeL.position.set(-spacing, y, z); g.add(eyeL);
+      const eyeR = glow(size, color); eyeR.position.set(spacing, y, z); g.add(eyeR);
+      return [eyeL, eyeR];
+    }
+
+    // ============ 花色卡牌 ============
+    const SUITS = ['spade', 'diamond', 'heart', 'club'];
+    const SUIT_COLORS = {
+      spade:   { face: '#e6e6e6', em: 0x8888a0, mark: 0x0a0a14 },
+      diamond: { face: '#ff8a8a', em: 0xff5878, mark: 0xa8181a },
+      heart:   { face: '#ff5e5e', em: 0xff2a2a, mark: 0x6a0a0a },
+      club:    { face: '#aaffc3', em: 0x4ade80, mark: 0x0a3a14 },
+    };
+    // 花色徽记（可复用，前后两面各一个）
+    function makeSuitMark(suit, color) {
+      const markMat = new THREE.MeshBasicMaterial({ color });
+      if (suit === 'spade') {
+        const mark = new THREE.Group();
+        const top = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.06, 6), markMat);
+        top.rotation.x = Math.PI; top.position.y = 0.015; mark.add(top);
+        const stem = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.025, 0.005), markMat);
+        stem.position.y = -0.035; mark.add(stem);
+        return mark;
+      } else if (suit === 'diamond') {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.008), markMat);
+        m.rotation.z = Math.PI / 4;
+        return m;
+      } else if (suit === 'heart') {
+        const mark = new THREE.Group();
+        const ball1 = new THREE.Mesh(new THREE.SphereGeometry(0.024, 12, 8), markMat);
+        ball1.position.set(-0.018, 0.012, 0); mark.add(ball1);
+        const ball2 = new THREE.Mesh(new THREE.SphereGeometry(0.024, 12, 8), markMat);
+        ball2.position.set(0.018, 0.012, 0); mark.add(ball2);
+        const tri = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.05, 4), markMat);
+        tri.rotation.z = Math.PI; tri.position.set(0, -0.022, 0); mark.add(tri);
+        return mark;
+      } else { // club
+        const mark = new THREE.Group();
+        const top = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 8), markMat);
+        top.position.y = 0.02; mark.add(top);
+        const left = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 8), markMat);
+        left.position.set(-0.022, -0.005, 0); mark.add(left);
+        const right = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 8), markMat);
+        right.position.set(0.022, -0.005, 0); mark.add(right);
+        const stem = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.025, 0.005), markMat);
+        stem.position.y = -0.04; mark.add(stem);
+        return mark;
+      }
+    }
+    function makeSuitCard(suit, w = 0.14, h = 0.2) {
+      const g = new THREE.Group();
+      const c = SUIT_COLORS[suit];
+      // 卡牌骨架（深色不显眼，作为夹心层）
+      // z 范围: [-0.012, 0.012]
+      const skeleton = block(w + 0.02, h + 0.02, 0.024, '#1a1418');
+      g.add(skeleton);
+      // 前面花色色面 [0.012, 0.020]
+      const front = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, 0.008),
+        toon(c.face));
+      front.position.z = 0.016;
+      g.add(front);
+      // 前面花色徽记
+      const frontMark = makeSuitMark(suit, c.mark);
+      frontMark.position.z = 0.024;
+      g.add(frontMark);
+      // 背面花色色面 [-0.020, -0.012]
+      const back = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, 0.008),
+        toon(c.face));
+      back.position.z = -0.016;
+      g.add(back);
+      // 背面花色徽记（镜像）
+      const backMark = makeSuitMark(suit, c.mark);
+      backMark.position.z = -0.024;
+      backMark.rotation.y = Math.PI;
+      g.add(backMark);
+      return g;
+    }
+    // 4 张卡牌组合（弧形或扇形布局）
+    function makeSuitDeck(layout = 'arc', radius = 0.32) {
+      const g = new THREE.Group();
+      const cards = [];
+      SUITS.forEach((suit, i) => {
+        const card = makeSuitCard(suit);
+        if (layout === 'arc') {
+          // 腰间前方弧形展开（已外推避免穿斗篷）
+          const a = (i - 1.5) * 0.38;
+          card.position.set(Math.sin(a) * radius, 0, Math.cos(a) * radius * 0.85 + 0.1);
+          card.rotation.y = -a;
+        } else if (layout === 'fan') {
+          // 扇形（向上向后）
+          const a = (i - 1.5) * 0.22;
+          card.position.set(Math.sin(a) * radius, i * 0.02, -Math.cos(a) * radius * 0.4);
+          card.rotation.z = a * 0.6;
+          card.rotation.y = Math.PI - a * 0.3;
+        } else if (layout === 'spread') {
+          // 横向平铺（背后），4 张同高同向无角度，放大 1.5×
+          card.scale.set(1.5, 1.5, 1);
+          card.position.set((i - 1.5) * 0.26, 0, -radius);
+          card.rotation.y = Math.PI;
+        }
+        g.add(card);
+        cards.push(card);
+      });
+      g.userData.cards = cards;
+      return g;
+    }
+
+    // ============ Scene / Renderer ============
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#0a0a0e');
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    document.querySelector('main').appendChild(renderer.domElement);
+
+    const aspect = window.innerWidth / window.innerHeight;
+    const d = 5;
+    const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 0.1, 100);
+    camera.position.set(14, 11, 14);
+    camera.lookAt(0, 1.2, 0);
+
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloom = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.5, 0.5, 0.7
+    );
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+
+    // ============ Root + 工具 ============
+    let root = new THREE.Group(); scene.add(root);
+    let updaters = [];
+
+    function disposeRoot() {
+      root.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+      });
+      scene.remove(root); root = new THREE.Group(); scene.add(root); updaters = [];
+    }
+
+    function makeSun(color, intensity, pos) {
+      const s = new THREE.DirectionalLight(color, intensity);
+      s.position.set(...pos); s.castShadow = true;
+      s.shadow.mapSize.set(2048, 2048);
+      Object.assign(s.shadow.camera, { left: -16, right: 16, top: 10, bottom: -10, near: 1, far: 60 });
+      s.shadow.bias = -0.0003; s.shadow.normalBias = 0.02; s.shadow.radius = 4;
+      return s;
+    }
+
+    // 发光圈底座（NPC 脚下，提供氛围光 + 视觉聚焦）
+    function makeGlowRing(color = 0xfbbf24, r = 0.78) {
+      const g = new THREE.Group();
+      // 主光环（亮）
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(r - 0.06, r, 48),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.32; g.add(ring);
+      // 内圈淡光（弥散）
+      const inner = new THREE.Mesh(
+        new THREE.RingGeometry(r * 0.45, r - 0.08, 48),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, side: THREE.DoubleSide })
+      );
+      inner.rotation.x = -Math.PI / 2;
+      inner.position.y = 0.315; g.add(inner);
+      // 6 个小光点（沿圈）
+      const dots = [];
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const dot = new THREE.Mesh(
+          new THREE.SphereGeometry(0.028, 10, 8),
+          new THREE.MeshBasicMaterial({ color })
+        );
+        dot.position.set(Math.cos(a) * (r + 0.04), 0.34, Math.sin(a) * (r + 0.04));
+        g.add(dot); dots.push(dot);
+      }
+      // 来自圈中心的向上点光源
+      const pl = new THREE.PointLight(color, 1.2, 2.5, 1.5);
+      pl.position.y = 0.5; g.add(pl);
+      g.userData = { dots };
+      return g;
+    }
+
+    // 台座（圆柱底盘 + 八边形顶面 + 金边）
+    function makePedestal(color = '#2a2630', accent = '#5a5060') {
+      const g = new THREE.Group();
+      const base = cyl(0.95, 1.1, 0.25, color, { seg: 8 });
+      base.position.y = 0.125; base.receiveShadow = true;
+      g.add(base);
+      const top = cyl(0.9, 0.9, 0.06, accent, { seg: 8 });
+      top.position.y = 0.28;
+      g.add(top);
+      return g;
+    }
+
+    // ============ ★ 共享 limb helper ============
+    function limb(w, h, d, color) {
+      const pivot = new THREE.Group();
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), toon(color));
+      m.position.y = -h / 2; m.castShadow = true;
+      pivot.add(m);
+      return pivot;
+    }
+
+    // ============ §1 玩家（融入 ♠♦♥♣ 花色元素）============
+    // C · 剑客（男）— 红白黑 + 灰色装甲层次 + 平铺卡牌
+    function makePlayerC() {
+      const g = new THREE.Group();
+      // —— 鞋（黑底 + 红口）——
+      const bootL = block(0.17, 0.1, 0.21, '#1a0e10'); bootL.position.set(-0.09, 0.05, 0.02); g.add(bootL);
+      const bootR = block(0.17, 0.1, 0.21, '#1a0e10'); bootR.position.set(0.09, 0.05, 0.02); g.add(bootR);
+      const cuffBL = block(0.18, 0.04, 0.19, '#a8181a'); cuffBL.position.set(-0.09, 0.13, 0.02); g.add(cuffBL);
+      const cuffBR = block(0.18, 0.04, 0.19, '#a8181a'); cuffBR.position.set(0.09, 0.13, 0.02); g.add(cuffBR);
+      // —— 裤子（黑色）——
+      const legL = limb(0.14, 0.3, 0.15, '#0e0a0c'); legL.position.set(-0.09, 0.45, 0); g.add(legL);
+      const legR = limb(0.14, 0.3, 0.15, '#0e0a0c'); legR.position.set(0.09, 0.45, 0); g.add(legR);
+      const kneeL = block(0.15, 0.07, 0.05, '#a8181a'); kneeL.position.set(-0.09, 0.36, 0.075); g.add(kneeL);
+      const kneeR = block(0.15, 0.07, 0.05, '#a8181a'); kneeR.position.set(0.09, 0.36, 0.075); g.add(kneeR);
+      const stripeL = block(0.04, 0.3, 0.04, '#3a1a1c'); stripeL.position.set(-0.16, 0.45, 0); g.add(stripeL);
+      const stripeR = block(0.04, 0.3, 0.04, '#3a1a1c'); stripeR.position.set(0.16, 0.45, 0); g.add(stripeR);
+      // —— 腰带（红 + 金扣）——
+      const belt = block(0.4, 0.08, 0.28, '#a8181a'); belt.position.y = 0.52; g.add(belt);
+      const buckle = block(0.07, 0.09, 0.04, '#fbbf24'); buckle.position.set(0, 0.52, 0.16); g.add(buckle);
+      // —— 白色短上衣（底层）——
+      const shirt = block(0.38, 0.34, 0.27, '#f0f0f0'); shirt.position.y = 0.73; g.add(shirt);
+      // —— 灰色装甲层次 ——
+      // 胸前菱形板（旋 45°）
+      const chestPlate = block(0.16, 0.16, 0.02, '#a8a8b8');
+      chestPlate.position.set(0, 0.82, 0.14);
+      chestPlate.rotation.z = Math.PI / 4; g.add(chestPlate);
+      // 板中心金色花色钉
+      const centerStud = new THREE.Mesh(new THREE.OctahedronGeometry(0.028), toon('#fbbf24'));
+      centerStud.position.set(0, 0.82, 0.16); g.add(centerStud);
+      // 腹部横甲条（凹陷深灰）
+      const beltArmor = block(0.4, 0.07, 0.28, '#8a8a98');
+      beltArmor.position.set(0, 0.60, 0.001); g.add(beltArmor);
+      const beltArmorLine = block(0.4, 0.015, 0.282, '#5a5a68');
+      beltArmorLine.position.set(0, 0.625, 0.002); g.add(beltArmorLine);
+      // 肩-胸装甲斜条（连接肩与胸）
+      const shConnL = block(0.07, 0.18, 0.06, '#8a8a98');
+      shConnL.position.set(-0.16, 0.86, 0.1); shConnL.rotation.z = -0.35; g.add(shConnL);
+      const shConnR = block(0.07, 0.18, 0.06, '#8a8a98');
+      shConnR.position.set(0.16, 0.86, 0.1); shConnR.rotation.z = 0.35; g.add(shConnR);
+      // 颈圈装甲
+      const collarArmor = block(0.22, 0.06, 0.22, '#5a5a68');
+      collarArmor.position.y = 0.92; g.add(collarArmor);
+      // —— 肩甲（红圆球 + 金钉）——
+      const shL = sph(0.11, '#a8181a'); shL.position.set(-0.24, 0.92, 0); g.add(shL);
+      const shR = sph(0.11, '#a8181a'); shR.position.set(0.24, 0.92, 0); g.add(shR);
+      const studL = sph(0.025, '#fbbf24'); studL.position.set(-0.24, 1.0, 0); g.add(studL);
+      const studR = sph(0.025, '#fbbf24'); studR.position.set(0.24, 1.0, 0); g.add(studR);
+      // —— 手臂（白袖 + 红袖口）——
+      const armL = limb(0.1, 0.32, 0.11, '#f0f0f0'); armL.position.set(-0.24, 0.85, 0); g.add(armL);
+      const armR = limb(0.1, 0.32, 0.11, '#f0f0f0'); armR.position.set(0.24, 0.85, 0); g.add(armR);
+      const cuffArmL = block(0.12, 0.05, 0.13, '#a8181a'); cuffArmL.position.set(-0.24, 0.55, 0); g.add(cuffArmL);
+      const cuffArmR = block(0.12, 0.05, 0.13, '#a8181a'); cuffArmR.position.set(0.24, 0.55, 0); g.add(cuffArmR);
+      // —— 头 / 头发 / 额带 ——
+      const head = sph(0.14, '#e8c89a'); head.position.y = 1.07; g.add(head);
+      const hairTop = sph(0.16, '#1a0a0e', { hSeg: 12 }); hairTop.position.y = 1.12; hairTop.scale.y = 0.7; g.add(hairTop);
+      const ponytail = cyl(0.05, 0.08, 0.36, '#1a0a0e'); ponytail.position.set(0, 1.10, -0.17);
+      ponytail.rotation.x = -0.3; g.add(ponytail);
+      const band = block(0.32, 0.04, 0.32, '#a8181a'); band.position.y = 1.18; g.add(band);
+      const browStud = block(0.04, 0.05, 0.02, '#fbbf24'); browStud.position.set(0, 1.18, 0.165); g.add(browStud);
+      addEyes(g, 1.07, 0.14, 0.045, 0xfcd34d, 0.018);
+      // —— 双刀 ——
+      const blade1 = block(0.05, 0.6, 0.03, '#d8d8e0'); blade1.position.set(-0.32, 0.7, 0); blade1.rotation.z = 0.1; g.add(blade1);
+      const grip1 = block(0.04, 0.12, 0.03, '#1a1010'); grip1.position.set(-0.32, 0.4, 0); g.add(grip1);
+      const blade2 = block(0.05, 0.6, 0.03, '#d8d8e0'); blade2.position.set(0.32, 0.7, 0); blade2.rotation.z = -0.1; g.add(blade2);
+      const grip2 = block(0.04, 0.12, 0.03, '#1a1010'); grip2.position.set(0.32, 0.4, 0); g.add(grip2);
+      // —— 腰带 4 色花色绳结 ——
+      SUITS.forEach((suit, i) => {
+        const c = SUIT_COLORS[suit];
+        const knot = new THREE.Mesh(new THREE.SphereGeometry(0.04, 14, 10), toon(c.face));
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        knot.position.set(Math.cos(a) * 0.34, 0.52, Math.sin(a) * 0.34);
+        g.add(knot);
+      });
+      // —— 背后平铺 4 张大卡牌 ——
+      const deck = makeSuitDeck('spread', 0.32);
+      deck.position.set(0, 0.85, 0);
+      g.add(deck);
+      g.userData = { deck };
+      return g;
+    }
+    // D · 剑客（女）— 略矮 / 窄肩 / 长发披肩 / 同款灰甲层次
+    function makePlayerD_Female() {
+      const g = new THREE.Group();
+      g.scale.setScalar(0.96);
+      // 鞋
+      const bootL = block(0.15, 0.1, 0.19, '#1a0e10'); bootL.position.set(-0.085, 0.05, 0.02); g.add(bootL);
+      const bootR = block(0.15, 0.1, 0.19, '#1a0e10'); bootR.position.set(0.085, 0.05, 0.02); g.add(bootR);
+      const cuffBL = block(0.16, 0.04, 0.17, '#a8181a'); cuffBL.position.set(-0.085, 0.13, 0.02); g.add(cuffBL);
+      const cuffBR = block(0.16, 0.04, 0.17, '#a8181a'); cuffBR.position.set(0.085, 0.13, 0.02); g.add(cuffBR);
+      // 裤子（较窄）
+      const legL = limb(0.12, 0.3, 0.13, '#0e0a0c'); legL.position.set(-0.085, 0.45, 0); g.add(legL);
+      const legR = limb(0.12, 0.3, 0.13, '#0e0a0c'); legR.position.set(0.085, 0.45, 0); g.add(legR);
+      const kneeL = block(0.13, 0.06, 0.05, '#a8181a'); kneeL.position.set(-0.085, 0.36, 0.065); g.add(kneeL);
+      const kneeR = block(0.13, 0.06, 0.05, '#a8181a'); kneeR.position.set(0.085, 0.36, 0.065); g.add(kneeR);
+      const stripeL = block(0.035, 0.3, 0.04, '#3a1a1c'); stripeL.position.set(-0.15, 0.45, 0); g.add(stripeL);
+      const stripeR = block(0.035, 0.3, 0.04, '#3a1a1c'); stripeR.position.set(0.15, 0.45, 0); g.add(stripeR);
+      // 腰带（细）
+      const belt = block(0.34, 0.07, 0.25, '#a8181a'); belt.position.y = 0.52; g.add(belt);
+      const buckle = block(0.06, 0.08, 0.04, '#fbbf24'); buckle.position.set(0, 0.52, 0.14); g.add(buckle);
+      // 白色短上衣（女版用 cylinder 模拟胸腰曲线）
+      const torsoTop = cyl(0.18, 0.2, 0.18, '#f0f0f0'); torsoTop.position.y = 0.84; g.add(torsoTop);
+      const torsoBottom = cyl(0.2, 0.16, 0.16, '#f0f0f0'); torsoBottom.position.y = 0.67; g.add(torsoBottom);
+      // 灰色装甲层次
+      const chestPlate = block(0.14, 0.14, 0.02, '#a8a8b8');
+      chestPlate.position.set(0, 0.82, 0.14); chestPlate.rotation.z = Math.PI / 4; g.add(chestPlate);
+      const centerStud = new THREE.Mesh(new THREE.OctahedronGeometry(0.024), toon('#fbbf24'));
+      centerStud.position.set(0, 0.82, 0.155); g.add(centerStud);
+      const beltArmor = block(0.32, 0.06, 0.25, '#8a8a98');
+      beltArmor.position.set(0, 0.60, 0.001); g.add(beltArmor);
+      const beltArmorLine = block(0.32, 0.012, 0.252, '#5a5a68');
+      beltArmorLine.position.set(0, 0.624, 0.002); g.add(beltArmorLine);
+      const shConnL = block(0.06, 0.16, 0.05, '#8a8a98');
+      shConnL.position.set(-0.15, 0.86, 0.08); shConnL.rotation.z = -0.35; g.add(shConnL);
+      const shConnR = block(0.06, 0.16, 0.05, '#8a8a98');
+      shConnR.position.set(0.15, 0.86, 0.08); shConnR.rotation.z = 0.35; g.add(shConnR);
+      const collarArmor = block(0.2, 0.05, 0.2, '#5a5a68');
+      collarArmor.position.y = 0.94; g.add(collarArmor);
+      // 肩甲（窄红圆）
+      const shL = sph(0.09, '#a8181a'); shL.position.set(-0.21, 0.93, 0); g.add(shL);
+      const shR = sph(0.09, '#a8181a'); shR.position.set(0.21, 0.93, 0); g.add(shR);
+      const studL = sph(0.022, '#fbbf24'); studL.position.set(-0.21, 1.0, 0); g.add(studL);
+      const studR = sph(0.022, '#fbbf24'); studR.position.set(0.21, 1.0, 0); g.add(studR);
+      // 手臂
+      const armL = limb(0.09, 0.3, 0.1, '#f0f0f0'); armL.position.set(-0.21, 0.85, 0); g.add(armL);
+      const armR = limb(0.09, 0.3, 0.1, '#f0f0f0'); armR.position.set(0.21, 0.85, 0); g.add(armR);
+      const cuffArmL = block(0.11, 0.05, 0.12, '#a8181a'); cuffArmL.position.set(-0.21, 0.57, 0); g.add(cuffArmL);
+      const cuffArmR = block(0.11, 0.05, 0.12, '#a8181a'); cuffArmR.position.set(0.21, 0.57, 0); g.add(cuffArmR);
+      // 头
+      const head = sph(0.13, '#f4d8b8'); head.position.y = 1.07; g.add(head);
+      // 长发（顶 + 侧两条 + 背后块）
+      const hairTop = sph(0.155, '#2a1410'); hairTop.position.y = 1.13; hairTop.scale.y = 0.75; g.add(hairTop);
+      // 两侧长发条（下垂到肩）
+      const hairSideL = block(0.05, 0.34, 0.18, '#2a1410'); hairSideL.position.set(-0.135, 0.95, -0.01); g.add(hairSideL);
+      const hairSideR = block(0.05, 0.34, 0.18, '#2a1410'); hairSideR.position.set(0.135, 0.95, -0.01); g.add(hairSideR);
+      // 背后长发块
+      const hairBack = block(0.22, 0.42, 0.05, '#2a1410'); hairBack.position.set(0, 0.92, -0.14); g.add(hairBack);
+      // 额带
+      const band = block(0.3, 0.04, 0.3, '#a8181a'); band.position.y = 1.18; g.add(band);
+      const browStud = block(0.04, 0.05, 0.02, '#fbbf24'); browStud.position.set(0, 1.18, 0.155); g.add(browStud);
+      addEyes(g, 1.07, 0.13, 0.045, 0xfcd34d, 0.02);
+      // 嘴唇（女性识别）
+      const lips = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.012, 0.005),
+        new THREE.MeshBasicMaterial({ color: 0xa8181a }));
+      lips.position.set(0, 1.02, 0.13); g.add(lips);
+      // 双刀
+      const blade1 = block(0.04, 0.55, 0.025, '#d8d8e0'); blade1.position.set(-0.29, 0.7, 0); blade1.rotation.z = 0.1; g.add(blade1);
+      const grip1 = block(0.035, 0.11, 0.025, '#1a1010'); grip1.position.set(-0.29, 0.42, 0); g.add(grip1);
+      const blade2 = block(0.04, 0.55, 0.025, '#d8d8e0'); blade2.position.set(0.29, 0.7, 0); blade2.rotation.z = -0.1; g.add(blade2);
+      const grip2 = block(0.035, 0.11, 0.025, '#1a1010'); grip2.position.set(0.29, 0.42, 0); g.add(grip2);
+      // 4 色绳结
+      SUITS.forEach((suit, i) => {
+        const c = SUIT_COLORS[suit];
+        const knot = new THREE.Mesh(new THREE.SphereGeometry(0.035, 14, 10), toon(c.face));
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        knot.position.set(Math.cos(a) * 0.3, 0.52, Math.sin(a) * 0.3);
+        g.add(knot);
+      });
+      // 背后平铺 4 张大卡牌
+      const deck = makeSuitDeck('spread', 0.32);
+      deck.position.set(0, 0.85, 0);
+      g.add(deck);
+      g.userData = { deck };
+      return g;
+    }
+
+
+    // ============ §2 兽族 ============
+    // 通用：四足兽底盘
+    function quadrupedBase(bodyColor, legColor, opts = {}) {
+      const g = new THREE.Group();
+      const body = block(opts.bodyL || 0.9, opts.bodyH || 0.32, opts.bodyW || 0.42, bodyColor);
+      body.position.y = 0.5; g.add(body);
+      const head = block(0.35, 0.3, 0.35, bodyColor);
+      head.position.set(0, 0.55, 0.5); g.add(head);
+      [[-0.3, 0.18], [0.3, 0.18], [-0.3, -0.18], [0.3, -0.18]].forEach(([z, x]) => {
+        const leg = block(0.12, 0.42, 0.12, legColor);
+        leg.position.set(x, 0.21, z); g.add(leg);
+      });
+      return { g, body, head };
+    }
+    // A · 狂狼
+    function makeWolf() {
+      const { g, head } = quadrupedBase('#3a2a1a', '#1a1208');
+      // 耳
+      const earL = cone(0.08, 0.18, '#1a1208', 6); earL.position.set(-0.12, 0.78, 0.5); g.add(earL);
+      const earR = cone(0.08, 0.18, '#1a1208', 6); earR.position.set(0.12, 0.78, 0.5); g.add(earR);
+      // 吻
+      const snout = block(0.18, 0.15, 0.18, '#2a1a10'); snout.position.set(0, 0.5, 0.7); g.add(snout);
+      // 尾
+      const tail = block(0.1, 0.1, 0.5, '#3a2a1a'); tail.position.set(0, 0.55, -0.35); g.add(tail);
+      addEyes(g, 0.6, 0.65, 0.08, 0xff5e5e, 0.028);
+      // 獠牙（白）
+      const fang = block(0.04, 0.08, 0.04, '#f8e8b0');
+      fang.position.set(0, 0.42, 0.78); g.add(fang);
+      return g;
+    }
+    // B · 黑豹
+    function makePanther() {
+      const { g } = quadrupedBase('#1a1820', '#0a0810', { bodyL: 1.0, bodyH: 0.28, bodyW: 0.38 });
+      // 较长流线身体（已在 quadrupedBase 调整），头小尾长
+      const tail = block(0.08, 0.08, 0.7, '#1a1820'); tail.position.set(0, 0.55, -0.45); g.add(tail);
+      // 背刺（沿脊柱）
+      for (let i = 0; i < 5; i++) {
+        const spike = cone(0.04, 0.12, '#5a3050', 4);
+        spike.position.set(0, 0.7, -0.2 + i * 0.1); g.add(spike);
+      }
+      addEyes(g, 0.6, 0.65, 0.08, 0xfcd34d, 0.028);
+      // 小耳
+      const earL = cone(0.06, 0.12, '#0a0810', 6); earL.position.set(-0.12, 0.74, 0.45); g.add(earL);
+      const earR = cone(0.06, 0.12, '#0a0810', 6); earR.position.set(0.12, 0.74, 0.45); g.add(earR);
+      return g;
+    }
+    // C · 巨蝠（蹲伏 + 翅展）
+    function makeBat() {
+      const g = new THREE.Group();
+      const body = sph(0.25, '#3a1a30'); body.position.y = 0.5; body.scale.set(1, 1.2, 0.8); g.add(body);
+      // 头
+      const head = sph(0.2, '#3a1a30'); head.position.set(0, 0.7, 0.15); g.add(head);
+      // 耳（尖长）
+      const earL = cone(0.05, 0.2, '#3a1a30', 6); earL.position.set(-0.13, 0.92, 0.1); g.add(earL);
+      const earR = cone(0.05, 0.2, '#3a1a30', 6); earR.position.set(0.13, 0.92, 0.1); g.add(earR);
+      // 翅膀（左右两片三角形）
+      const wingGeo = new THREE.BufferGeometry();
+      const v = new Float32Array([
+        0, 0, 0,  1.2, 0.4, 0,  1.1, -0.6, 0,
+        0, 0, 0,  1.1, -0.6, 0,  0.3, -0.4, 0,
+      ]);
+      wingGeo.setAttribute('position', new THREE.BufferAttribute(v, 3));
+      wingGeo.computeVertexNormals();
+      const wingMat = toon('#5a2a4a');
+      const wingL = new THREE.Mesh(wingGeo, wingMat);
+      wingL.position.set(-0.2, 0.6, 0); wingL.scale.x = -1; wingL.castShadow = true; g.add(wingL);
+      const wingR = new THREE.Mesh(wingGeo, wingMat);
+      wingR.position.set(0.2, 0.6, 0); wingR.castShadow = true; g.add(wingR);
+      // 腿
+      const legL = block(0.08, 0.2, 0.08, '#2a0a20'); legL.position.set(-0.1, 0.1, 0); g.add(legL);
+      const legR = block(0.08, 0.2, 0.08, '#2a0a20'); legR.position.set(0.1, 0.1, 0); g.add(legR);
+      addEyes(g, 0.72, 0.32, 0.07, 0xff5e5e, 0.03);
+      // 尖牙
+      const fang = block(0.03, 0.08, 0.03, '#f8e8b0'); fang.position.set(0, 0.6, 0.33); g.add(fang);
+      g.userData = { wingL, wingR };
+      return g;
+    }
+    // D · 九尾狐妖（Boss · 站立 2 足）
+    function makeNineTailFox() {
+      const g = new THREE.Group();
+      // 腿
+      const legL = limb(0.12, 0.36, 0.13, '#d8a04a'); legL.position.set(-0.1, 0.46, 0); g.add(legL);
+      const legR = limb(0.12, 0.36, 0.13, '#d8a04a'); legR.position.set(0.1, 0.46, 0); g.add(legR);
+      // 长袍下身
+      const skirt = cone(0.36, 0.6, '#c87828', 12); skirt.position.y = 0.45; skirt.rotation.x = Math.PI; g.add(skirt);
+      // 上身
+      const torso = cyl(0.18, 0.26, 0.5, '#fbbf24'); torso.position.y = 0.95; g.add(torso);
+      // 头（狐脸）
+      const head = sph(0.18, '#fcd34d'); head.position.y = 1.32; g.add(head);
+      // 狐耳
+      const earL = cone(0.07, 0.2, '#c87828', 6); earL.position.set(-0.13, 1.5, 0); g.add(earL);
+      const earR = cone(0.07, 0.2, '#c87828', 6); earR.position.set(0.13, 1.5, 0); g.add(earR);
+      // 狐面具（白 + 红）
+      const mask = block(0.32, 0.22, 0.06, '#f4ecd8'); mask.position.set(0, 1.32, 0.16); g.add(mask);
+      // 面具红纹
+      const mark = block(0.32, 0.04, 0.02, '#a8181a'); mark.position.set(0, 1.35, 0.19); g.add(mark);
+      // 眼洞（黑色 + 红光）
+      const eyeL = glow(0.025, 0xff5e5e); eyeL.position.set(-0.07, 1.34, 0.2); g.add(eyeL);
+      const eyeR = glow(0.025, 0xff5e5e); eyeR.position.set(0.07, 1.34, 0.2); g.add(eyeR);
+      // 9 尾巴（扇形展开，背后）
+      const tails = [];
+      for (let i = 0; i < 9; i++) {
+        const a = (i - 4) * 0.22;
+        const tail = cyl(0.06, 0.04, 0.7, '#fcd34d');
+        tail.position.set(Math.sin(a) * 0.4, 0.9 + Math.cos(a) * 0.1, -0.3 - Math.abs(Math.sin(a)) * 0.15);
+        tail.rotation.z = -a * 1.5;
+        tail.rotation.x = -0.4;
+        g.add(tail);
+        tails.push(tail);
+        // 尾尖白
+        const tip = sph(0.08, '#f4ecd8'); tip.position.copy(tail.position);
+        tip.position.y += Math.cos(-a * 1.5) * 0.35;
+        tip.position.x += Math.sin(-a * 1.5) * -0.35;
+        g.add(tip);
+      }
+      g.userData = { tails };
+      return g;
+    }
+    // E · 雷神之爪（Boss · 巨熊形态 + 雷符）
+    function makeThunderClaw() {
+      const { g } = quadrupedBase('#2a2630', '#1a1820', { bodyL: 1.2, bodyH: 0.5, bodyW: 0.6 });
+      // 加大头
+      const headBig = block(0.5, 0.42, 0.45, '#2a2630'); headBig.position.set(0, 0.75, 0.65); g.add(headBig);
+      // 熊耳
+      const earL = sph(0.1, '#1a1820'); earL.position.set(-0.17, 0.95, 0.65); g.add(earL);
+      const earR = sph(0.1, '#1a1820'); earR.position.set(0.17, 0.95, 0.65); g.add(earR);
+      addEyes(g, 0.82, 0.85, 0.1, 0x80c8ff, 0.04);
+      // 背雷电符文（蓝白发光）
+      for (let i = 0; i < 3; i++) {
+        const rune = block(0.18, 0.04, 0.18, '#b8d8ff', { emissive: 0x4080c0, emissiveIntensity: 2.0 });
+        rune.position.set(0, 0.78, -0.3 + i * 0.25); g.add(rune);
+      }
+      // 雷电锯齿（背上几道闪电）
+      for (let i = 0; i < 4; i++) {
+        const bolt = block(0.04, 0.18, 0.04, '#e8f0ff', { emissive: 0x80c8ff, emissiveIntensity: 2.5 });
+        bolt.position.set((Math.random() - 0.5) * 0.5, 0.85 + Math.random() * 0.2, -0.4 + i * 0.2);
+        bolt.rotation.z = (Math.random() - 0.5) * 0.5; g.add(bolt);
+      }
+      // 长爪
+      const claw = block(0.06, 0.15, 0.06, '#b8b8c8');
+      claw.position.set(-0.3, 0.05, 0.4); g.add(claw);
+      return g;
+    }
+    // F · 原初之兽（Boss · 全黑 + 红眼超大）
+    function makePrimal() {
+      const { g } = quadrupedBase('#0a0810', '#000000', { bodyL: 1.4, bodyH: 0.5, bodyW: 0.7 });
+      // 巨头
+      const head = block(0.55, 0.5, 0.5, '#0a0810'); head.position.set(0, 0.78, 0.78); g.add(head);
+      // 尖角（两个大角）
+      const hornL = cone(0.08, 0.45, '#1a0a14', 6); hornL.position.set(-0.18, 1.05, 0.72); hornL.rotation.z = 0.3; g.add(hornL);
+      const hornR = cone(0.08, 0.45, '#1a0a14', 6); hornR.position.set(0.18, 1.05, 0.72); hornR.rotation.z = -0.3; g.add(hornR);
+      // 红眼（大且发光）
+      addEyes(g, 0.85, 0.98, 0.13, 0xff2a2a, 0.06);
+      // 背刺
+      for (let i = 0; i < 6; i++) {
+        const spike = cone(0.07, 0.3, '#1a0a14', 4);
+        spike.position.set(0, 0.85, -0.3 + i * 0.15); g.add(spike);
+      }
+      // 黑色雾边（脚下小球）
+      for (let i = 0; i < 8; i++) {
+        const m = sph(0.08, '#1a0a14');
+        const a = (i / 8) * Math.PI * 2;
+        m.position.set(Math.cos(a) * 0.7, 0.05, Math.sin(a) * 0.4); g.add(m);
+      }
+      return g;
+    }
+
+    // ============ §3 人型 ============
+    // 通用：人形骨架
+    function humanoidBase(bodyColor, pantsColor, skinColor = '#e8c89a') {
+      const g = new THREE.Group();
+      const legL = limb(0.13, 0.32, 0.14, pantsColor); legL.position.set(-0.09, 0.4, 0); g.add(legL);
+      const legR = limb(0.13, 0.32, 0.14, pantsColor); legR.position.set(0.09, 0.4, 0); g.add(legR);
+      const bootL = block(0.16, 0.08, 0.18, '#1a0e08'); bootL.position.set(-0.09, 0.04, 0.02); g.add(bootL);
+      const bootR = block(0.16, 0.08, 0.18, '#1a0e08'); bootR.position.set(0.09, 0.04, 0.02); g.add(bootR);
+      const body = block(0.36, 0.42, 0.26, bodyColor); body.position.y = 0.65; g.add(body);
+      const head = block(0.28, 0.28, 0.26, skinColor); head.position.y = 1.0; g.add(head);
+      return { g, body, head };
+    }
+    // A · 哥布林（矮、绿、弯刀）
+    function makeGoblin() {
+      const { g, head } = humanoidBase('#6a4a28', '#3a2818', '#6a8a3a');
+      g.scale.setScalar(0.85);
+      // 长尖耳
+      const earL = cone(0.06, 0.18, '#6a8a3a', 6); earL.position.set(-0.15, 1.0, 0); earL.rotation.z = -1.0; g.add(earL);
+      const earR = cone(0.06, 0.18, '#6a8a3a', 6); earR.position.set(0.15, 1.0, 0); earR.rotation.z = 1.0; g.add(earR);
+      addEyes(g, 1.02, 0.14, 0.06, 0xfcd34d, 0.022);
+      // 獠牙
+      const fang = block(0.025, 0.06, 0.025, '#f4ecd8'); fang.position.set(0.04, 0.92, 0.135); g.add(fang);
+      // 弯刀（窄长 + 弯曲，简化为斜方块）
+      const blade = block(0.05, 0.5, 0.04, '#a8a8b8'); blade.position.set(0.32, 0.7, 0); blade.rotation.z = 0.3; g.add(blade);
+      // 破布头巾
+      const cap = block(0.32, 0.06, 0.28, '#5a2a2a'); cap.position.y = 1.16; g.add(cap);
+      return g;
+    }
+    // B · 盗贼（蒙面 + 弯刀）
+    function makeRogue() {
+      const { g, head } = humanoidBase('#1a1820', '#0a0810');
+      // 面巾（口鼻部分黑色）
+      const mask = block(0.3, 0.12, 0.27, '#2a2630'); mask.position.set(0, 0.96, 0); g.add(mask);
+      addEyes(g, 1.05, 0.14, 0.05, 0xfff0c0, 0.018);
+      // 兜帽
+      const hood = new THREE.Mesh(
+        new THREE.SphereGeometry(0.18, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.6),
+        toon('#0a0810'));
+      hood.position.set(0, 1.04, -0.02); g.add(hood);
+      // 弯刀 + 短弩
+      const blade = block(0.05, 0.45, 0.04, '#c8a14a'); blade.position.set(0.3, 0.7, 0); blade.rotation.z = 0.2; g.add(blade);
+      const bow = block(0.04, 0.3, 0.04, '#3a2418'); bow.position.set(-0.3, 0.65, 0); bow.rotation.z = -0.1; g.add(bow);
+      // 腰带十字
+      const sash = block(0.4, 0.06, 0.28, '#a8181a'); sash.position.y = 0.55; g.add(sash);
+      return g;
+    }
+    // C · 异端兵（皮帽 + 铁链 + 锤）
+    function makeHeretic() {
+      const { g, head } = humanoidBase('#4a4248', '#1a1818');
+      // 皮帽（圆顶）
+      const hat = cyl(0.16, 0.18, 0.12, '#3a1818'); hat.position.y = 1.18; g.add(hat);
+      addEyes(g, 1.02, 0.14, 0.05, 0xff5e5e, 0.018);
+      // 黑色面具下半
+      const lowerMask = block(0.28, 0.1, 0.26, '#1a1010'); lowerMask.position.y = 0.95; g.add(lowerMask);
+      // 铁链甲（胸前小方格高光）
+      for (let i = 0; i < 3; i++)
+        for (let j = 0; j < 4; j++) {
+          const link = sph(0.022, '#a8a8b8');
+          link.position.set(-0.15 + i * 0.13, 0.55 + j * 0.08, 0.14); g.add(link);
+        }
+      // 铁锤（方头 + 长柄）
+      const haft = cyl(0.04, 0.04, 0.7, '#3a2418'); haft.position.set(0.32, 0.6, 0); haft.rotation.z = -0.1; g.add(haft);
+      const head_h = block(0.18, 0.18, 0.18, '#4a4a58'); head_h.position.set(0.36, 0.94, 0); g.add(head_h);
+      return g;
+    }
+    // D · 哥布林王（Boss · 矮胖 + 破王冠 + 大剑）
+    function makeGoblinKing() {
+      const { g } = humanoidBase('#5a3a18', '#3a1808', '#7a9a3a');
+      g.scale.setScalar(1.1);
+      // 胖躯干（重新放）
+      const belly = sph(0.32, '#7a9a3a'); belly.position.y = 0.65; belly.scale.set(1.1, 0.9, 1); g.add(belly);
+      // 长尖耳
+      const earL = cone(0.07, 0.22, '#7a9a3a', 6); earL.position.set(-0.16, 1.0, 0); earL.rotation.z = -1.0; g.add(earL);
+      const earR = cone(0.07, 0.22, '#7a9a3a', 6); earR.position.set(0.16, 1.0, 0); earR.rotation.z = 1.0; g.add(earR);
+      addEyes(g, 1.02, 0.14, 0.06, 0xff5e5e, 0.025);
+      // 破王冠（金色，有缺口）
+      const crownBase = cyl(0.18, 0.18, 0.08, '#fbbf24'); crownBase.position.y = 1.18; g.add(crownBase);
+      for (let i = 0; i < 5; i++) {
+        const peak = cone(0.04, 0.1, '#fbbf24', 4);
+        const a = (i / 5) * Math.PI * 2;
+        peak.position.set(Math.cos(a) * 0.16, 1.27, Math.sin(a) * 0.16); g.add(peak);
+      }
+      // 大剑（双手剑，巨型）
+      const blade = block(0.12, 0.9, 0.06, '#c8c8d8'); blade.position.set(0.42, 0.75, 0); g.add(blade);
+      const hilt = block(0.24, 0.06, 0.08, '#fbbf24'); hilt.position.set(0.42, 0.3, 0); g.add(hilt);
+      // 金币披风（流苏）
+      const cape = block(0.5, 0.5, 0.05, '#a8181a'); cape.position.set(0, 0.6, -0.16); g.add(cape);
+      return g;
+    }
+    // E · 黑暗骑士团长（Boss · 黑板甲 + 巨剑 + 红披风）
+    function makeDarkKnight() {
+      const { g } = humanoidBase('#1a1828', '#0a0810');
+      g.scale.setScalar(1.1);
+      // 全身黑板甲（覆盖原 body）
+      const armor = block(0.44, 0.5, 0.32, '#1a1828'); armor.position.y = 0.7; g.add(armor);
+      // 肩甲
+      const shL = sph(0.14, '#0a0810'); shL.position.set(-0.28, 0.95, 0); g.add(shL);
+      const shR = sph(0.14, '#0a0810'); shR.position.set(0.28, 0.95, 0); g.add(shR);
+      // 头盔（封闭）
+      const helm = sph(0.16, '#0a0810'); helm.position.y = 1.04; g.add(helm);
+      // 头盔角（双弯角）
+      const hornL = cone(0.05, 0.25, '#1a1828', 6); hornL.position.set(-0.1, 1.22, 0); hornL.rotation.z = 0.4; g.add(hornL);
+      const hornR = cone(0.05, 0.25, '#1a1828', 6); hornR.position.set(0.1, 1.22, 0); hornR.rotation.z = -0.4; g.add(hornR);
+      // 红眼缝
+      const eyeBar = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.025, 0.02),
+        new THREE.MeshBasicMaterial({ color: 0xff2a2a }));
+      eyeBar.position.set(0, 1.06, 0.19); g.add(eyeBar);
+      // 巨剑（垂直插地）
+      const blade = block(0.1, 1.2, 0.05, '#5a5868'); blade.position.set(0.4, 0.6, 0); g.add(blade);
+      const guard = block(0.22, 0.05, 0.06, '#fbbf24'); guard.position.set(0.4, 1.18, 0); g.add(guard);
+      // 红披风
+      const cape = block(0.5, 0.7, 0.06, '#a8181a'); cape.position.set(0, 0.65, -0.18); g.add(cape);
+      const capeTop = block(0.4, 0.08, 0.06, '#7a0a0a'); capeTop.position.set(0, 0.95, -0.16); g.add(capeTop);
+      return g;
+    }
+    // F · 异端大主教（Boss · 祭司冠 + 血符法袍）
+    function makeHeresiarch() {
+      const g = new THREE.Group();
+      g.scale.setScalar(1.05);
+      // 长袍（地面到颈）
+      const robe = cone(0.4, 1.0, '#3a1a28', 12); robe.position.y = 0.5; robe.rotation.x = Math.PI; g.add(robe);
+      // 血符（袍前的红十字）
+      const cross1 = block(0.06, 0.4, 0.02, '#a8181a'); cross1.position.set(0, 0.6, 0.32); g.add(cross1);
+      const cross2 = block(0.25, 0.06, 0.02, '#a8181a'); cross2.position.set(0, 0.65, 0.32); g.add(cross2);
+      // 头（藏在帽下）
+      const head = sph(0.15, '#e8c89a'); head.position.y = 1.05; g.add(head);
+      // 祭司冠（高尖帽）
+      const mitre = cone(0.15, 0.35, '#a8181a', 8); mitre.position.y = 1.32; g.add(mitre);
+      const mitreBand = cyl(0.16, 0.16, 0.05, '#fbbf24'); mitreBand.position.y = 1.15; g.add(mitreBand);
+      addEyes(g, 1.07, 0.14, 0.05, 0xfff0c0, 0.018);
+      // 卷轴（手持）
+      const scroll = cyl(0.04, 0.04, 0.35, '#d8c8a0'); scroll.position.set(0.32, 0.75, 0); scroll.rotation.z = 0.3; g.add(scroll);
+      // 浮空符文（环绕）
+      const runes = [];
+      for (let i = 0; i < 4; i++) {
+        const rune = block(0.06, 0.06, 0.06, '#ff5e5e', { emissive: 0xff2a2a, emissiveIntensity: 2.0 });
+        const a = (i / 4) * Math.PI * 2;
+        rune.position.set(Math.cos(a) * 0.45, 0.9, Math.sin(a) * 0.45);
+        g.add(rune); runes.push(rune);
+      }
+      g.userData = { runes };
+      return g;
+    }
+
+    // ============ §4 不死 ============
+    // A · 骷髅兵（白骨人 + 破皮甲 + 骨剑）
+    function makeSkeleton() {
+      const g = new THREE.Group();
+      // 腿（白骨柱）
+      const legL = limb(0.08, 0.4, 0.08, '#d8d0bc'); legL.position.set(-0.09, 0.45, 0); g.add(legL);
+      const legR = limb(0.08, 0.4, 0.08, '#d8d0bc'); legR.position.set(0.09, 0.45, 0); g.add(legR);
+      // 胸骨架（瘦窄）
+      const ribcage = cyl(0.18, 0.22, 0.4, '#d8d0bc'); ribcage.position.y = 0.7; g.add(ribcage);
+      // 肋骨（横向小条）
+      for (let i = 0; i < 3; i++) {
+        const rib = block(0.36, 0.025, 0.04, '#a8a098'); rib.position.set(0, 0.62 + i * 0.07, 0.18); g.add(rib);
+      }
+      // 头骨
+      const skull = sph(0.16, '#d8d0bc'); skull.position.y = 1.05; g.add(skull);
+      // 眼眶（黑洞）
+      const eyeL = sph(0.04, '#0a0a0e'); eyeL.position.set(-0.05, 1.07, 0.13); g.add(eyeL);
+      const eyeR = sph(0.04, '#0a0a0e'); eyeR.position.set(0.05, 1.07, 0.13); g.add(eyeR);
+      // 鼻洞
+      const nose = block(0.04, 0.05, 0.02, '#0a0a0e'); nose.position.set(0, 1.02, 0.15); g.add(nose);
+      // 颚（牙齿条）
+      const jaw = block(0.18, 0.04, 0.02, '#0a0a0e'); jaw.position.set(0, 0.97, 0.14); g.add(jaw);
+      // 破皮甲（胸前）
+      const armor = block(0.34, 0.16, 0.28, '#3a2418'); armor.position.y = 0.7; g.add(armor);
+      // 骨剑
+      const blade = block(0.06, 0.6, 0.03, '#d8d0bc'); blade.position.set(0.28, 0.75, 0); blade.rotation.z = 0.15; g.add(blade);
+      return g;
+    }
+    // B · 食尸鬼（佝偻 + 长爪）
+    function makeGhoul() {
+      const g = new THREE.Group();
+      g.scale.setScalar(0.95);
+      // 弯腿
+      const legL = limb(0.13, 0.3, 0.14, '#3a3028'); legL.position.set(-0.1, 0.4, 0); legL.rotation.x = 0.2; g.add(legL);
+      const legR = limb(0.13, 0.3, 0.14, '#3a3028'); legR.position.set(0.1, 0.4, 0); legR.rotation.x = 0.2; g.add(legR);
+      // 弯曲身体（绿灰）
+      const body = block(0.4, 0.4, 0.3, '#5a6a48'); body.position.set(0, 0.65, 0.05); body.rotation.x = 0.3; g.add(body);
+      // 头（前倾）
+      const head = sph(0.16, '#5a6a48'); head.position.set(0, 0.95, 0.25); g.add(head);
+      // 长爪（手臂 + 锐爪）
+      const armL = limb(0.08, 0.4, 0.1, '#5a6a48'); armL.position.set(-0.22, 0.85, 0.05); armL.rotation.x = 0.5; g.add(armL);
+      const armR = limb(0.08, 0.4, 0.1, '#5a6a48'); armR.position.set(0.22, 0.85, 0.05); armR.rotation.x = 0.5; g.add(armR);
+      // 爪指（每只手 3 个爪）
+      for (const x of [-0.22, 0.22])
+        for (let i = 0; i < 3; i++) {
+          const claw = cone(0.025, 0.12, '#d8d0bc', 4);
+          claw.position.set(x + (i - 1) * 0.04, 0.42, 0.28); g.add(claw);
+        }
+      addEyes(g, 0.97, 0.38, 0.06, 0xffd478, 0.025);
+      // 嘴（露獠牙）
+      const fang1 = block(0.025, 0.05, 0.025, '#f4ecd8'); fang1.position.set(-0.04, 0.91, 0.4); g.add(fang1);
+      const fang2 = block(0.025, 0.05, 0.025, '#f4ecd8'); fang2.position.set(0.04, 0.91, 0.4); g.add(fang2);
+      return g;
+    }
+    // C · 幽魂（半透明飘浮 + 无下身）
+    function makeWraith() {
+      const g = new THREE.Group();
+      // 飘浮主体（顶圆下尖锥）
+      const headG = sph(0.22, '#a8b8d8', { emissive: 0x3848a0, emissiveIntensity: 0.4 });
+      headG.position.y = 1.1; g.add(headG);
+      // 兜帽（半球盖）
+      const hood = new THREE.Mesh(
+        new THREE.SphereGeometry(0.26, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.65),
+        toon('#2a3858'));
+      hood.position.y = 1.1; g.add(hood);
+      // 飘浮长袍（下逐渐溶解，用细长锥）
+      const robe = cone(0.3, 0.9, '#3848a0', 10); robe.position.y = 0.55; robe.rotation.x = Math.PI; g.add(robe);
+      // 底部飘散颗粒（小球）
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * Math.PI * 2;
+        const dot = glow(0.04, 0xa8b8d8);
+        dot.position.set(Math.cos(ang) * 0.4, 0.2 - Math.random() * 0.15, Math.sin(ang) * 0.3); g.add(dot);
+      }
+      // 蓝白发光眼
+      const eyeL = glow(0.035, 0xa8d8ff); eyeL.position.set(-0.06, 1.1, 0.2); g.add(eyeL);
+      const eyeR = glow(0.035, 0xa8d8ff); eyeR.position.set(0.06, 1.1, 0.2); g.add(eyeR);
+      // 漂浮（不接触台座）
+      g.userData = { floatOffset: 0.25 };
+      return g;
+    }
+    // D · 巫妖（Boss · 飘浮无下身 + 紫袍 + 法师帽）
+    function makeLich() {
+      const g = new THREE.Group();
+      g.scale.setScalar(1.1);
+      // 法师帽（高尖紫）
+      const hat = cone(0.16, 0.5, '#5a2a8a', 8); hat.position.y = 1.6; g.add(hat);
+      const hatTip = sph(0.06, '#fbbf24', { emissive: 0xfbbf24, emissiveIntensity: 1.5 });
+      hatTip.position.y = 1.88; g.add(hatTip);
+      // 头骨
+      const skull = sph(0.18, '#d8d0bc'); skull.position.y = 1.18; g.add(skull);
+      // 眼洞（紫光）
+      const eyeL = glow(0.045, 0xc868ff); eyeL.position.set(-0.06, 1.2, 0.15); g.add(eyeL);
+      const eyeR = glow(0.045, 0xc868ff); eyeR.position.set(0.06, 1.2, 0.15); g.add(eyeR);
+      // 紫袍（飘浮，无腿）
+      const robe = cone(0.45, 1.2, '#3a1858', 12); robe.position.y = 0.5; robe.rotation.x = Math.PI; g.add(robe);
+      // 衣领（高领）
+      const collar = cyl(0.22, 0.18, 0.15, '#1a0828'); collar.position.y = 0.95; g.add(collar);
+      // 法杖（左侧悬浮）
+      const staff = cyl(0.03, 0.03, 1.5, '#3a2418'); staff.position.set(-0.4, 0.9, 0); g.add(staff);
+      const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.12),
+        toon('#c868ff', 0xa848e0, 2.0));
+      orb.position.set(-0.4, 1.7, 0); g.add(orb);
+      // 围绕的紫黑火球
+      const orbs = [];
+      for (let i = 0; i < 5; i++) {
+        const fb = glow(0.06, 0xa848ff);
+        const a = (i / 5) * Math.PI * 2;
+        fb.position.set(Math.cos(a) * 0.7, 0.7 + Math.sin(a) * 0.2, Math.sin(a) * 0.7);
+        g.add(fb); orbs.push(fb);
+      }
+      g.userData = { orbs, orb, floatOffset: 0.3 };
+      return g;
+    }
+    // E · 骨之王座（Boss · 长骨刺的椅子）
+    function makeBoneThrone() {
+      const g = new THREE.Group();
+      // 王座底
+      const seat = block(0.8, 0.2, 0.6, '#d8d0bc'); seat.position.y = 0.55; g.add(seat);
+      // 椅腿（4 根骨柱）
+      [[-0.3, 0.2], [0.3, 0.2], [-0.3, -0.2], [0.3, -0.2]].forEach(([x, z]) => {
+        const leg = cyl(0.06, 0.07, 0.55, '#d8d0bc'); leg.position.set(x, 0.275, z); g.add(leg);
+      });
+      // 椅背（巨大，骨刺装饰）
+      const backRest = block(0.7, 1.2, 0.1, '#d8d0bc'); backRest.position.set(0, 1.15, -0.25); g.add(backRest);
+      // 椅背刺（多个尖锥往上）
+      for (let i = 0; i < 9; i++) {
+        const spike = cone(0.05, 0.4, '#d8d0bc', 6);
+        spike.position.set(-0.3 + i * 0.075, 1.95, -0.25);
+        spike.rotation.z = (Math.random() - 0.5) * 0.3;
+        g.add(spike);
+      }
+      // 两侧扶手刺
+      for (const side of [-1, 1]) {
+        const arm = block(0.12, 0.3, 0.6, '#d8d0bc'); arm.position.set(side * 0.36, 0.85, 0); g.add(arm);
+        const spk = cone(0.05, 0.3, '#d8d0bc', 6); spk.position.set(side * 0.36, 1.15, -0.15); g.add(spk);
+      }
+      // 中央发光符文
+      const rune = block(0.2, 0.2, 0.02, '#c868ff', { emissive: 0xa848ff, emissiveIntensity: 2.0 });
+      rune.position.set(0, 1.0, -0.18); g.add(rune);
+      // 王座下的头骨堆
+      for (let i = 0; i < 5; i++) {
+        const sk = sph(0.08, '#d8d0bc');
+        sk.position.set((Math.random() - 0.5) * 0.7, 0.08, 0.2 + Math.random() * 0.2);
+        g.add(sk);
+      }
+      return g;
+    }
+    // F · 死灵法师（Boss · 黑袍 + 骷髅面具 + 浮空头骨）
+    function makeNecromancer() {
+      const g = new THREE.Group();
+      g.scale.setScalar(1.05);
+      // 黑袍
+      const robe = cone(0.4, 1.1, '#0a0a18', 12); robe.position.y = 0.55; robe.rotation.x = Math.PI; g.add(robe);
+      // 骷髅面具
+      const skullMask = sph(0.16, '#d8d0bc'); skullMask.position.y = 1.15; g.add(skullMask);
+      // 黑眼洞
+      const eyeL = sph(0.045, '#0a0a0e'); eyeL.position.set(-0.06, 1.16, 0.13); g.add(eyeL);
+      const eyeR = sph(0.045, '#0a0a0e'); eyeR.position.set(0.06, 1.16, 0.13); g.add(eyeR);
+      // 黑兜帽
+      const hood = new THREE.Mesh(
+        new THREE.SphereGeometry(0.22, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.65),
+        toon('#0a0a18'));
+      hood.position.set(0, 1.14, -0.02); g.add(hood);
+      // 浮空头骨群（3 个绕头转）
+      const skulls = [];
+      for (let i = 0; i < 3; i++) {
+        const sk = sph(0.12, '#d8d0bc');
+        const a = (i / 3) * Math.PI * 2;
+        sk.position.set(Math.cos(a) * 0.55, 1.4, Math.sin(a) * 0.55);
+        g.add(sk); skulls.push(sk);
+        // 头骨眼洞
+        const e = glow(0.025, 0xa848ff);
+        e.position.copy(sk.position); e.position.z += 0.1;
+        g.add(e);
+      }
+      // 法杖
+      const staff = cyl(0.03, 0.03, 1.4, '#3a2418'); staff.position.set(0.35, 0.85, 0); g.add(staff);
+      const skullTop = sph(0.1, '#d8d0bc'); skullTop.position.set(0.35, 1.5, 0); g.add(skullTop);
+      g.userData = { skulls };
+      return g;
+    }
+
+    // ============ §5 巨怪 ============
+    // 通用：巨怪底盘（粗壮 humanoid）
+    function giantBase(bodyColor, accentColor) {
+      const g = new THREE.Group();
+      const legL = limb(0.2, 0.5, 0.22, bodyColor); legL.position.set(-0.16, 0.55, 0); g.add(legL);
+      const legR = limb(0.2, 0.5, 0.22, bodyColor); legR.position.set(0.16, 0.55, 0); g.add(legR);
+      const torso = block(0.7, 0.6, 0.4, bodyColor); torso.position.y = 0.95; g.add(torso);
+      const head = block(0.4, 0.34, 0.4, bodyColor); head.position.y = 1.4; g.add(head);
+      // 粗胳膊
+      const armL = limb(0.18, 0.5, 0.2, bodyColor); armL.position.set(-0.42, 1.18, 0); g.add(armL);
+      const armR = limb(0.18, 0.5, 0.2, bodyColor); armR.position.set(0.42, 1.18, 0); g.add(armR);
+      return { g, head, torso };
+    }
+    // A · 石巨人（岩石 + 苔藓）
+    function makeStoneGolem() {
+      const { g, head } = giantBase('#5a5448', '#3a3830');
+      // 苔藓贴皮（绿色小方块散布）
+      for (let i = 0; i < 10; i++) {
+        const moss = block(0.1 + Math.random() * 0.1, 0.04, 0.1 + Math.random() * 0.1, '#3a6a3a');
+        moss.position.set(
+          (Math.random() - 0.5) * 0.7,
+          0.5 + Math.random() * 1.0,
+          0.21 + Math.random() * 0.02 - 0.01
+        );
+        g.add(moss);
+      }
+      // 凸起的肩膀岩
+      const shL = sph(0.18, '#3a3830'); shL.position.set(-0.42, 1.32, 0); g.add(shL);
+      const shR = sph(0.18, '#3a3830'); shR.position.set(0.42, 1.32, 0); g.add(shR);
+      // 头顶岩石
+      const top1 = block(0.18, 0.18, 0.18, '#3a3830'); top1.position.set(-0.1, 1.62, 0); g.add(top1);
+      const top2 = block(0.16, 0.14, 0.16, '#3a3830'); top2.position.set(0.12, 1.6, 0); g.add(top2);
+      // 红眼（岩缝）
+      const eyeBar = glow(0.04, 0xff5e5e); eyeBar.position.set(-0.08, 1.42, 0.21); g.add(eyeBar);
+      const eyeBar2 = glow(0.04, 0xff5e5e); eyeBar2.position.set(0.08, 1.42, 0.21); g.add(eyeBar2);
+      return g;
+    }
+    // B · 山地野人（裸身肌肉 + 骨棒）
+    function makeWildman() {
+      const { g } = giantBase('#9a7048', '#7a4828');
+      // 简单遮羞布（腰围红布）
+      const cloth = block(0.6, 0.15, 0.42, '#a8181a'); cloth.position.y = 0.78; g.add(cloth);
+      // 长发 + 髻
+      const hair = sph(0.22, '#3a2818'); hair.position.y = 1.5; hair.scale.y = 0.7; g.add(hair);
+      const knot = sph(0.1, '#3a2818'); knot.position.set(0, 1.7, 0); g.add(knot);
+      // 部落涂纹（脸上红痕）
+      const stripe = block(0.32, 0.02, 0.02, '#a8181a'); stripe.position.set(0, 1.46, 0.21); g.add(stripe);
+      addEyes(g, 1.42, 0.21, 0.07, 0xfff0c0, 0.025);
+      // 骨棒
+      const club = cyl(0.08, 0.12, 0.9, '#d8c8a0'); club.position.set(0.55, 1.0, 0); club.rotation.z = 0.1; g.add(club);
+      // 棒头骨头
+      const clubSkull = sph(0.14, '#d8d0bc'); clubSkull.position.set(0.6, 1.45, 0); g.add(clubSkull);
+      return g;
+    }
+    // C · 沼泽巨魔（绿皮 + 水草 + 钉锤）
+    function makeSwampTroll() {
+      const { g } = giantBase('#4a6a3a', '#2a4828');
+      // 水草（头顶 + 肩膀垂下的绿色长条）
+      for (let i = 0; i < 5; i++) {
+        const weed = block(0.04, 0.25 + Math.random() * 0.15, 0.04, '#2a5a28');
+        weed.position.set(-0.15 + i * 0.075, 1.7, -0.05 + Math.random() * 0.1); g.add(weed);
+      }
+      // 两边肩膀水草
+      for (const side of [-1, 1])
+        for (let i = 0; i < 3; i++) {
+          const wd = block(0.04, 0.2, 0.04, '#2a5a28');
+          wd.position.set(side * 0.42, 1.3 - i * 0.1, -0.05); g.add(wd);
+        }
+      // 长鼻吻
+      const snout = block(0.2, 0.12, 0.3, '#4a6a3a'); snout.position.set(0, 1.32, 0.28); g.add(snout);
+      // 獠牙
+      const fang1 = block(0.04, 0.1, 0.04, '#d8d0bc'); fang1.position.set(-0.06, 1.22, 0.43); g.add(fang1);
+      const fang2 = block(0.04, 0.1, 0.04, '#d8d0bc'); fang2.position.set(0.06, 1.22, 0.43); g.add(fang2);
+      addEyes(g, 1.45, 0.21, 0.08, 0xfcd34d, 0.03);
+      // 钉锤
+      const haft = cyl(0.06, 0.06, 0.9, '#3a2418'); haft.position.set(0.55, 0.95, 0); haft.rotation.z = 0.1; g.add(haft);
+      const hMass = sph(0.18, '#5a5868'); hMass.position.set(0.6, 1.4, 0); g.add(hMass);
+      for (let i = 0; i < 8; i++) {
+        const sp = cone(0.04, 0.14, '#5a5868', 4);
+        const a = (i / 8) * Math.PI * 2;
+        sp.position.set(0.6 + Math.cos(a) * 0.24, 1.4, Math.sin(a) * 0.24);
+        sp.rotation.z = Math.cos(a) * 1.5;
+        g.add(sp);
+      }
+      return g;
+    }
+    // D · 山岳之主（Boss · 山形 + 雪顶）
+    function makeMountainLord() {
+      const { g } = giantBase('#3a3830', '#1a1818');
+      g.scale.setScalar(1.25);
+      // 头顶山形（金字塔）
+      const peak = cone(0.4, 0.6, '#5a5448', 4); peak.position.y = 1.8; peak.rotation.y = Math.PI / 4; g.add(peak);
+      // 雪顶
+      const snow = cone(0.18, 0.3, '#f4ecd8', 4); snow.position.y = 2.15; snow.rotation.y = Math.PI / 4; g.add(snow);
+      // 侧峰
+      const peakL = cone(0.22, 0.35, '#3a3830', 4); peakL.position.set(-0.35, 1.7, 0); peakL.rotation.y = Math.PI / 4; g.add(peakL);
+      const peakR = cone(0.22, 0.35, '#3a3830', 4); peakR.position.set(0.35, 1.7, 0); peakR.rotation.y = Math.PI / 4; g.add(peakR);
+      // 红眼
+      addEyes(g, 1.42, 0.22, 0.1, 0xff5e5e, 0.05);
+      // 巨锤（拖地）
+      const haft = cyl(0.08, 0.08, 1.5, '#3a2418'); haft.position.set(0.6, 0.85, 0.2); haft.rotation.z = 0.3; g.add(haft);
+      const hMass = block(0.4, 0.3, 0.4, '#5a5448'); hMass.position.set(1.05, 0.4, 0.5); g.add(hMass);
+      return g;
+    }
+    // E · 时间巨灵（Boss · 紫蓝 + 沙漏 + 星辰花纹）
+    function makeTimeGiant() {
+      const { g } = giantBase('#3a3858', '#1a1828');
+      g.scale.setScalar(1.2);
+      // 胸前沙漏（发光）
+      const hgTop = cone(0.18, 0.18, '#a8b8d8', 8); hgTop.position.set(0, 1.05, 0.22); g.add(hgTop);
+      const hgBot = cone(0.18, 0.18, '#a8b8d8', 8); hgBot.position.set(0, 0.85, 0.22); hgBot.rotation.x = Math.PI; g.add(hgBot);
+      const hgGlow = glow(0.06, 0xfbbf24); hgGlow.position.set(0, 0.95, 0.25); g.add(hgGlow);
+      // 星辰花纹（小光点散布在身体上）
+      for (let i = 0; i < 14; i++) {
+        const star = glow(0.025, 0xa8d8ff);
+        star.position.set((Math.random() - 0.5) * 0.6, 0.7 + Math.random() * 1.2, 0.21 + Math.random() * 0.02);
+        g.add(star);
+      }
+      // 头无眼，单点白光圆
+      const eye = glow(0.08, 0xffffff); eye.position.set(0, 1.45, 0.22); g.add(eye);
+      // 浮动小球（围绕）
+      const orbs = [];
+      for (let i = 0; i < 4; i++) {
+        const o = glow(0.05, 0xa8b8ff);
+        const a = (i / 4) * Math.PI * 2;
+        o.position.set(Math.cos(a) * 0.85, 1.45, Math.sin(a) * 0.85);
+        g.add(o); orbs.push(o);
+      }
+      g.userData = { orbs };
+      return g;
+    }
+    // F · 霜山巨王（Boss · 冰蓝 + 冰角 + 冰甲）
+    function makeFrostKing() {
+      const { g } = giantBase('#5a78a0', '#3a5878');
+      g.scale.setScalar(1.2);
+      // 冰甲方块（胸前 + 肩膀）
+      const ice1 = block(0.18, 0.18, 0.06, '#b8d8f0', { emissive: 0x4080c0, emissiveIntensity: 0.6 });
+      ice1.position.set(0, 1.05, 0.22); g.add(ice1);
+      const iceShL = sph(0.16, '#b8d8f0'); iceShL.position.set(-0.42, 1.32, 0); g.add(iceShL);
+      const iceShR = sph(0.16, '#b8d8f0'); iceShR.position.set(0.42, 1.32, 0); g.add(iceShR);
+      // 冰角（头部 4 个尖锥）
+      for (let i = 0; i < 4; i++) {
+        const horn = cone(0.05, 0.4, '#d8e8f8', 6);
+        const a = (i / 4) * Math.PI * 2;
+        horn.position.set(Math.cos(a) * 0.18, 1.75, Math.sin(a) * 0.18);
+        horn.rotation.z = Math.cos(a) * 0.4;
+        horn.rotation.x = Math.sin(a) * 0.4;
+        g.add(horn);
+      }
+      addEyes(g, 1.42, 0.21, 0.09, 0x80c8ff, 0.04);
+      // 冰长剑
+      const blade = block(0.08, 1.2, 0.05, '#d8e8f8', { emissive: 0x4080c0, emissiveIntensity: 0.5 });
+      blade.position.set(0.55, 1.1, 0); g.add(blade);
+      const guard = block(0.2, 0.06, 0.08, '#b8d8f0'); guard.position.set(0.55, 0.5, 0); g.add(guard);
+      return g;
+    }
+
+    // ============ §6 NPC 通用工具 ============
+    function makeWoodTable(w = 1.0, depth = 0.5, color = '#5a3a20') {
+      const g = new THREE.Group();
+      const top = block(w, 0.05, depth, color); top.position.y = 0.4; g.add(top);
+      const topEdge = block(w + 0.02, 0.015, depth + 0.02, '#3a2418'); topEdge.position.y = 0.435; g.add(topEdge);
+      for (const [x, z] of [[-w/2+0.06,-depth/2+0.06],[w/2-0.06,-depth/2+0.06],[-w/2+0.06,depth/2-0.06],[w/2-0.06,depth/2-0.06]]) {
+        const leg = block(0.06, 0.4, 0.06, '#3a2418'); leg.position.set(x, 0.2, z); g.add(leg);
+      }
+      return g;
+    }
+    function makeOilLamp(scale = 1) {
+      const g = new THREE.Group(); g.scale.setScalar(scale);
+      const base = cyl(0.04, 0.06, 0.08, '#3a2418'); base.position.y = 0.04; g.add(base);
+      const flame = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), toon('#ffcc66', 0xff7820, 2.0));
+      flame.position.y = 0.12; g.add(flame); return g;
+    }
+
+    // ============ §6.1 流浪商人（重做 · 提亮 + 金边 + 真斗篷） ============
+    function makeMerchantC() {
+      const g = new THREE.Group();
+      g.add(makeWoodTable(1.0, 0.5, '#8a5828'));
+      // 中等身材
+      const npc = new THREE.Group();
+      // 长袍（深蓝灰 cone + 金边）
+      const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.4, 0.85, 14), toon('#3a4868'));
+      robe.position.y = 0.45; npc.add(robe);
+      const robeEdge = cyl(0.41, 0.41, 0.04, '#fbbf24'); robeEdge.position.y = 0.04; npc.add(robeEdge);
+      // 肩披肩（红 + 金边）
+      const cape = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.32, 0.2, 14), toon('#8a2828'));
+      cape.position.y = 0.94; npc.add(cape);
+      const capeEdge = cyl(0.33, 0.33, 0.025, '#fbbf24'); capeEdge.position.y = 0.85; npc.add(capeEdge);
+      // 头/兜帽（深蓝灰）
+      const head = sph(0.13, '#e8c89a'); head.position.y = 1.14; npc.add(head);
+      const hood = new THREE.Mesh(new THREE.SphereGeometry(0.2, 18, 14, 0, Math.PI*2, 0, Math.PI*0.62), toon('#28324a'));
+      hood.position.set(0, 1.14, -0.02); npc.add(hood);
+      // 圆铜面具（金色）
+      const mask = new THREE.Mesh(new THREE.CircleGeometry(0.13, 24), toon('#fbbf24'));
+      mask.position.set(0, 1.14, 0.14); npc.add(mask);
+      const maskInner = new THREE.Mesh(new THREE.CircleGeometry(0.1, 24), toon('#c8a14a'));
+      maskInner.position.set(0, 1.14, 0.145); npc.add(maskInner);
+      // 面具中央凸纹（图腾）
+      const maskPattern = new THREE.Mesh(new THREE.OctahedronGeometry(0.025), toon('#8a181a'));
+      maskPattern.position.set(0, 1.14, 0.16); npc.add(maskPattern);
+      // 面具眼孔（发光）
+      const eyeL = glow(0.018, 0xff5e5e); eyeL.position.set(-0.045, 1.17, 0.16); npc.add(eyeL);
+      const eyeR = glow(0.018, 0xff5e5e); eyeR.position.set(0.045, 1.17, 0.16); npc.add(eyeR);
+      // 兜帽金边
+      const hoodEdge = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.014, 6, 18, Math.PI), toon('#fbbf24'));
+      hoodEdge.position.set(0, 1.13, 0.05); hoodEdge.rotation.x = Math.PI/2; npc.add(hoodEdge);
+      npc.position.z = -0.22; g.add(npc);
+      // 桌一角栖息乌鸦（亮一点）
+      const crow = sph(0.08, '#2a2838'); crow.position.set(0.42, 0.5, -0.12); g.add(crow);
+      const beak = cone(0.025, 0.07, '#fbbf24', 4); beak.position.set(0.5, 0.5, -0.12); beak.rotation.z = -Math.PI/2; g.add(beak);
+      const crowEye = glow(0.016, 0xff5e5e); crowEye.position.set(0.43, 0.55, -0.08); g.add(crowEye);
+      // 桌上发光蜡烛
+      const candle = cyl(0.025, 0.025, 0.1, '#fff0c0'); candle.position.set(-0.4, 0.48, -0.12); g.add(candle);
+      const flame = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), toon('#fff0a0', 0xff8838, 2.0));
+      flame.position.set(-0.4, 0.58, -0.12); g.add(flame);
+      // —— 货品（让桌面像商人摊位）——
+      // 2 个药水瓶（红 + 紫，发光）
+      const potion1Body = cyl(0.04, 0.05, 0.1, '#1a1010'); potion1Body.position.set(-0.32, 0.48, 0.1); g.add(potion1Body);
+      const potion1Liquid = sph(0.045, '#ff5e5e', { emissive: 0xff2a2a, emissiveIntensity: 0.8 });
+      potion1Liquid.position.set(-0.32, 0.47, 0.1); g.add(potion1Liquid);
+      const potion1Cork = cyl(0.025, 0.025, 0.03, '#fbbf24'); potion1Cork.position.set(-0.32, 0.55, 0.1); g.add(potion1Cork);
+      const potion2Body = cyl(0.04, 0.05, 0.1, '#1a1010'); potion2Body.position.set(-0.22, 0.48, 0.1); g.add(potion2Body);
+      const potion2Liquid = sph(0.045, '#c868ff', { emissive: 0xc868ff, emissiveIntensity: 0.8 });
+      potion2Liquid.position.set(-0.22, 0.47, 0.1); g.add(potion2Liquid);
+      const potion2Cork = cyl(0.025, 0.025, 0.03, '#fbbf24'); potion2Cork.position.set(-0.22, 0.55, 0.1); g.add(potion2Cork);
+      // 一本书 + 上面宝石
+      const book = block(0.12, 0.04, 0.16, '#5a2828'); book.position.set(-0.05, 0.45, 0.1); g.add(book);
+      const bookSpine = block(0.12, 0.02, 0.16, '#fbbf24'); bookSpine.position.set(-0.05, 0.47, 0.1); g.add(bookSpine);
+      const gemOnBook = new THREE.Mesh(new THREE.OctahedronGeometry(0.035), toon('#80c8ff', 0x80c8ff, 1.0));
+      gemOnBook.position.set(-0.05, 0.51, 0.1); g.add(gemOnBook);
+      // 金币堆（4 枚）
+      for (let i = 0; i < 4; i++) {
+        const coin = cyl(0.04, 0.04, 0.008, '#fbbf24', { emissive: 0xfbbf24, emissiveIntensity: 0.3 });
+        coin.position.set(0.1, 0.435 + i*0.009, 0.1); coin.rotation.x = Math.PI/2; g.add(coin);
+      }
+      const coinNext = cyl(0.04, 0.04, 0.008, '#fbbf24'); coinNext.position.set(0.17, 0.435, 0.13); coinNext.rotation.x = Math.PI/2; g.add(coinNext);
+      // 几张金色卡牌（左前角，叠放）
+      for (let i = 0; i < 3; i++) {
+        const card = block(0.09, 0.01, 0.13, '#fbbf24'); card.position.set(0.25, 0.43 + i*0.011, 0.08); g.add(card);
+      }
+      // 小骷髅装饰（神秘货品）
+      const skull = sph(0.04, '#d8d0bc'); skull.position.set(0.3, 0.45, -0.05); g.add(skull);
+      g.rotation.y = Math.PI / 4; return g;
+    }
+
+    // ============ §6.2 赌徒（重做 · 红绒 + 亮金 + 高对比） ============
+    function makeGamblerB() {
+      const g = new THREE.Group(); g.add(makeWoodTable(1.0, 0.55, '#8a5828'));
+      const npc = new THREE.Group(); npc.scale.set(0.95, 1.05, 0.9);
+      // 裤子（深棕 + 金线）
+      const legL = limb(0.1, 0.4, 0.11, '#3a2418'); legL.position.set(-0.07, 0.45, 0); npc.add(legL);
+      const legR = limb(0.1, 0.4, 0.11, '#3a2418'); legR.position.set(0.07, 0.45, 0); npc.add(legR);
+      // 西装外套（亮酒红 + 金边）
+      const torso = block(0.34, 0.48, 0.24, '#8a2828'); torso.position.y = 0.85; npc.add(torso);
+      // 内衬白
+      const shirt = block(0.18, 0.45, 0.02, '#f4ecd8'); shirt.position.set(0, 0.85, 0.13); npc.add(shirt);
+      // 红领带
+      const tie = block(0.05, 0.32, 0.04, '#c83838'); tie.position.set(0, 0.85, 0.14); npc.add(tie);
+      const tieKnot = block(0.07, 0.05, 0.04, '#a8181a'); tieKnot.position.set(0, 1.02, 0.14); npc.add(tieKnot);
+      // 西装翻领（金边）
+      const lapelL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.3, 0.02), toon('#fbbf24'));
+      lapelL.position.set(-0.085, 0.93, 0.13); lapelL.rotation.z = 0.25; npc.add(lapelL);
+      const lapelR = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.3, 0.02), toon('#fbbf24'));
+      lapelR.position.set(0.085, 0.93, 0.13); lapelR.rotation.z = -0.25; npc.add(lapelR);
+      // 西装金扣
+      for (let i = 0; i < 3; i++) {
+        const btn = sph(0.018, '#fbbf24'); btn.position.set(0, 0.78 - i*0.1, 0.13); npc.add(btn);
+      }
+      // 头
+      const head = sph(0.13, '#e8c89a'); head.position.y = 1.18; npc.add(head);
+      // 单片眼镜（金色 + 微微发光）
+      const monocle = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.01, 6, 16), toon('#fbbf24', 0xfbbf24, 0.4));
+      monocle.position.set(0.06, 1.2, 0.13); monocle.rotation.x = Math.PI/2; npc.add(monocle);
+      // 眼镜下面金色链子
+      const monoCh = block(0.005, 0.1, 0.005, '#fbbf24'); monoCh.position.set(0.08, 1.13, 0.13); npc.add(monoCh);
+      addEyes(npc, 1.2, 0.13, 0.045, 0xfcd34d, 0.014);
+      // 头发（侧分黑红短发）
+      const hair = block(0.22, 0.08, 0.22, '#3a1408'); hair.position.y = 1.28; npc.add(hair);
+      // 嘴角小胡
+      const mustache = block(0.1, 0.02, 0.02, '#3a1408'); mustache.position.set(0, 1.13, 0.135); npc.add(mustache);
+      npc.position.z = -0.3; g.add(npc);
+      // —— 三张倒扣大号纸牌（Three Card Monte）——
+      // 桌面绿绒（让纸牌更显眼）
+      const felt = block(0.7, 0.005, 0.32, '#1a5028'); felt.position.set(0, 0.434, 0.05); g.add(felt);
+      // 3 张大号倒扣牌（背面朝上 - 红色背 + 金色花纹）
+      for (let i = 0; i < 3; i++) {
+        const cx = -0.22 + i * 0.22;
+        // 背板（深红 + 厚度）
+        const cardBack = block(0.16, 0.012, 0.22, '#5a1818'); cardBack.position.set(cx, 0.443, 0.05); g.add(cardBack);
+        // 金色卡边
+        const cardEdge = block(0.17, 0.014, 0.23, '#fbbf24'); cardEdge.position.set(cx, 0.44, 0.05); g.add(cardEdge);
+        // 卡背花纹（中央菱形 + 4 角小点）
+        const cardPattern = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.005, 0.05),
+          new THREE.MeshBasicMaterial({ color: 0xfbbf24 }));
+        cardPattern.position.set(cx, 0.45, 0.05); cardPattern.rotation.y = Math.PI / 4;
+        g.add(cardPattern);
+        // 4 角小金点
+        for (const [dx, dz] of [[-0.06, -0.085],[0.06, -0.085],[-0.06, 0.085],[0.06, 0.085]]) {
+          const dot = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6),
+            new THREE.MeshBasicMaterial({ color: 0xfbbf24 }));
+          dot.position.set(cx + dx, 0.45, 0.05 + dz);
+          g.add(dot);
+        }
+      }
+      // 桌中央金币堆（向后挪一点）
+      for (let i = 0; i < 4; i++) {
+        const coin = cyl(0.04, 0.04, 0.008, '#fbbf24', { emissive: 0xfbbf24, emissiveIntensity: 0.4 });
+        coin.position.set(-0.28, 0.435 + i*0.009, -0.15); coin.rotation.x = Math.PI/2; g.add(coin);
+      }
+      // 桌右后角骰子点缀
+      const dice = block(0.05, 0.05, 0.05, '#f4ecd8'); dice.position.set(0.28, 0.46, -0.18); dice.rotation.y = 0.5; g.add(dice);
+      g.rotation.y = Math.PI / 4; return g;
+    }
+
+    // ============ §6.3 古老神龛 ============
+    function makeShrineC() {
+      const g = new THREE.Group();
+      const base = block(0.5, 0.15, 0.4, '#3a3838'); base.position.y = 0.075; g.add(base);
+      const arch = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.04, 8, 16, Math.PI), toon('#5a5060'));
+      arch.position.set(0, 0.6, 0); g.add(arch);
+      const columnL = cyl(0.04, 0.05, 0.45, '#5a5060'); columnL.position.set(-0.22, 0.37, 0); g.add(columnL);
+      const columnR = cyl(0.04, 0.05, 0.45, '#5a5060'); columnR.position.set(0.22, 0.37, 0); g.add(columnR);
+      const innerCircle = new THREE.Mesh(new THREE.CircleGeometry(0.16, 24), toon('#2a2828'));
+      innerCircle.position.set(0, 0.4, -0.1); g.add(innerCircle);
+      const innerEyeL = sph(0.025, '#0a0a0e'); innerEyeL.position.set(-0.05, 0.43, -0.08); g.add(innerEyeL);
+      const innerEyeR = sph(0.025, '#0a0a0e'); innerEyeR.position.set(0.05, 0.43, -0.08); g.add(innerEyeR);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI + Math.PI/12;
+        const r = block(0.02, 0.06, 0.005, '#a8181a', { emissive: 0xa8181a, emissiveIntensity: 1.0 });
+        r.position.set(Math.cos(a) * 0.25, 0.4 + Math.sin(a) * 0.25, 0.04); r.rotation.z = -a; g.add(r);
+      }
+      const groove = cyl(0.12, 0.12, 0.02, '#5a1818'); groove.position.y = 0.16; g.add(groove);
+      g.rotation.y = Math.PI / 4; return g;
+    }
+
+    // ============ §6.4 诡异术士（重做：cone 斗篷 + 肩披肩 + 金边） ============
+    // 通用：合身斗篷（cone 主袍 + 肩披肩 + 底摆金边 + 前襟开口）
+    function makeRobeShape(robeColor, edgeColor, capeColor, accentColor) {
+      const g = new THREE.Group();
+      // 主袍 cone（明显上窄下宽）
+      const robe = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.45, 0.8, 16),
+        toon(robeColor));
+      robe.position.y = 0.4; robe.castShadow = true;
+      g.add(robe);
+      // 底摆金边
+      const trim = cyl(0.46, 0.46, 0.05, edgeColor);
+      trim.position.y = 0.02; g.add(trim);
+      // 肩披肩（短锥包住肩部）
+      const cape = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.16, 0.34, 0.2, 16),
+        toon(capeColor));
+      cape.position.y = 0.85; cape.castShadow = true; g.add(cape);
+      // 披肩金边
+      const capeEdge = cyl(0.35, 0.35, 0.025, edgeColor);
+      capeEdge.position.y = 0.755; g.add(capeEdge);
+      // 前襟开口竖线
+      const placket = block(0.04, 0.7, 0.015, accentColor);
+      placket.position.set(0, 0.45, 0.32); g.add(placket);
+      // 金扣（2 颗）
+      const btn1 = sph(0.02, edgeColor); btn1.position.set(0, 0.65, 0.35); g.add(btn1);
+      const btn2 = sph(0.02, edgeColor); btn2.position.set(0, 0.45, 0.42); g.add(btn2);
+      return g;
+    }
+
+    function makeSorcererB() {
+      const g = new THREE.Group(); g.add(makeWoodTable(0.95, 0.5, '#2a1818'));
+      const npc = new THREE.Group();
+      // 斗篷（深灰 + 血红边 + 金扣）
+      const robe = makeRobeShape('#3a3038', '#a8181a', '#5a4850', '#1a1418');
+      npc.add(robe);
+      // 头
+      const head = sph(0.14, '#e8c89a'); head.position.y = 1.18; npc.add(head);
+      // 黑面具
+      const mask = block(0.22, 0.2, 0.05, '#1a1010'); mask.position.set(0, 1.16, 0.1); npc.add(mask);
+      // 山羊角
+      const hornL = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.018, 6, 12, Math.PI), toon('#fbbf24'));
+      hornL.position.set(-0.1, 1.28, 0.05); hornL.rotation.z = Math.PI/2; hornL.rotation.y = -0.3; npc.add(hornL);
+      const hornR = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.018, 6, 12, Math.PI), toon('#fbbf24'));
+      hornR.position.set(0.1, 1.28, 0.05); hornR.rotation.z = -Math.PI/2; hornR.rotation.y = 0.3; npc.add(hornR);
+      const eyeL = glow(0.022, 0xff5e5e); eyeL.position.set(-0.05, 1.18, 0.13); npc.add(eyeL);
+      const eyeR = glow(0.022, 0xff5e5e); eyeR.position.set(0.05, 1.18, 0.13); npc.add(eyeR);
+      // 手
+      const handR = sph(0.05, '#e8c89a'); handR.position.set(0.28, 0.55, 0.18); npc.add(handR);
+      const cuffR = cyl(0.08, 0.08, 0.04, '#a8181a'); cuffR.position.set(0.28, 0.62, 0.15); npc.add(cuffR);
+      npc.position.z = -0.2; g.add(npc);
+      // 桌上紫水晶 + 3 卷
+      for (let i = 0; i < 3; i++) {
+        const scroll = cyl(0.04, 0.04, 0.18, '#d8c8a0'); scroll.position.set(-0.22 + i*0.18, 0.46, 0.05); scroll.rotation.z = Math.PI/2; g.add(scroll);
+      }
+      const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.1), toon('#fff0a0', 0xc868ff, 2.0));
+      crystal.position.set(0.35, 0.55, 0.05); g.add(crystal);
+      g.rotation.y = Math.PI / 4; return g;
+    }
+
+    // ============ §6.5 神秘宝箱（大锁孔 + 神秘花纹光芒） ============
+    // 通用：大锁孔（金色边 + 深色洞 + 内含发光宝石）
+    function makeLock(w = 0.18, h = 0.22, accent = '#fbbf24', glowColor = 0xff7820) {
+      const g = new THREE.Group();
+      // 金色锁板（背景）
+      const plate = block(w + 0.06, h + 0.06, 0.02, accent); g.add(plate);
+      // 锁板凸边（凹槽）
+      const plateInner = block(w + 0.04, h + 0.04, 0.025, '#1a1010');
+      plateInner.position.z = 0.005; g.add(plateInner);
+      // 上圆洞
+      const hole = new THREE.Mesh(new THREE.CircleGeometry(w * 0.45, 24),
+        new THREE.MeshBasicMaterial({ color: 0x05050a }));
+      hole.position.set(0, h * 0.2, 0.018); g.add(hole);
+      // 下竖洞（钥匙孔下半）
+      const slot = block(w * 0.25, h * 0.35, 0.005, '#05050a');
+      slot.position.set(0, -h * 0.15, 0.018); g.add(slot);
+      // 锁孔内部发光宝石
+      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(w * 0.18),
+        toon('#fff0a0', glowColor, 2.5));
+      gem.position.set(0, h * 0.2, 0.028); g.add(gem);
+      // 锁板 4 角钉
+      for (const [dx, dy] of [[-w*0.55,-h*0.55],[w*0.55,-h*0.55],[-w*0.55,h*0.55],[w*0.55,h*0.55]]) {
+        const stud = sph(0.018, accent); stud.position.set(dx, dy, 0.013); g.add(stud);
+      }
+      return g;
+    }
+
+    function makeChestA() {
+      const g = new THREE.Group();
+      // 木箱主体（颜色提亮）
+      const body = block(0.8, 0.45, 0.55, '#8a5828'); body.position.y = 0.225; g.add(body);
+      // 木条纹（横向 3 条）
+      for (let i = 0; i < 3; i++) {
+        const stripe = block(0.82, 0.02, 0.57, '#5a3818');
+        stripe.position.y = 0.1 + i*0.15; g.add(stripe);
+      }
+      // 8 角铁包（金色铜色）
+      for (const [x, y, z] of [[-0.4,0.45,-0.275],[0.4,0.45,-0.275],[-0.4,0.45,0.275],[0.4,0.45,0.275],
+                                [-0.4,0,-0.275],[0.4,0,-0.275],[-0.4,0,0.275],[0.4,0,0.275]]) {
+        const corner = block(0.06, 0.06, 0.06, '#c8a14a'); corner.position.set(x, y, z); g.add(corner);
+      }
+      // 4 面金色神秘花纹（每面 2 条发光符文）
+      for (let i = 0; i < 4; i++) {
+        const rune = block(0.04, 0.25, 0.008, '#fbbf24',
+          { emissive: 0xfbbf24, emissiveIntensity: 1.4 });
+        rune.position.set(-0.2 + i*0.13, 0.225, 0.281); g.add(rune);
+      }
+      // 锁链（缠 2 圈）
+      for (let i = 0; i < 2; i++) {
+        const chain = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.022, 8, 24), toon('#7a5828'));
+        chain.position.set(0, 0.12 + i*0.18, 0); chain.rotation.x = Math.PI/2; chain.scale.set(1, 1, 0.7); g.add(chain);
+      }
+      // 大锁孔（前正中央）
+      const lock = makeLock(0.2, 0.26, '#fbbf24', 0xff7820);
+      lock.position.set(0, 0.28, 0.285); g.add(lock);
+      // 箱盖（略翘）
+      const lid = block(0.8, 0.06, 0.55, '#8a5828'); lid.position.set(0, 0.48, 0); lid.rotation.x = -0.08; g.add(lid);
+      // 箱盖装饰
+      const lidTrim = block(0.82, 0.02, 0.57, '#c8a14a'); lidTrim.position.set(0, 0.515, 0); lidTrim.rotation.x = -0.08; g.add(lidTrim);
+      // 缝隙橙光（盖与身之间）
+      const gap = block(0.76, 0.015, 0.52, '#ffcc66',
+        { emissive: 0xff7820, emissiveIntensity: 2.5 });
+      gap.position.y = 0.455; g.add(gap);
+      g.rotation.y = Math.PI / 4; return g;
+    }
+
+    // ============ §7 铁匠（站立打铁 + 身后火炉 + 锤子 Loop 动画） ============
+    function makeForge() {
+      const g = new THREE.Group();
+      // —— 身后火炉 ——
+      const stoveBase = block(0.85, 0.6, 0.5, '#3a3838');
+      stoveBase.position.set(0, 0.3, -0.55); g.add(stoveBase);
+      const stoveBaseTrim = block(0.9, 0.04, 0.52, '#5a5060');
+      stoveBaseTrim.position.set(0, 0.62, -0.55); g.add(stoveBaseTrim);
+      // 火炉烟囱
+      const stack = cyl(0.16, 0.2, 0.5, '#2a2828'); stack.position.set(0, 0.9, -0.55); g.add(stack);
+      const stackTop = cyl(0.22, 0.22, 0.05, '#5a5060'); stackTop.position.set(0, 1.16, -0.55); g.add(stackTop);
+      // 火炉口（深色框）
+      const stoveOpening = block(0.5, 0.38, 0.04, '#0a0a0e');
+      stoveOpening.position.set(0, 0.34, -0.305); g.add(stoveOpening);
+      // 火焰球（双层 - 外橙红 + 内白）
+      const fire = sph(0.21, '#fff0a0', { emissive: 0xff7820, emissiveIntensity: 2.5 });
+      fire.position.set(0, 0.34, -0.36); g.add(fire);
+      const fireCore = sph(0.11, '#ffffff', { emissive: 0xffe080, emissiveIntensity: 3.5 });
+      fireCore.position.set(0, 0.34, -0.36); g.add(fireCore);
+      // 炉旁工具墙（背景挂工具）
+      const tool1 = block(0.04, 0.22, 0.04, '#3a2828'); tool1.position.set(-0.55, 0.95, -0.55); g.add(tool1);
+      const tool1Head = block(0.08, 0.06, 0.06, '#5a5060'); tool1Head.position.set(-0.55, 1.08, -0.55); g.add(tool1Head);
+      const tool2 = block(0.06, 0.18, 0.06, '#3a2828'); tool2.position.set(0.55, 0.95, -0.55); g.add(tool2);
+      const tool2Head = sph(0.06, '#5a5060'); tool2Head.position.set(0.55, 1.07, -0.55); g.add(tool2Head);
+
+      // —— 砧板（前方）——
+      const anvilBase = cyl(0.13, 0.17, 0.3, '#1a1010'); anvilBase.position.set(0, 0.15, 0.18); g.add(anvilBase);
+      const anvilTop = block(0.48, 0.08, 0.24, '#3a3838'); anvilTop.position.set(0, 0.34, 0.18); g.add(anvilTop);
+      const anvilHorn = cone(0.06, 0.16, '#3a3838', 8);
+      anvilHorn.position.set(0.3, 0.34, 0.18); anvilHorn.rotation.z = -Math.PI / 2; g.add(anvilHorn);
+
+      // —— 砧板上热武器（剑刃，发橙红光）——
+      const heatBlade = block(0.06, 0.42, 0.04, '#ffe080', { emissive: 0xff5828, emissiveIntensity: 2.4 });
+      heatBlade.position.set(-0.05, 0.4, 0.18); heatBlade.rotation.z = 0.1; g.add(heatBlade);
+      const heatHilt = block(0.08, 0.06, 0.06, '#3a2418');
+      heatHilt.position.set(-0.25, 0.39, 0.18); g.add(heatHilt);
+
+      // —— 铁匠（站立面对相机）——
+      const npc = new THREE.Group();
+      // 腿
+      const legL = limb(0.17, 0.4, 0.18, '#3a2418'); legL.position.set(-0.13, 0.42, 0.05); npc.add(legL);
+      const legR = limb(0.17, 0.4, 0.18, '#3a2418'); legR.position.set(0.13, 0.42, 0.05); npc.add(legR);
+      // 鞋
+      const bootL = block(0.2, 0.08, 0.22, '#1a1010'); bootL.position.set(-0.13, 0.05, 0.07); npc.add(bootL);
+      const bootR = block(0.2, 0.08, 0.22, '#1a1010'); bootR.position.set(0.13, 0.05, 0.07); npc.add(bootR);
+      // 围裙（前面深棕 + 金边）
+      const apron = block(0.4, 0.55, 0.04, '#5a3a20'); apron.position.set(0, 0.5, 0.205); npc.add(apron);
+      const apronEdge = block(0.42, 0.04, 0.05, '#fbbf24'); apronEdge.position.set(0, 0.22, 0.21); npc.add(apronEdge);
+      // 围裙肩带（V 字）
+      const strapL = block(0.04, 0.35, 0.04, '#5a3a20');
+      strapL.position.set(-0.1, 0.93, 0.21); strapL.rotation.z = 0.15; npc.add(strapL);
+      const strapR = block(0.04, 0.35, 0.04, '#5a3a20');
+      strapR.position.set(0.1, 0.93, 0.21); strapR.rotation.z = -0.15; npc.add(strapR);
+      // 围裙金色符文（中央发光）
+      const apronRune = block(0.06, 0.2, 0.005, '#fbbf24',
+        { emissive: 0xfbbf24, emissiveIntensity: 1.2 });
+      apronRune.position.set(0, 0.55, 0.232); npc.add(apronRune);
+      // 上身肌肉（裸露肩膀，肤色）
+      const torso = block(0.44, 0.42, 0.3, '#c8a878'); torso.position.y = 0.78; npc.add(torso);
+      // 胸肌分隔线
+      const chestLine = block(0.04, 0.16, 0.02, '#a87858');
+      chestLine.position.set(0, 0.78, 0.15); npc.add(chestLine);
+      // 头（光头）
+      const head = sph(0.14, '#c8a878'); head.position.y = 1.08; npc.add(head);
+      // 单眼护目镜（金色环 + 黑带）
+      const goggleStrap = cyl(0.16, 0.16, 0.025, '#1a1010'); goggleStrap.position.y = 1.1; npc.add(goggleStrap);
+      const goggleEye = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.014, 8, 16), toon('#fbbf24', 0xfbbf24, 0.5));
+      goggleEye.position.set(-0.05, 1.1, 0.13); goggleEye.rotation.x = Math.PI / 2; npc.add(goggleEye);
+      const goggleLens = new THREE.Mesh(new THREE.CircleGeometry(0.035, 16),
+        new THREE.MeshBasicMaterial({ color: 0xff7820 }));
+      goggleLens.position.set(-0.05, 1.1, 0.135); npc.add(goggleLens);
+      const eye = glow(0.018, 0xfcd34d); eye.position.set(0.05, 1.1, 0.135); npc.add(eye);
+      // 红棕大胡子
+      const beard = block(0.2, 0.07, 0.05, '#5a2818'); beard.position.set(0, 1.0, 0.13); npc.add(beard);
+      const mustache = block(0.14, 0.025, 0.03, '#5a2818'); mustache.position.set(0, 1.06, 0.135); npc.add(mustache);
+      // 左手扶武器（在砧板上方）
+      const armL = limb(0.13, 0.38, 0.14, '#c8a878');
+      armL.position.set(-0.3, 0.92, 0); armL.rotation.x = 0.3; armL.rotation.z = 0.3; npc.add(armL);
+      // 右手 - PIVOT 用于打铁动画
+      const hammerArm = new THREE.Group();
+      hammerArm.position.set(0.3, 0.94, 0);
+      // 手臂从 pivot 朝下
+      const armR = limb(0.13, 0.36, 0.14, '#c8a878');
+      armR.position.set(0, 0, 0);
+      hammerArm.add(armR);
+      // 手腕处的锤（在手臂末端 y=-0.36 处往下接锤）
+      const hammer = new THREE.Group();
+      hammer.position.y = -0.36;
+      const hammerHandle = cyl(0.025, 0.025, 0.4, '#3a2418');
+      hammerHandle.position.y = -0.2; hammer.add(hammerHandle);
+      const hammerHead = block(0.13, 0.14, 0.11, '#3a3838');
+      hammerHead.position.y = -0.42; hammer.add(hammerHead);
+      const hammerHeadEdge = block(0.135, 0.04, 0.115, '#5a5060');
+      hammerHeadEdge.position.y = -0.42; hammer.add(hammerHeadEdge);
+      hammerArm.add(hammer);
+      // 默认姿势：手臂向下 + 锤垂直向下
+      hammerArm.rotation.x = 0;
+      npc.add(hammerArm);
+      npc.userData = { hammerArm };
+      g.add(npc);
+
+      // —— 火花粒子（围绕砧板）——
+      const sparks = [];
+      for (let i = 0; i < 10; i++) {
+        const spark = sph(0.02, '#ffe080', { emissive: 0xff7820, emissiveIntensity: 1.8 });
+        const ang = Math.random() * Math.PI * 2;
+        spark.position.set(
+          Math.cos(ang) * 0.18,
+          0.36 + Math.random() * 0.2,
+          0.18 + Math.sin(ang) * 0.12
+        );
+        spark.userData = { phase: Math.random() * Math.PI * 2, baseY: spark.position.y };
+        g.add(spark); sparks.push(spark);
+      }
+
+      g.userData = {
+        sparks,
+        hammerArm: npc.userData.hammerArm,
+        fire, fireCore,
+      };
+      g.rotation.y = Math.PI / 4;
+      return g;
+    }
+
+    // ============ Section 配置 ============
+    const sections = {
+      player: {
+        title: '玩家 / The Climber',
+        desc: '塔牌世界的爬塔者 · 抽象的角色，可由装备改变形象',
+        bg: '#0e0c14',
+        ambient: { color: 0x4858a0, intensity: 0.45 },
+        sun: { color: 0xffd8a8, intensity: 1.5, pos: [12, 14, 10] },
+        bloom: { strength: 0.4, threshold: 0.75 },
+        items: [
+          { name: 'C · 剑客（男）', en: 'Blade · M', desc: '红白黑装甲 · 灰甲层次 · 双刀', build: makePlayerC },
+          { name: 'D · 剑客（女）', en: 'Blade · F', desc: '长发披肩 · 同款灰甲层次 · 双刀', build: makePlayerD_Female },
+        ],
+      },
+      beast: {
+        title: '兽族 / Beast',
+        desc: '荒野与洞窟的捕食者 · F1–F5 主力 · 灵魂碎片：兽魂 🐾',
+        bg: '#1a1408',
+        ambient: { color: 0x4a3828, intensity: 0.4 },
+        sun: { color: 0xffb070, intensity: 1.4, pos: [12, 14, 10] },
+        bloom: { strength: 0.5, threshold: 0.75 },
+        items: [
+          { name: 'A · 狂狼', en: 'Wolf', desc: '4 足 · 黑灰毛 · 红眼獠牙', build: makeWolf },
+          { name: 'B · 黑豹', en: 'Panther', desc: '4 足流线 · 紫黑背刺', build: makePanther },
+          { name: 'C · 巨蝠', en: 'Bat', desc: '蹲伏 · 翅展 · 紫红', build: makeBat },
+          { name: 'D · 九尾狐妖', en: 'Nine-tailed Fox', desc: 'Boss · 妖魅 · 狐面具', build: makeNineTailFox, boss: true },
+          { name: 'E · 雷神之爪', en: 'Thunder Claw', desc: 'Boss · 巨熊 · 雷符', build: makeThunderClaw, boss: true },
+          { name: 'F · 原初之兽', en: 'Primal', desc: 'Boss · 暗色兽王 · 巨角', build: makePrimal, boss: true },
+        ],
+      },
+      humanoid: {
+        title: '人型 / Humanoid',
+        desc: '流浪武装与异端 · F3–F5 主力 · 灵魂石 💎',
+        bg: '#100c14',
+        ambient: { color: 0x6868a0, intensity: 0.4 },
+        sun: { color: 0xfcd0a8, intensity: 1.4, pos: [12, 14, 10] },
+        bloom: { strength: 0.45, threshold: 0.75 },
+        items: [
+          { name: 'A · 哥布林', en: 'Goblin', desc: '矮小绿皮 · 长尖耳 · 弯刀', build: makeGoblin },
+          { name: 'B · 盗贼', en: 'Rogue', desc: '蒙面巾 · 弯刀短弩', build: makeRogue },
+          { name: 'C · 异端兵', en: 'Heretic', desc: '皮帽铁链 · 铁锤', build: makeHeretic },
+          { name: 'D · 哥布林王', en: 'Goblin King', desc: 'Boss · 破王冠大剑 · 金币披风', build: makeGoblinKing, boss: true },
+          { name: 'E · 黑暗骑士团长', en: 'Dark Knight', desc: 'Boss · 黑板甲 · 红披风巨剑', build: makeDarkKnight, boss: true },
+          { name: 'F · 异端大主教', en: 'Heresiarch', desc: 'Boss · 祭司冠 · 血符浮空符', build: makeHeresiarch, boss: true },
+        ],
+      },
+      undead: {
+        title: '不死 / Undead',
+        desc: '祭坛与古墓的低语 · F6–F8 主力 · 怨念 👻',
+        bg: '#0a0e18',
+        ambient: { color: 0x3858a0, intensity: 0.4 },
+        sun: { color: 0xa8c0ff, intensity: 1.1, pos: [10, 14, 10] },
+        bloom: { strength: 0.7, threshold: 0.6 },
+        items: [
+          { name: 'A · 骷髅兵', en: 'Skeleton', desc: '白骨架 · 破皮甲骨剑', build: makeSkeleton },
+          { name: 'B · 食尸鬼', en: 'Ghoul', desc: '佝偻 · 绿灰皮 · 长爪', build: makeGhoul },
+          { name: 'C · 幽魂', en: 'Wraith', desc: '半透飘浮 · 无下身', build: makeWraith },
+          { name: 'D · 巫妖', en: 'Lich', desc: 'Boss · 飘浮紫袍 · 法师帽', build: makeLich, boss: true },
+          { name: 'E · 骨之王座', en: 'Bone Throne', desc: 'Boss · 长骨刺椅 · 符文', build: makeBoneThrone, boss: true },
+          { name: 'F · 死灵法师', en: 'Necromancer', desc: 'Boss · 骷髅面具 · 浮空头骨', build: makeNecromancer, boss: true },
+        ],
+      },
+      giant: {
+        title: '巨怪 / Giant',
+        desc: '山岳与霜地 · F6+ 解锁 · 巨魂 🗿',
+        bg: '#0e1014',
+        ambient: { color: 0x586878, intensity: 0.45 },
+        sun: { color: 0xffe0c0, intensity: 1.3, pos: [12, 14, 10] },
+        bloom: { strength: 0.4, threshold: 0.7 },
+        items: [
+          { name: 'A · 石巨人', en: 'Stone Golem', desc: '岩石身 · 苔藓 · 红眼缝', build: makeStoneGolem },
+          { name: 'B · 山地野人', en: 'Wildman', desc: '裸身 · 红涂纹 · 骨棒', build: makeWildman },
+          { name: 'C · 沼泽巨魔', en: 'Swamp Troll', desc: '绿皮 · 水草 · 钉锤', build: makeSwampTroll },
+          { name: 'D · 山岳之主', en: 'Mountain Lord', desc: 'Boss · 山形雪顶 · 巨锤', build: makeMountainLord, boss: true },
+          { name: 'E · 时间巨灵', en: 'Time Giant', desc: 'Boss · 沙漏 · 星辰花纹', build: makeTimeGiant, boss: true },
+          { name: 'F · 霜山巨王', en: 'Frost King', desc: 'Boss · 冰角 · 冰长剑', build: makeFrostKing, boss: true },
+        ],
+      },
+      merchant: {
+        title: '流浪商人 / Wandering Merchant',
+        desc: '楼层间事件 · 灵魂碎片为货币 · 旧斗篷遮脸',
+        bg: '#100c14',
+        ambient: { color: 0x4a3828, intensity: 0.55 },
+        sun: { color: 0xffd8a8, intensity: 1.0, pos: [10, 14, 10] },
+        bloom: { strength: 0.6, threshold: 0.7 },
+        ringColor: 0xfbbf24,
+        items: [
+          { name: '流浪商人', en: 'Merchant', desc: '黑斗篷 · 铜面具 · 乌鸦栖息 · 桌上货品', build: makeMerchantC, static: true },
+        ],
+      },
+      gambler: {
+        title: '赌徒 / Gambler',
+        desc: '命运之轮在你面前转动 · 楼层间事件',
+        bg: '#140c0c',
+        ambient: { color: 0x4a2828, intensity: 0.5 },
+        sun: { color: 0xffb070, intensity: 1.2, pos: [10, 14, 10] },
+        bloom: { strength: 0.6, threshold: 0.7 },
+        ringColor: 0xff5e5e,
+        items: [
+          { name: '赌徒', en: 'Gambler', desc: '单片眼镜 · 红领带金扣 · 3 倒扣大牌', build: makeGamblerB, static: true },
+        ],
+      },
+      shrine: {
+        title: '古老神龛 / Ancient Shrine',
+        desc: '献祭生命换力量 · 楼层间事件 · 无 NPC',
+        bg: '#0c0c14',
+        ambient: { color: 0x3848a0, intensity: 0.5 },
+        sun: { color: 0xb8c8ff, intensity: 1.1, pos: [10, 14, 10] },
+        bloom: { strength: 0.8, threshold: 0.6 },
+        ringColor: 0xff2a2a,
+        items: [
+          { name: '古老神龛', en: 'Shrine', desc: '半圆拱门 · 圆形浮雕 · 龛口符文圈', build: makeShrineC, static: true },
+        ],
+      },
+      sorcerer: {
+        title: '诡异术士 / Strange Sorcerer',
+        desc: '女性 · 不说话只点头 · 楼层间事件',
+        bg: '#0c0a18',
+        ambient: { color: 0x4858a0, intensity: 0.55 },
+        sun: { color: 0xc868ff, intensity: 0.9, pos: [10, 14, 10] },
+        bloom: { strength: 0.7, threshold: 0.65 },
+        ringColor: 0xc868ff,
+        items: [
+          { name: '诡异术士', en: 'Sorcerer', desc: '黑袍金角 · 弯曲山羊角 · 紫水晶', build: makeSorcererB, static: true },
+        ],
+      },
+      chest: {
+        title: '神秘宝箱 / Mysterious Chest',
+        desc: '锁链已经锈蚀 · 楼层间事件 · 静物',
+        bg: '#100c10',
+        ambient: { color: 0x4a3828, intensity: 0.55 },
+        sun: { color: 0xffd8a8, intensity: 1.0, pos: [10, 14, 10] },
+        bloom: { strength: 0.7, threshold: 0.65 },
+        ringColor: 0xff8838,
+        items: [
+          { name: '神秘宝箱', en: 'Chest', desc: '木箱铁角 · 大金锁孔 · 缠链 · 4 面金符文', build: makeChestA, static: true },
+        ],
+      },
+      forge: {
+        title: '铁匠铺 / Forge',
+        desc: '武器附魔 · 25% 概率 5 折特惠 · 地图节点',
+        bg: '#180c08',
+        ambient: { color: 0x5a3818, intensity: 0.55 },
+        sun: { color: 0xff8838, intensity: 1.4, pos: [10, 14, 10] },
+        bloom: { strength: 0.8, threshold: 0.6 },
+        ringColor: 0xff7820,
+        items: [
+          { name: '铁匠', en: 'Blacksmith', desc: '站立打铁 · 身后火炉 · 护目镜 · 锤击 Loop 动画', build: makeForge, static: true },
+        ],
+      },
+    };
+
+    // ============ 光照模式 ============
+    // gallery: 摄影棚 · 明亮均匀 · 暴露所有细节（画廊预览用）
+    // ambient: 氛围光 · 种族主题色 · 暗调对比强（实际场景用）
+    const GALLERY_LIGHT = {
+      bg: '#1c1c26',
+      ambient: { color: 0xf0f0f4, intensity: 0.8 },
+      hemi:    { sky: 0xfff4e0, ground: 0x6868a0, intensity: 0.55 },
+      sun:     { color: 0xffffff, intensity: 1.5, pos: [10, 14, 14] },
+      fill:    { color: 0xa8b8d8, intensity: 0.7, pos: [-12, 8, -6] },
+      rim:     { color: 0xfcd34d, intensity: 0.5, pos: [0, 6, -14] },
+      bloom:   { strength: 0.42, threshold: 0.78 },
+    };
+    let lightMode = 'gallery';
+    let currentSection = 'player';
+
+    // ============ 切换场景 ============
+    function buildSection(key) {
+      disposeRoot();
+      currentSection = key;
+      const sec = sections[key];
+      const L = lightMode === 'gallery' ? GALLERY_LIGHT : sec;
+      scene.background = new THREE.Color(L.bg !== undefined ? L.bg : sec.bg);
+      root.add(new THREE.AmbientLight(L.ambient.color, L.ambient.intensity));
+      if (L.hemi) {
+        root.add(new THREE.HemisphereLight(L.hemi.sky, L.hemi.ground, L.hemi.intensity));
+      } else {
+        root.add(new THREE.HemisphereLight(0x6868a0, 0x1a1818, 0.3));
+      }
+      root.add(makeSun(L.sun.color, L.sun.intensity, L.sun.pos));
+      if (L.fill) {
+        const f = new THREE.DirectionalLight(L.fill.color, L.fill.intensity);
+        f.position.set(...L.fill.pos); root.add(f);
+      }
+      if (L.rim) {
+        const r = new THREE.DirectionalLight(L.rim.color, L.rim.intensity);
+        r.position.set(...L.rim.pos); root.add(r);
+      }
+      bloom.strength = L.bloom.strength;
+      bloom.threshold = L.bloom.threshold;
+
+      // 地面
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(40, 20), toon('#15131a')
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      root.add(ground);
+
+      // 排列角色 + 相机动态适配
+      const n = sec.items.length;
+      const span = n > 3 ? 3.0 : (n === 2 ? 2.6 : (n === 1 ? 0 : 3.5));
+      const camD = n > 3 ? 4.5 : (n === 2 ? 2.4 : (n === 1 ? 2.0 : 3.2));
+      camera.top = camD; camera.bottom = -camD;
+      const _a = window.innerWidth / window.innerHeight;
+      camera.left = -camD * _a; camera.right = camD * _a;
+      camera.updateProjectionMatrix();
+      const startX = -((n - 1) * span) / 2;
+      const labelsEl = document.getElementById('labels');
+      labelsEl.style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+      labelsEl.innerHTML = '';
+      sec.items.forEach((item, i) => {
+        const x = startX + i * span;
+        // 台座
+        const ped = makePedestal(item.boss ? '#3a1a1a' : '#2a2630',
+                                  item.boss ? '#7a3030' : '#5a5060');
+        ped.position.set(x, 0, 0);
+        root.add(ped);
+
+        // 发光圈底座（static NPC 必加 / 其他可选）
+        const ringColor = item.ring !== undefined ? item.ring : sec.ringColor;
+        if (ringColor !== undefined) {
+          const ring = makeGlowRing(ringColor, 0.78);
+          ring.position.set(x, 0, 0);
+          ring.userData.phase = i;
+          root.add(ring);
+          updaters.push((t) => {
+            ring.userData.dots && ring.userData.dots.forEach((d, k) => {
+              const a = (k / 6) * Math.PI * 2 + t * 0.5;
+              const r2 = 0.82;
+              d.position.x = Math.cos(a) * r2;
+              d.position.z = Math.sin(a) * r2;
+            });
+          });
+        }
+        // 角色
+        const m = item.build();
+        const floatY = (m.userData && m.userData.floatOffset) || 0;
+        const baseRotY = m.rotation.y;
+        m.userData = m.userData || {};
+        m.userData.baseY = 0.3 + floatY;
+        m.position.set(x, m.userData.baseY, 0);
+        m.userData.spinSpeed = item.boss ? 0.3 : 0.4;
+        m.userData.static = !!item.static;
+        m.userData.baseRotY = baseRotY;
+        root.add(m);
+        updaters.push((t) => {
+          if (m.userData.static) {
+            m.rotation.y = m.userData.baseRotY + Math.sin(t * 0.4) * 0.15;
+          } else {
+            m.rotation.y = t * m.userData.spinSpeed;
+          }
+          m.position.y = m.userData.baseY + Math.sin(t * 1.6 + i) * 0.03;
+          // 飘浮型（幽魂/巫妖）保持悬浮
+          if (m.userData.orbs) {
+            m.userData.orbs.forEach((o, idx) => {
+              const ang = t * 0.8 + idx * (Math.PI * 2 / m.userData.orbs.length);
+              const r = 0.7;
+              o.position.x = Math.cos(ang) * r;
+              o.position.z = Math.sin(ang) * r;
+            });
+          }
+          if (m.userData.skulls) {
+            m.userData.skulls.forEach((sk, idx) => {
+              const ang = t * 1.2 + idx * (Math.PI * 2 / 3);
+              const r = 0.55;
+              sk.position.x = Math.cos(ang) * r;
+              sk.position.z = Math.sin(ang) * r;
+              sk.position.y = 1.4 + Math.sin(t * 2 + idx) * 0.08;
+            });
+          }
+          // 铁匠打铁 Loop
+          if (m.userData.hammerArm) {
+            const phase = (t * 3.2) % (Math.PI * 2);
+            // 锤抬起再落下：rotation.x 从 -1.4（举起朝后）摆到 0.3（向下砸）
+            m.userData.hammerArm.rotation.x = -0.6 + Math.cos(phase) * 0.9;
+          }
+          // 火花闪烁（只在锤落下瞬间放大）
+          if (m.userData.sparks) {
+            const phase = (t * 3.2) % (Math.PI * 2);
+            const strike = Math.max(0, Math.cos(phase - Math.PI) ** 4);  // 0 → 1 在锤落下时
+            m.userData.sparks.forEach((sp, idx) => {
+              const localPhase = sp.userData.phase + t * 4;
+              const scale = strike * (0.8 + Math.sin(localPhase) * 0.4) + 0.3;
+              sp.scale.setScalar(scale);
+              sp.position.y = sp.userData.baseY + strike * 0.08 * Math.sin(localPhase * 1.5);
+            });
+          }
+          // 火焰呼吸
+          if (m.userData.fire) {
+            m.userData.fire.material.emissiveIntensity = 2.4 + Math.sin(t * 6) * 0.4 + Math.sin(t * 11) * 0.2;
+            m.userData.fireCore.material.emissiveIntensity = 3.4 + Math.sin(t * 7) * 0.3;
+          }
+        });
+
+        // 标签
+        const cell = document.createElement('div');
+        cell.className = 'cell' + (item.boss ? ' boss' : '');
+        cell.innerHTML = `
+          <div class="name">${item.name}</div>
+          <div class="desc">${item.desc}</div>
+          <span class="badge">${item.boss ? 'BOSS' : item.en}</span>
+        `;
+        labelsEl.appendChild(cell);
+      });
+
+      // 标题
+      document.getElementById('title').textContent = sec.title;
+      document.getElementById('desc').textContent = sec.desc;
+    }
+
+    // ============ Nav ============
+    document.getElementById('sections').addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      document.querySelectorAll('nav.sections button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      buildSection(btn.dataset.key);
+    });
+
+    // ============ Mode toggle ============
+    const modeBtn = document.getElementById('modeToggle');
+    modeBtn.addEventListener('click', () => {
+      lightMode = lightMode === 'gallery' ? 'ambient' : 'gallery';
+      modeBtn.classList.toggle('ambient', lightMode === 'ambient');
+      modeBtn.innerHTML = lightMode === 'gallery'
+        ? '<span class="dot"></span>展示模式 / GALLERY'
+        : '<span class="dot"></span>氛围模式 / IN-GAME';
+      buildSection(currentSection);
+    });
+
+    // ============ 启动 ============
+    buildSection('player');
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+      for (const fn of updaters) fn(t);
+      composer.render();
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      const a = window.innerWidth / window.innerHeight;
+      camera.left = -d * a; camera.right = d * a;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
