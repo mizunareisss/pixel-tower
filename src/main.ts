@@ -283,17 +283,13 @@ function render() {
 function showDiceRoll(finalRoll: number): void {
   document.getElementById("dice-overlay")?.remove();
   const enemyFirst = finalRoll % 2 === 0;
+  const faces = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
   const overlay = document.createElement("div");
   overlay.id = "dice-overlay";
   overlay.innerHTML = `
     <div class="dice-container">
-      <div class="dice-3d">
-        <div class="dice-face f1">⚀</div>
-        <div class="dice-face f2">⚁</div>
-        <div class="dice-face f3">⚂</div>
-        <div class="dice-face f4">⚃</div>
-        <div class="dice-face f5">⚄</div>
-        <div class="dice-face f6">⚅</div>
+      <div class="dice-2d">
+        <span class="dice-emoji">${faces[Math.floor(Math.random() * 6)]}</span>
       </div>
       <div class="dice-result" style="display:none">
         <div class="dr-num">${finalRoll}</div>
@@ -303,30 +299,37 @@ function showDiceRoll(finalRoll: number): void {
   `;
   document.body.appendChild(overlay);
 
-  // 1.1s 后停止翻滚，显示最终骰面
-  setTimeout(() => {
-    const dice = overlay.querySelector(".dice-3d") as HTMLElement | null;
-    if (dice) {
-      dice.classList.add("stopped");
-      dice.setAttribute("data-final", String(finalRoll));
-    }
-  }, 1100);
+  const dice = overlay.querySelector(".dice-2d") as HTMLElement | null;
+  const emoji = overlay.querySelector(".dice-emoji") as HTMLElement | null;
 
-  // 1.4s 显示文字结果
+  // 翻滚阶段：每 ~55ms 切换面 + 加 shake + scale + rotate
+  // 总时长 700ms（用户要求"再缩短一点点"）
+  const rollInterval = setInterval(() => {
+    if (emoji) emoji.textContent = faces[Math.floor(Math.random() * 6)];
+  }, 55);
+
+  // 700ms 停止翻滚，显示最终面 + bounce
+  setTimeout(() => {
+    clearInterval(rollInterval);
+    if (emoji) emoji.textContent = faces[finalRoll - 1];
+    if (dice) dice.classList.add("stopped");
+  }, 700);
+
+  // 950ms 显示文字结果（bounce 完）
   setTimeout(() => {
     const r = overlay.querySelector(".dice-result") as HTMLElement | null;
     if (r) r.style.display = "flex";
-  }, 1400);
+  }, 950);
 
-  // 2.2s 淡出 + 如果敌人先手，触发敌人攻击
+  // 1500ms 淡出 + 如果敌人先手，触发敌人攻击
   setTimeout(() => {
     overlay.classList.add("fade-out");
-    setTimeout(() => overlay.remove(), 280);
+    setTimeout(() => overlay.remove(), 240);
     if (enemyFirst) {
       gameEnemyFirstStrike(state);
       render();
     }
-  }, 2200);
+  }, 1500);
 }
 
 // 战斗出场动画 — 分三阶段，节奏感更强，玩家能看清"击杀"
@@ -852,6 +855,32 @@ function renderBattle() {
     ps.innerHTML = visibleStatuses.map(s => renderStatusTag(s)).join("");
   }
 
+  // 花色专精激活的 keyword chip — 加在状态栏开头
+  // 显示当前激活花色 + tier + keyword 名（点击展开详情）
+  const activeSuit = getActiveSpecialty(battle);
+  if (activeSuit) {
+    const tier = suitTier(battle, activeSuit);
+    if (tier >= 1) {
+      const chips: string[] = [];
+      // 4 花色 keyword 名映射
+      const keywordNames: Record<Suit, string> = {
+        spade: "锐利", diamond: "迅捷", heart: "贪婪", club: "守序",
+      };
+      const sym = SUIT_SYMBOLS[activeSuit];
+      const kw = keywordNames[activeSuit];
+      // T1 激活的 keyword chip
+      chips.push(`<span class="keyword-chip k-suit-${activeSuit}" data-suit-kw="${activeSuit}" title="${SUIT_THEMES[activeSuit].name} 专精 T${tier} · ${kw} keyword 激活中（点击查看详情）"><span class="kc-sym">${sym}</span><span class="kc-name">${kw}</span><span class="kc-tier">T${tier}</span></span>`);
+      // 把 keyword chip 插到 status chips 之前
+      ps.innerHTML = chips.join("") + ps.innerHTML;
+      // 点击 keyword chip 打开 suit specialty panel
+      ps.querySelectorAll<HTMLElement>("[data-suit-kw]").forEach(chip => {
+        chip.addEventListener("click", e => {
+          e.stopPropagation();
+          showSuitSpecialtyPanel();
+        });
+      });
+    }
+  }
 }
 
 async function handleEndTurn() {
