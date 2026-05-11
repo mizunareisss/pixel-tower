@@ -3509,6 +3509,56 @@ body.is-touch button:hover:not(:disabled) {
 .mxpay-total .mxpay-ok { color: var(--green); }
 .mxpay-total .mxpay-mismatch { color: var(--red); }
 
+/* 兑换 modal 上下分段 */
+.trade-modal {
+  width: min(480px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.trade-section-label {
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--yellow);
+  margin: 10px 0 4px;
+  letter-spacing: 0.5px;
+}
+
+/* 卖卡 modal */
+.sell-modal {
+  width: min(560px, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+.sell-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
+  margin: 8px 0;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.sell-card-item {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  padding: 8px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--white);
+  clip-path: none !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sell-card-item:hover { border-color: var(--yellow); }
+.sell-card-item.rarity-rare       { border-left: 3px solid #6bb3ff; }
+.sell-card-item.rarity-super_rare { border-left: 3px solid #d460ff; }
+.sell-card-item.rarity-epic       { border-left: 3px solid #ffd460; }
+.sell-card-name { font-size: 12px; font-weight: 900; }
+.sell-card-meta { font-size: 10px; color: var(--gray); }
+.sell-card-price { font-size: 11px; color: var(--yellow); margin-top: 2px; }
+
 /* 图鉴 · 附魔分组 */
 .codex-enchant-branch {
   margin-bottom: 18px;

@@ -630,11 +630,11 @@ const SK_BATTLE_CRY: CardDef = {
 
 const SK_FRENZY: CardDef = {
   id: "sk_frenzy", name: "激奋", category: "skill", target: "self",
-  desc: "激活激奋：每打出一张攻击牌后层数 +1，下次攻击额外 +5 × 层数伤害（整场战斗持续）。",
+  desc: "激活激奋：4 回合内每打出一张攻击牌后层数 +1，下次攻击额外 +2 × 层数伤害。",
   onPlay: (c) => {
     if (!c.player.statuses.find(s => s.id === "frenzy")) {
-      addStatus(c.player, "frenzy", "激奋", 1, -1);
-      c.log("激奋激活！下张攻击 +5。", "player");
+      addStatus(c.player, "frenzy", "激奋", 1, 4);  // duration 4 回合
+      c.log("激奋激活！下张攻击 +2（持续 4 回合）。", "player");
     } else {
       c.log("激奋已激活，重复使用无效。", "system");
     }
@@ -978,6 +978,164 @@ const SK_PIERCE_SHOT: CardDef = {
   onPlay: (c) => {
     addStatus(c.player, "pierce_next", "穿甲蓄势", 1, -1);
     c.log("穿甲射：下一击无视护甲。", "player");
+  },
+};
+
+// ─────────────────────────────────────────────────────────
+// 新增卡：填充 ♥ 吸血 / ♣ 魔法 / pierce / dodge / 控制 类
+// ─────────────────────────────────────────────────────────
+
+// ♥ 血契：消耗 5 HP → 本回合所有攻击吸血 +20%
+const SK_BLOOD_PACT: CardDef = {
+  id: "sk_blood_pact", name: "血契", category: "skill", target: "self",
+  desc: "消耗 5 HP，本回合内所有攻击吸血 +20%。",
+  attackSuit: undefined, defaultSuit: "heart",
+  onPlay: (c) => {
+    const cost = Math.min(5, c.player.vita - 1);
+    if (cost <= 0) { c.log("血契：HP 不足。", "system"); return; }
+    c.player.vita -= cost;
+    addStatus(c.player, "blood_pact", "血契", 20, 1);
+    c.log(`血契：自损 ${cost} HP，本回合吸血 +20%。`, "player");
+  },
+};
+
+// ♥ 汲血斩（super_rare）：单体造目标当前 HP 35% 真伤 + 100% 转化为玩家 HP；下回合不能出攻击牌
+const SK_DRAIN_STRIKE: CardDef = {
+  id: "sk_drain_strike", name: "汲血斩", category: "skill", target: "single",
+  desc: "对目标造成其当前 HP 35% 的真实伤害（无视护甲），伤害全部转为你的 HP；下回合无法出攻击牌。",
+  defaultSuit: "heart",
+  onPlay: (c) => {
+    const dmg = Math.max(1, Math.floor(c.target.hp * 0.35));
+    c.target.hp = Math.max(0, c.target.hp - dmg);
+    c.log(`汲血斩：${c.target.name} -${dmg}（真伤）。`, "player");
+    if (c.target.hp <= 0) { c.target.alive = false; c.log(`★ 击败 ${c.target.name}！`, "win"); }
+    const before = c.player.vita;
+    c.player.vita = Math.min(c.player.vitaMax, c.player.vita + dmg);
+    if (c.player.vita > before) c.log(`汲血：回 ${c.player.vita - before} HP。`, "player");
+    addStatus(c.player, "no_attack", "蓄力中", 1, 1);
+  },
+};
+
+// ♣ 奥术爆裂：本回合每出 1 张非攻击牌，下张攻击 +3（独立于法师杖/算计）
+const SK_ARCANE_BURST: CardDef = {
+  id: "sk_arcane_burst", name: "奥术爆裂", category: "skill", target: "self",
+  desc: "本回合内每打出 1 张非攻击牌，下张攻击额外 +3 伤害。",
+  defaultSuit: "club",
+  onPlay: (c) => {
+    addStatus(c.player, "arcane_burst", "奥术爆裂", 1, 1);
+    c.log("奥术爆裂：本回合非攻击牌加成。", "player");
+  },
+};
+
+// ♣ 心刃：单体造伤 = 本回合已出非攻击牌数 ×4
+const SK_MIND_BLADE: CardDef = {
+  id: "sk_mind_blade", name: "心刃", category: "skill", target: "single",
+  desc: "对目标造成本回合已出非攻击牌数 ×4 的直接伤害（最少 1）。",
+  defaultSuit: "club",
+  onPlay: (c) => {
+    const charge = c.player.statuses.find(s => s.id === "calc_charge");
+    const stacks = charge?.stacks ?? 0;
+    const dmg = Math.max(1, stacks * 4);
+    dealDirectDamage(c, c.target, dmg);
+  },
+};
+
+// 道具：速摸 — 消耗本回合不能再出技能 → 立刻摸 3 张
+const IT_QUICK_DRAW: CardDef = {
+  id: "it_quick_draw", name: "速摸", category: "item", target: "self",
+  desc: "立刻摸 3 张牌；本回合内不能再出技能牌。",
+  onPlay: (c) => {
+    (c as any)._drawN = ((c as any)._drawN ?? 0) + 3;
+    addStatus(c.player, "no_skill", "技能锁", 1, 1);
+    c.log("速摸：摸 3 张，本回合不能再出技能。", "player");
+  },
+};
+
+// 道具：药剂 — 本场战斗内每回合开始 +2 HP
+const IT_BREW: CardDef = {
+  id: "it_brew", name: "药剂", category: "item", target: "self",
+  desc: "本场战斗内每回合开始时回复 2 HP。",
+  onPlay: (c) => {
+    addStatus(c.player, "brew_regen", "药剂", 2, -1);
+    c.log("药剂：每回合开始 +2 HP。", "player");
+  },
+};
+
+// ♠ 穿甲斩：本回合下张攻击 +3 pierce
+const SK_PIERCE_STRIKE: CardDef = {
+  id: "sk_pierce_strike", name: "穿甲斩", category: "skill", target: "self",
+  desc: "本回合下张攻击额外 +3 pierce（与武器/特性 pierce 叠加）。",
+  defaultSuit: "spade",
+  onPlay: (c) => {
+    addStatus(c.player, "pierce_bonus", "穿甲斩", 3, 1);
+    c.log("穿甲斩就绪。", "player");
+  },
+};
+
+// ♦ 灵巧爆发：本回合闪避 +20%
+const SK_EVASION_BURST: CardDef = {
+  id: "sk_evasion_burst", name: "灵巧爆发", category: "skill", target: "self",
+  desc: "本回合闪避概率 +20%。",
+  defaultSuit: "diamond",
+  onPlay: (c) => {
+    addStatus(c.player, "smoke_dodge", "烟雾", 20, 1);  // 复用烟雾闪避 status
+    c.log("灵巧爆发：闪避 +20%。", "player");
+  },
+};
+
+// ♣ 恐惧术：目标下回合攻击伤害 -50%
+const SK_FEAR: CardDef = {
+  id: "sk_fear", name: "恐惧术", category: "skill", target: "single",
+  desc: "目标恐惧（下回合攻击伤害 -50%），持续 1 回合。",
+  defaultSuit: "club",
+  onPlay: (c) => {
+    addStatus(c.target, "fear", "恐惧", 1, 1);
+    c.log(`${c.target.name} 陷入恐惧。`, "player");
+  },
+};
+
+// ♥ AOE 吸血潮：对全体造 3 伤 + 全部转化为玩家 HP
+const SK_DRAIN_WAVE: CardDef = {
+  id: "sk_drain_wave", name: "吸血潮", category: "skill", target: "all",
+  desc: "对所有敌人造 3 直伤，造成的伤害总和转为你的 HP。",
+  defaultSuit: "heart",
+  onPlay: (c) => {
+    let totalHeal = 0;
+    for (const e of c.enemies) {
+      if (!e.alive) continue;
+      const dmg = Math.min(3, e.hp);
+      e.hp = Math.max(0, e.hp - dmg);
+      totalHeal += dmg;
+      c.log(`吸血潮：${e.name} -${dmg}。`, "player");
+      if (e.hp <= 0) { e.alive = false; c.log(`★ 击败 ${e.name}！`, "win"); }
+    }
+    if (totalHeal > 0) {
+      const before = c.player.vita;
+      c.player.vita = Math.min(c.player.vitaMax, c.player.vita + totalHeal);
+      if (c.player.vita > before) c.log(`吸血潮：回 ${c.player.vita - before} HP。`, "player");
+    }
+  },
+};
+
+// 道具：穿甲油 — 本场战斗武器永久 +2 pierce
+const IT_PIERCE_OIL: CardDef = {
+  id: "it_pierce_oil", name: "穿甲油", category: "item", target: "self",
+  desc: "本场战斗内武器永久 +2 pierce。",
+  onPlay: (c) => {
+    addStatus(c.player, "pierce_perm", "穿甲油", 2, -1);
+    c.log("穿甲油：武器 +2 pierce。", "player");
+  },
+};
+
+// 特性：破甲专家 — 每张 +1 pierce（与洞察叠加）
+const PERK_ARMOR_BREAK: CardDef = {
+  id: "p_armor_break", name: "破甲专家", category: "perk",
+  desc: "每张：所有攻击 +1 pierce。",
+  defaultSuit: "spade",
+  perkEffect: {
+    unitDesc: "破甲 +1（每张，pierce 总线）",
+    summary: (s) => `破甲 +${s}`,
+    // pierce 在 battle.ts/calcAttackDamage 里统一汇总
   },
 };
 
@@ -1436,6 +1594,18 @@ export const CARD_DB: Record<string, CardDef> = {
   it_smoke: IT_SMOKE,
   sk_step: SK_STEP,
   sk_pierce_shot: SK_PIERCE_SHOT,
+  // 新增 12 张
+  sk_blood_pact: SK_BLOOD_PACT,
+  sk_drain_strike: SK_DRAIN_STRIKE,
+  sk_arcane_burst: SK_ARCANE_BURST,
+  sk_mind_blade: SK_MIND_BLADE,
+  it_quick_draw: IT_QUICK_DRAW,
+  it_brew: IT_BREW,
+  sk_pierce_strike: SK_PIERCE_STRIKE,
+  sk_evasion_burst: SK_EVASION_BURST,
+  sk_fear: SK_FEAR,
+  sk_drain_wave: SK_DRAIN_WAVE,
+  it_pierce_oil: IT_PIERCE_OIL,
   it_echo: IT_ECHO,
   // Epic 卡（5 张）
   excalibur: EXCALIBUR,
@@ -1459,6 +1629,7 @@ export const CARD_DB: Record<string, CardDef> = {
   p_insight: PERK_INSIGHT,
   p_swift_strike: PERK_SWIFT_STRIKE,
   p_blood_pact: PERK_BLOOD_PACT,
+  p_armor_break: PERK_ARMOR_BREAK,
 };
 
 // ─────────────────────────────────────────────────────────
@@ -1472,16 +1643,23 @@ const _RARITY: Record<string, "rare" | "super_rare" | "epic"> = {
   spike_armor: "rare", scale_mail: "rare", full_plate: "rare",
   crown_of_vitality: "rare",
   sk_blast: "rare", sk_shadow_strike: "rare", sk_dye: "rare", sk_attune: "rare", sk_chant: "super_rare",
-  sk_pierce_shot: "rare",
+  sk_pierce_shot: "rare", sk_frenzy: "super_rare",
   it_regroup: "rare", it_elixir: "rare", it_smoke: "rare",
   sk_chain_bolt: "rare", sk_fire_wall: "rare", sk_shockwave: "rare",
   sk_group_curse: "rare", sk_sonic: "rare", sk_mass_weak: "rare", sk_lightning: "rare",
+  // 新增 11 张 rare/SR + 1 perk（PERK_POOL 也加）
+  sk_blood_pact: "rare", sk_arcane_burst: "rare", sk_mind_blade: "rare",
+  it_quick_draw: "rare", it_brew: "rare",
+  sk_pierce_strike: "rare", sk_evasion_burst: "rare",
+  sk_fear: "rare", sk_drain_wave: "rare",
+  it_pierce_oil: "rare",
   // ── Super Rare（强力 build 核心 / 大招）─────────────────
   berserker_blade: "super_rare", wizard_staff: "super_rare", repeating_bow: "super_rare",
   mage_robe: "super_rare", mind_armor: "super_rare",
   sk_curse_blood: "super_rare", sk_rhythm: "super_rare", sk_time_stop: "super_rare",
   sk_curse_vortex: "super_rare", sk_chroma_wave: "super_rare",
   sk_step: "super_rare",
+  sk_drain_strike: "super_rare",
   // ── Epic（极稀有，一卡逆转乾坤）────────────────────────
   excalibur: "epic", divine_blade: "epic", undying_heart: "epic",
   sk_wrath: "epic", it_echo: "epic",
@@ -1556,19 +1734,24 @@ export const REWARD_CARD_POOL_BASE = [
   "sk_dye", "sk_attune", "sk_recolor", "sk_chant",
   "sk_curse_blood", "sk_rhythm", "sk_time_stop",
   "sk_step", "sk_pierce_shot",
-  // 道具（7 = 原 6 + 烟雾弹）
+  // 新增 9 张单体（含 SR 汲血斩）+ 3 张道具
+  "sk_blood_pact", "sk_drain_strike", "sk_arcane_burst", "sk_mind_blade",
+  "sk_pierce_strike", "sk_evasion_burst", "sk_fear",
+  // 道具（10 = 原 7 + 速摸 + 药剂 + 穿甲油）
   "it_heal", "it_purify", "it_whetstone", "it_regroup", "it_bomb", "it_elixir", "it_smoke",
+  "it_quick_draw", "it_brew", "it_pierce_oil",
   // 攻击牌补强
   "atk_spade", "atk_diamond", "atk_heart", "atk_club",
   // Epic（极稀有，需要 tier roll 命中才会出现）
   "excalibur", "divine_blade", "undying_heart", "sk_wrath", "it_echo",
 ];
 
-// 第 3 关后追加的群攻技能（9 = 8 + 1 花色）
+// 第 3 关后追加的群攻技能（10 = 9 + 吸血潮）
 export const REWARD_CARD_POOL_AOE = [
   "sk_chain_bolt", "sk_fire_wall", "sk_shockwave", "sk_group_curse",
   "sk_sonic", "sk_mass_weak", "sk_lightning", "sk_curse_vortex",
   "sk_chroma_wave",
+  "sk_drain_wave",
 ];
 
 // 注：奖励池抽卡已改为稀有度档驱动（rollRewardChoices/pickRarity），权重表已废弃。
@@ -1578,7 +1761,7 @@ export const PERK_POOL = [
   "p_bleed", "p_dodge", "p_regen", "p_crit", "p_tough",
   "p_vampire", "p_thorns", "p_iron_will", "p_lifetap",
   "p_overload", "p_executioner", "p_resonance", "p_coldblood", "p_insight",
-  "p_swift_strike", "p_blood_pact",
+  "p_swift_strike", "p_blood_pact", "p_armor_break",
 ];
 
 // 加权采样
@@ -1620,19 +1803,122 @@ function pickRarity(floor: number): CardRarity {
   return "common";
 }
 
-// 加权策略（在每档候选池内独立加权）：
-// - 装备（武器/防具）×1.5：稳定的 build 件，玩家拿来 4 叠 / 凑同花色
-// - 花色操作牌 ×1.0：sk_dye/sk_attune/sk_chant/sk_recolor 不再加权（之前 ×3 出现率太高 → 持咒+共鸣几乎每场都能凑齐双锁敌人花色）
-// - 其他 ×1.0
+// 花色操作牌（已拥有时仍允许出现，但权重通过 ownedFactor 自然衰减）
 const SUIT_OPERATION_CARDS = new Set(["sk_dye", "sk_attune", "sk_chant", "sk_recolor"]);
 
-function pickWeightedFromCandidates(candidates: string[]): string {
-  const items = candidates.map(id => {
+// 关键 build 件（pierce / dodge）：早期 friendly，floor 越大加成越弱（衔接动态曲线）
+const BUILD_KEY_CARDS = new Set([
+  "sk_pierce_shot", "sk_pierce_strike", "p_insight", "p_armor_break", "it_pierce_oil",
+  "sk_step", "sk_evasion_burst", "p_dodge", "mind_armor",
+]);
+
+// 流派对齐：return "with" / "neutral" / "against"
+// 判定依据：cardSuit（attackSuit / equipSuit / defaultSuit）vs 玩家主流派
+function cardAlignment(cardId: string, mainSuit: Suit | null): "with" | "neutral" | "against" {
+  if (!mainSuit) return "neutral";
+  const def = CARD_DB[cardId];
+  if (!def) return "neutral";
+  const cardSuit = def.attackSuit ?? def.equipSuit ?? def.defaultSuit;
+  if (!cardSuit) return "neutral";
+  if (cardSuit === mainSuit) return "with";
+  // 反向：仅"色相反"算反向（红 vs 黑），让大部分 ♦/♥ 之间或 ♠/♣ 之间不算冲突
+  const isRedMain = mainSuit === "heart" || mainSuit === "diamond";
+  const isRedCard = cardSuit === "heart" || cardSuit === "diamond";
+  if (isRedMain !== isRedCard) return "against";
+  return "neutral";
+}
+
+// 已拥有衰减（平滑曲线）：非装备 N=0→1.0, 1→0.85, 2→0.65, 3→0.45, 4+→0.30
+//                     装备   N=0→1.0, 1→1.0,  2→0.85, 3→0.70, 4+→0.50
+function ownedFactor(cardId: string, ownedCount: number): number {
+  const def = CARD_DB[cardId];
+  const isEquip = def?.category === "equipment";
+  const n = Math.min(4, ownedCount);
+  if (isEquip) return [1.0, 1.0, 0.85, 0.70, 0.50][n];
+  return [1.0, 0.85, 0.65, 0.45, 0.30][n];
+}
+
+// 牌库大小因子：膨胀越大 → 略压新卡（鼓励玩家精炼 build）
+function sizeFactor(deckSize: number): number {
+  if (deckSize > 50) return 0.85;
+  if (deckSize > 40) return 0.95;
+  return 1.0;
+}
+
+// 关键 build 件加权（随 floor 由强到弱）
+function buildItemBoost(cardId: string, floor: number): number {
+  if (!BUILD_KEY_CARDS.has(cardId)) return 1.0;
+  if (floor <= 2) return 1.5;
+  if (floor <= 5) return 1.3;
+  return 1.1;
+}
+
+// 流派偏好加权（随 floor 由弱到强再到弱）
+function alignmentMult(align: "with" | "neutral" | "against", floor: number): number {
+  if (floor <= 2) return 1.0;  // 早期不引导
+  if (floor <= 5) {
+    if (align === "with") return 1.6;
+    if (align === "against") return 0.5;
+    return 1.0;
+  }
+  // floor 6+：温和
+  if (align === "with") return 1.3;
+  if (align === "against") return 0.8;
+  return 1.0;
+}
+
+// 计算玩家"主流派"：取已拥有的同花色装备 + 同花色特性最多的那个
+function getMainSuit(ownedCounts: Map<string, number>): Suit | null {
+  const score: Record<Suit, number> = { spade: 0, diamond: 0, heart: 0, club: 0 };
+  for (const [id, cnt] of ownedCounts) {
     const def = CARD_DB[id];
-    let w = 1;
-    if (def?.category === "equipment") w = 1.5;
-    return { id, w };
-  });
+    if (!def || !cnt) continue;
+    const s = def.equipSuit ?? def.defaultSuit;
+    if (def.category === "equipment" && s) score[s] += cnt * 1.5;
+    else if (def.category === "perk" && s) score[s] += cnt * 1.0;
+  }
+  const max = Math.max(...Object.values(score));
+  if (max < 1.0) return null;  // 玩家还没明显倾向
+  // 找出最高的
+  for (const s of ["spade", "diamond", "heart", "club"] as Suit[]) {
+    if (score[s] === max) return s;
+  }
+  return null;
+}
+
+// 单卡权重合成（用于在候选池里加权采样）
+function computeCardWeight(
+  cardId: string,
+  ownedCounts: Map<string, number>,
+  deckSize: number,
+  floor: number,
+  mainSuit: Suit | null,
+): number {
+  let w = 1.0;
+  // 1. 装备类基础加权 ×1.5（仍然偏向装备出现）
+  if (CARD_DB[cardId]?.category === "equipment") w *= 1.5;
+  // 2. 已拥有衰减
+  w *= ownedFactor(cardId, ownedCounts.get(cardId) ?? 0);
+  // 3. 牌库大小压制
+  w *= sizeFactor(deckSize);
+  // 4. 关键 build 件加权（pierce/dodge）
+  w *= buildItemBoost(cardId, floor);
+  // 5. 流派偏好
+  w *= alignmentMult(cardAlignment(cardId, mainSuit), floor);
+  return Math.max(0.01, w);  // 别归 0，保留极小概率
+}
+
+function pickWeightedFromCandidatesV2(
+  candidates: string[],
+  ownedCounts: Map<string, number>,
+  deckSize: number,
+  floor: number,
+  mainSuit: Suit | null,
+): string {
+  const items = candidates.map(id => ({
+    id,
+    w: computeCardWeight(id, ownedCounts, deckSize, floor, mainSuit),
+  }));
   const total = items.reduce((s, x) => s + x.w, 0);
   let r = Math.random() * total;
   for (const it of items) {
@@ -1643,21 +1929,25 @@ function pickWeightedFromCandidates(candidates: string[]): string {
 
 /**
  * 关卡奖励抽卡：先 roll 每张候选的稀有度档，再从该档卡池里抽（无放回）
- * - 同次奖励里同张卡不会重复
- * - 玩家牌库已有 ≥1 张的花色操作牌从候选池中排除（避免反复抽到同名调色卡）
- * - 装备保底：连续 N 场战斗未拿到装备 → 下一次必出装备（由 game.ts 跨场计数后传入 forceEquipment）
+ * 多重权重：
+ *   ownedFactor（已拥有数量衰减）× sizeFactor（牌库膨胀压制）×
+ *   装备类 ×1.5 × buildItemBoost（关键 build 件随 floor 弱化）×
+ *   alignmentMult（流派对齐随 floor 强化再弱化）
+ * 一次奖励里同 defId 不会重复（used set）。装备保底 forceEquipment。
  */
 export function rollRewardChoices(
   pool: string[],
   n: number,
   floor = 0,
-  ownedDefIds?: Set<string>,
+  ownedCounts?: Map<string, number>,
   forceEquipment = false,
 ): CardInstance[] {
+  const owned = ownedCounts ?? new Map();
+  const deckSize = Array.from(owned.values()).reduce((s, x) => s + x, 0);
+  const mainSuit = getMainSuit(owned);
+
   const byRarity: Record<CardRarity, string[]> = { common: [], rare: [], super_rare: [], epic: [] };
   for (const id of pool) {
-    // 过滤：玩家已经有 ≥1 张的花色操作牌从奖励池排除
-    if (ownedDefIds?.has(id) && SUIT_OPERATION_CARDS.has(id)) continue;
     const r = (CARD_DB[id]?.rarity ?? "common") as CardRarity;
     byRarity[r].push(id);
   }
@@ -1668,7 +1958,7 @@ export function rollRewardChoices(
   if (forceEquipment) {
     const allEquip = pool.filter(id => CARD_DB[id]?.category === "equipment");
     if (allEquip.length > 0) {
-      const pickedId = pickWeightedFromCandidates(allEquip);
+      const pickedId = pickWeightedFromCandidatesV2(allEquip, owned, deckSize, floor, mainSuit);
       used.add(pickedId);
       result.push(makeInstance(pickedId, undefined, floor));
     }
@@ -1685,7 +1975,7 @@ export function rollRewardChoices(
       tier = order[j];
       candidates = byRarity[tier].filter(id => !used.has(id));
       if (candidates.length > 0) {
-        pickedId = pickWeightedFromCandidates(candidates);
+        pickedId = pickWeightedFromCandidatesV2(candidates, owned, deckSize, floor, mainSuit);
       }
     }
     if (pickedId) {
@@ -1695,6 +1985,9 @@ export function rollRewardChoices(
   }
   return result;
 }
+
+// 兼容旧引用（一些地方仍把 SUIT_OPERATION_CARDS 当判断）
+export { SUIT_OPERATION_CARDS };
 
 export function getStackEffect(defId: string, count: number) {
   const def = CARD_DB[defId];
