@@ -912,56 +912,23 @@ h2.lose::before { display: none; }
   perspective: 800px;
 }
 
-/* 2D 骰子 — 大 emoji + shake + scale，移动端浏览器友好（不用 transform-style preserve-3d，避免 CSS 3D 移动端 quirks） */
-.dice-2d {
-  width: 100px;
-  height: 100px;
+/* 3D 骰子挂载点 — Three.js canvas 渲染到这里 */
+.dice-3d-mount {
+  width: 160px;
+  height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #f8f8f8, #d0d0d0);
-  border: 3px solid var(--gold, #d4940a);
-  border-radius: 16px;
-  box-shadow:
-    0 12px 32px rgba(0,0,0,0.55),
-    inset 0 -4px 8px rgba(0,0,0,0.12),
-    inset 0 4px 8px rgba(255,255,255,0.6),
-    0 0 32px rgba(245,197,24,0.4);
-  animation: dice-shake 0.7s cubic-bezier(0.3, 0.1, 0.4, 1) forwards;
+  /* 给 canvas 加金光，强化"立体感" */
+  filter: drop-shadow(0 8px 24px rgba(0,0,0,0.55)) drop-shadow(0 0 28px rgba(245,197,24,0.35));
+  animation: dice-mount-in 250ms cubic-bezier(0.2, 0.9, 0.3, 1.3) forwards;
 }
-.dice-2d.stopped {
-  animation: dice-bounce 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.4) forwards;
+@keyframes dice-mount-in {
+  from { transform: scale(0.6); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
 }
-.dice-emoji {
-  font-size: 78px;
-  line-height: 1;
-  color: #1a1a1a;
-  text-shadow: 0 2px 0 rgba(0,0,0,0.18);
-  /* 字体重置，让 dice emoji ⚀-⚅ 在移动端正常渲染 */
-  font-family: "Segoe UI Emoji", "Apple Color Emoji", system-ui, sans-serif;
-  user-select: none;
-}
-
-/* 翻滚动画：晃动 + 缩放 + 旋转（不是 3D，是 2D shake，但视觉强烈） */
-@keyframes dice-shake {
-  0%   { transform: translate(0, 0)    rotate(0deg)   scale(1); }
-  10%  { transform: translate(-6px, 4px) rotate(-12deg) scale(1.08); }
-  20%  { transform: translate(7px, -3px) rotate(15deg)  scale(0.94); }
-  30%  { transform: translate(-5px, -6px) rotate(-18deg) scale(1.10); }
-  40%  { transform: translate(8px, 5px)  rotate(20deg)  scale(0.92); }
-  50%  { transform: translate(-7px, 3px) rotate(-15deg) scale(1.06); }
-  60%  { transform: translate(5px, -5px) rotate(10deg)  scale(0.96); }
-  70%  { transform: translate(-4px, 4px) rotate(-8deg)  scale(1.04); }
-  80%  { transform: translate(3px, -2px) rotate(6deg)   scale(0.98); }
-  90%  { transform: translate(-2px, 1px) rotate(-3deg)  scale(1.02); }
-  100% { transform: translate(0, 0)     rotate(0deg)   scale(1); }
-}
-/* 停下来弹跳 — 给玩家"骰子落定"的反馈 */
-@keyframes dice-bounce {
-  0%   { transform: scale(1) translateY(0); }
-  40%  { transform: scale(1.18) translateY(-6px); }
-  70%  { transform: scale(0.94) translateY(2px); }
-  100% { transform: scale(1) translateY(0); }
+.dice-3d-mount canvas {
+  display: block;
 }
 
 /* 结果文字 */

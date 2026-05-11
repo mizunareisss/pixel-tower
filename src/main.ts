@@ -283,14 +283,11 @@ function render() {
 function showDiceRoll(finalRoll: number): void {
   document.getElementById("dice-overlay")?.remove();
   const enemyFirst = finalRoll % 2 === 0;
-  const faces = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
   const overlay = document.createElement("div");
   overlay.id = "dice-overlay";
   overlay.innerHTML = `
     <div class="dice-container">
-      <div class="dice-2d">
-        <span class="dice-emoji">${faces[Math.floor(Math.random() * 6)]}</span>
-      </div>
+      <div class="dice-3d-mount"></div>
       <div class="dice-result" style="display:none">
         <div class="dr-num">${finalRoll}</div>
         <div class="dr-side ${enemyFirst ? "enemy" : "player"}">${enemyFirst ? "敌 人 先 手" : "你 先 手"}</div>
@@ -299,37 +296,35 @@ function showDiceRoll(finalRoll: number): void {
   `;
   document.body.appendChild(overlay);
 
-  const dice = overlay.querySelector(".dice-2d") as HTMLElement | null;
-  const emoji = overlay.querySelector(".dice-emoji") as HTMLElement | null;
+  const mount = overlay.querySelector(".dice-3d-mount") as HTMLElement;
 
-  // 翻滚阶段：每 ~55ms 切换面 + 加 shake + scale + rotate
-  // 总时长 700ms（用户要求"再缩短一点点"）
-  const rollInterval = setInterval(() => {
-    if (emoji) emoji.textContent = faces[Math.floor(Math.random() * 6)];
-  }, 55);
-
-  // 700ms 停止翻滚，显示最终面 + bounce
-  setTimeout(() => {
-    clearInterval(rollInterval);
-    if (emoji) emoji.textContent = faces[finalRoll - 1];
-    if (dice) dice.classList.add("stopped");
-  }, 700);
-
-  // 950ms 显示文字结果（bounce 完）
-  setTimeout(() => {
-    const r = overlay.querySelector(".dice-result") as HTMLElement | null;
-    if (r) r.style.display = "flex";
-  }, 950);
-
-  // 1500ms 淡出 + 如果敌人先手，触发敌人攻击
-  setTimeout(() => {
-    overlay.classList.add("fade-out");
-    setTimeout(() => overlay.remove(), 240);
-    if (enemyFirst) {
-      gameEnemyFirstStrike(state);
-      render();
-    }
-  }, 1500);
+  // 用 Three.js 渲染真 3D 骰子（dice3d.ts）
+  // 翻滚 700ms → ease-out cubic 衰减到最终面
+  import("./dice3d.ts").then(({ rollDice3D }) => {
+    const handle = rollDice3D({
+      container: mount,
+      finalRoll,
+      duration: 700,
+      size: 160,
+      onComplete: () => {
+        // 翻滚完成后 250ms 显示结果文字
+        setTimeout(() => {
+          const r = overlay.querySelector(".dice-result") as HTMLElement | null;
+          if (r) r.style.display = "flex";
+        }, 200);
+        // 750ms 淡出 + 触发敌人先手（如果是双数）
+        setTimeout(() => {
+          overlay.classList.add("fade-out");
+          handle.dispose();
+          setTimeout(() => overlay.remove(), 240);
+          if (enemyFirst) {
+            gameEnemyFirstStrike(state);
+            render();
+          }
+        }, 750);
+      },
+    });
+  });
 }
 
 // 战斗出场动画 — 分三阶段，节奏感更强，玩家能看清"击杀"
