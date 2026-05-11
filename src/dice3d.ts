@@ -59,27 +59,28 @@ function makeFaceTexture(num: number): THREE.CanvasTexture {
   return texture;
 }
 
-// 根据期望的最终面（1-6），返回让 BoxGeometry 该面 normal 朝 +Y 所需的旋转
+// 根据期望的最终面（1-6），返回让 BoxGeometry 该面 normal 旋转到世界 +Y 所需的 Euler XYZ 旋转
 // BoxGeometry 默认 material 顺序：[+X, -X, +Y, -Y, +Z, -Z]
 // 贴图分配：[1, 6, 2, 5, 3, 4]（1↔6, 2↔5, 3↔4 对面，标准骰子布局）
-// 然后让目标面的法线方向旋转到 +Y（屏幕"上"）
 //
-// 旋转推导（Three.js 右手坐标系，rotateZ(+) = 从 +Z 看 X 轴逆时针）：
-//   +X → +Y: rotateZ(+90°)    [(1,0,0) → (cos90°, sin90°, 0) = (0,1,0) ✓]
-//   -X → +Y: rotateZ(-90°)    [(-1,0,0) → (0,1,0) ✓]
-//   +Y → +Y: 不旋转
-//   -Y → +Y: rotateX(180°)
-//   +Z → +Y: rotateX(-90°)    [(0,0,1) → (0,1,0) ✓ — sin/cos 的对应位是 (cos×0 - sin×1, sin×0 + cos×1)... let me re-check]
-//   -Z → +Y: rotateX(+90°)
+// Three.js Euler 'XYZ' 顺序意味着 M = R_x · R_y · R_z（应用到向量：M·v）
+// 验算（v = face normal）：
+//   face-1 +X (1,0,0):  R_z(+π/2)·(1,0,0)=(cos π/2, sin π/2, 0)=(0,1,0) ✓
+//   face-6 -X (-1,0,0): R_z(-π/2)·(-1,0,0)=(0,1,0) ✓
+//   face-2 +Y (0,1,0):  identity ✓
+//   face-5 -Y (0,-1,0): R_x(π)·(0,-1,0)=(0, cos π·(-1)-sin π·0, sin π·(-1)+cos π·0)=(0,1,0) ✓
+//   face-3 +Z (0,0,1):  R_x(-π/2)·(0,0,1)=(0, -sin(-π/2)·1, cos(-π/2)·1)=(0,1,0) ✓
+//                                          这里 R_x(a)·(0,0,1)=(0,-sin a,cos a)
+//   face-4 -Z (0,0,-1): R_x(+π/2)·(0,0,-1)=(0, sin(π/2)·1, -cos(π/2)·1)=(0,1,0) ✓
 function getFinalRotation(num: number): { x: number; y: number; z: number } {
   const P = Math.PI / 2;
   switch (num) {
-    case 1: return { x: 0,    y: 0,  z: +P };   // +X (1) → +Y  (fix: 原 -P 错了)
-    case 6: return { x: 0,    y: 0,  z: -P };   // -X (6) → +Y  (fix: 原 +P 错了)
-    case 2: return { x: 0,    y: 0,  z:  0 };   // +Y (2) → +Y (default)
-    case 5: return { x: Math.PI, y: 0,  z: 0 }; // -Y (5) → +Y (旋 180°)
-    case 3: return { x: -P,   y: 0,  z:  0 };   // +Z (3) → +Y
-    case 4: return { x: +P,   y: 0,  z:  0 };   // -Z (4) → +Y
+    case 1: return { x: 0,       y: 0, z: +P };
+    case 6: return { x: 0,       y: 0, z: -P };
+    case 2: return { x: 0,       y: 0, z:  0 };
+    case 5: return { x: Math.PI, y: 0, z:  0 };
+    case 3: return { x: -P,      y: 0, z:  0 };
+    case 4: return { x: +P,      y: 0, z:  0 };
     default: return { x: 0, y: 0, z: 0 };
   }
 }
@@ -94,9 +95,12 @@ export function rollDice3D(opts: {
   const { container, finalRoll, duration = 800, size = 160, onComplete } = opts;
 
   // Scene / Camera / Renderer
+  // 相机俯视（从右上方往下看），让最终"朝上的面"清楚露在顶部，同时露出 前/右 两面 → 3 面立体感
+  // 之前正对着看 (0,0,5.5) → 顶面几乎是一条边、看不见，玩家实际读到的是前面那一面，所以"读数对不上"
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
-  camera.position.set(0, 0, 5.5);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+  camera.position.set(1.8, 2.5, 4.3);
+  camera.lookAt(0, 0, 0);
 
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
@@ -116,9 +120,8 @@ export function rollDice3D(opts: {
   );
   const geometry = new THREE.BoxGeometry(2, 2, 2);
   const dice = new THREE.Mesh(geometry, materials);
-  // 初始稍微倾斜，让两面同时可见（更立体）
-  dice.rotation.x = -0.3;
-  dice.rotation.y = 0.4;
+  // 初始姿态默认：face-2 (+Y) 朝上、face-1 (+X) 朝右、face-3 (+Z) 朝前
+  // 相机俯视提供透视感，骰子自身不需要 tilt
   scene.add(dice);
 
   // 光照
@@ -134,11 +137,8 @@ export function rollDice3D(opts: {
   // 翻滚动画参数
   const startTime = performance.now();
   const finalRot = getFinalRotation(finalRoll);
-  // 起始姿态（带初始 tilt 让两面同时可见，更立体）
-  const startX = dice.rotation.x;
-  const startY = dice.rotation.y;
-  // 终态：纯 finalRot + 整圈数（不含 startX/Y 偏置，避免最终面有 tilt 残留）
-  // 整圈 2π 在 Euler XYZ 序下等价于无旋转，所以最终等效于纯 finalRot
+  // 终态：整圈数 + finalRot；整圈 2π 在 Euler XYZ 下等价于 identity，所以 t=1 时姿态正好是纯 finalRot
+  // 翻滚圈数：X 轴 3 圈、Y 轴 4 圈、Z 轴只走最终的 0 或 ±π/2 / π（避免最后两面互相切换太频繁）
   const totalRotX = Math.PI * 2 * 3 + finalRot.x;
   const totalRotY = Math.PI * 2 * 4 + finalRot.y;
   const totalRotZ = finalRot.z;
@@ -149,10 +149,10 @@ export function rollDice3D(opts: {
   function animate() {
     if (done) return;
     const t = Math.min(1, (performance.now() - startTime) / duration);
-    // ease-out cubic (开始快、结尾慢)
+    // ease-out cubic (开始快、结尾慢，模拟"丢出去后逐渐停下")
     const ease = 1 - Math.pow(1 - t, 3);
-    dice.rotation.x = startX + (totalRotX - startX) * ease;
-    dice.rotation.y = startY + (totalRotY - startY) * ease;
+    dice.rotation.x = totalRotX * ease;
+    dice.rotation.y = totalRotY * ease;
     dice.rotation.z = totalRotZ * ease;
     renderer.render(scene, camera);
     if (t >= 1) {
