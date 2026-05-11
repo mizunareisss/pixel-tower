@@ -1094,16 +1094,16 @@ const SK_FEAR: CardDef = {
   },
 };
 
-// ♥ AOE 吸血潮：对全体造 3 伤 + 全部转化为玩家 HP
+// ♥ AOE 吸血潮 (SR)：对全体造各自 maxHP 5% 直伤 + 全部转化为玩家 HP
 const SK_DRAIN_WAVE: CardDef = {
   id: "sk_drain_wave", name: "吸血潮", category: "skill", target: "all",
-  desc: "对所有敌人造 3 直伤，造成的伤害总和转为你的 HP。",
+  desc: "对全体敌人造 5% 各自 HP 上限 的直伤（向上取整），伤害总和转为你的 HP。",
   defaultSuit: "heart",
   onPlay: (c) => {
     let totalHeal = 0;
     for (const e of c.enemies) {
       if (!e.alive) continue;
-      const dmg = Math.min(3, e.hp);
+      const dmg = Math.min(Math.max(1, Math.ceil(e.maxHp * 0.05)), e.hp);
       e.hp = Math.max(0, e.hp - dmg);
       totalHeal += dmg;
       c.log(`吸血潮：${e.name} -${dmg}。`, "player");
@@ -1651,7 +1651,7 @@ const _RARITY: Record<string, "rare" | "super_rare" | "epic"> = {
   sk_blood_pact: "rare", sk_arcane_burst: "rare", sk_mind_blade: "rare",
   it_quick_draw: "rare", it_brew: "rare",
   sk_pierce_strike: "rare", sk_evasion_burst: "rare",
-  sk_fear: "rare", sk_drain_wave: "rare",
+  sk_fear: "rare", sk_drain_wave: "super_rare",
   it_pierce_oil: "rare",
   // ── Super Rare（强力 build 核心 / 大招）─────────────────
   berserker_blade: "super_rare", wizard_staff: "super_rare", repeating_bow: "super_rare",

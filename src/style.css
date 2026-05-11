@@ -147,7 +147,7 @@ html, body {
 #game-header {
   background: linear-gradient(180deg, #14141c 0%, #0a0a0e 100%);
   border-bottom: 1px solid var(--gold);
-  padding: 10px var(--sp-4);
+  padding: 6px var(--sp-4);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -220,7 +220,7 @@ h1 {
 #phase-bar {
   background: linear-gradient(90deg, transparent 0%, rgba(245,197,24,0.04) 50%, transparent 100%);
   border-bottom: 1px solid var(--border-soft);
-  padding: 6px var(--sp-4);
+  padding: 3px var(--sp-4);
   font-size: var(--fs-xs);
   color: var(--gray);
   letter-spacing: 0.1em;
@@ -261,7 +261,7 @@ section {
   border-bottom: 1px solid var(--border-soft);
 }
 
-#stage { padding: 8px 12px; position: relative; }
+#stage { padding: 4px 12px; position: relative; }
 
 /* ═══════════════════════════════════════
    ENEMY TURN BANNER (full-screen overlay)
@@ -408,10 +408,12 @@ section {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: 4px var(--sp-3);
+  padding: 2px var(--sp-3);
   border-bottom: 1px solid var(--border-soft);
-  margin-bottom: var(--sp-1);
+  margin-bottom: 0;
 }
+#active-header .panel-label { font-size: var(--fs-xs); }
+#active-header .slot-count { font-size: var(--fs-xs); padding: 1px 6px; }
 
 .panel-label {
   font-family: var(--font-display);
@@ -451,27 +453,27 @@ section {
   50%      { opacity: 1;    transform: translateX(3px); }
 }
 
-/* 手牌：5×2 grid 全平铺 */
+/* 手牌：5×2 grid 全平铺（紧凑版 — 行高从 145 → 116） */
 #active {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  grid-template-rows: repeat(2, 145px);  /* 固定行高，让卡稍微大点 */
-  gap: var(--sp-2);
-  padding: 6px var(--sp-3);
+  grid-template-rows: repeat(2, 116px);
+  gap: var(--sp-1);
+  padding: 4px var(--sp-3);
   overflow: hidden;
 }
 #active .hand-card {
   width: 100%;
   height: 100%;
-  padding: 6px 5px 16px;
+  padding: 4px 4px 12px;
 }
 
 /* 底部大按钮 action bar */
 #active-actions {
   display: flex;
   gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3) 0;
-  margin-top: var(--sp-1);
+  padding: var(--sp-1) var(--sp-3) 0;
+  margin-top: 0;
 }
 #active-actions button {
   flex: 1;
@@ -479,12 +481,12 @@ section {
   font-size: var(--fs-base);
   font-weight: 700;
   letter-spacing: 0.12em;
-  padding: 12px var(--sp-3);
+  padding: 8px var(--sp-3);
   border-radius: var(--r-md);
   cursor: pointer;
   clip-path: none;
   transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
-  min-height: 44px;  /* 拇指点击友好 */
+  min-height: 38px;
 }
 #active-actions button:active { transform: scale(0.96); }
 #active-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -1165,10 +1167,10 @@ h2.lose::before { display: none; }
 
 #enemies-row {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   justify-content: center;
-  margin-bottom: 10px;
+  margin-bottom: 4px;
   position: relative;  /* 动效定位锚点 */
   overflow: hidden;     /* 让 aoe-wave 不溢出 */
 }
@@ -1179,10 +1181,10 @@ h2.lose::before { display: none; }
    ──────────────────────────────────────── */
 
 .enemy-card {
-  width: 145px;
-  min-height: 188px;
+  width: 138px;
+  min-height: 160px;
   flex-shrink: 0;
-  padding: 4px 8px 18px;
+  padding: 3px 6px 14px;
   background: var(--bg-card, #1a1a23);
   border: 2px solid var(--red);
   border-radius: var(--r-md);
@@ -1276,17 +1278,17 @@ h2.lose::before { display: none; }
 }
 .ec-corner.red { color: var(--red); }
 .ec-corner small { font-size: 8px; font-weight: 700; letter-spacing: 0; }
-.ec-corner-tl { top: 4px; left: 4px; }
-.ec-corner-br { bottom: 19px; right: 4px; transform: rotate(180deg); }
+.ec-corner-tl { top: 3px; left: 3px; }
+.ec-corner-br { bottom: 15px; right: 3px; transform: rotate(180deg); }
 /* tier 徽章占据顶部时角标下移 */
 .enemy-card.tier-elite .ec-corner-tl,
-.enemy-card.tier-boss .ec-corner-tl { top: 22px; }
+.enemy-card.tier-boss .ec-corner-tl { top: 20px; }
 
 /* 头像 */
 .ec-portrait {
-  font-size: 48px;
+  font-size: 38px;
   line-height: 1;
-  margin: 4px 0 4px;
+  margin: 2px 0 3px;
   filter: drop-shadow(0 2px 6px rgba(0,0,0,0.7));
   transition: filter var(--t-base);
 }
@@ -1430,10 +1432,10 @@ h2.lose::before { display: none; }
   border: 2px solid #ff5e5e;
   background: linear-gradient(180deg, #2a0e12 0%, #1a0608 100%);
   box-shadow: 0 0 24px rgba(255,80,40,0.6), inset 0 0 18px rgba(255,80,40,0.20);
-  min-height: 210px;
-  width: 158px;
+  min-height: 184px;
+  width: 152px;
 }
-.enemy-card.tier-boss .ec-portrait { font-size: 58px; }
+.enemy-card.tier-boss .ec-portrait { font-size: 48px; }
 .enemy-card.tier-boss .ec-name { font-size: 13px; }
 
 /* ⓘ 详情按钮 — 卡右上（精英/Boss 才有） */
@@ -1483,8 +1485,8 @@ h2.lose::before { display: none; }
   border: 1px solid var(--border);
   border-top: 2px solid var(--gold);
   border-radius: var(--r-md);
-  padding: 6px 8px 8px;
-  margin: 6px 0 4px;
+  padding: 4px 8px 5px;
+  margin: 4px 0 2px;
   position: relative;
   overflow: visible;  /* T3 大招按钮可以悬浮出来 */
   box-shadow: var(--sh-sm), var(--sh-inner);
@@ -1496,7 +1498,7 @@ h2.lose::before { display: none; }
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
+  gap: 2px;
   min-width: 0;
 }
 #player-card .pcard-right {
@@ -1513,8 +1515,8 @@ h2.lose::before { display: none; }
 .pcard-hp-row {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-1);
+  gap: var(--sp-2);
+  margin-bottom: 0;
 }
 
 .pcard-hp-val {
@@ -1562,7 +1564,7 @@ h2.lose::before { display: none; }
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 5px 8px;
+  padding: 3px 8px;
   font-size: var(--fs-xs);
   font-weight: 600;
   background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));

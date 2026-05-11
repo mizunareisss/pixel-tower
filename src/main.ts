@@ -3206,6 +3206,7 @@ const _AOE_SKILL_IDS = new Set([
   "sk_chain_bolt", "sk_fire_wall", "sk_shockwave", "sk_group_curse",
   "sk_sonic", "sk_mass_weak", "sk_lightning", "sk_curse_vortex",
   "sk_chroma_wave", "sk_wrath",
+  "sk_drain_wave",  // ♥ 吸血潮（target=all）原本漏在单体分类，修正
 ]);
 
 // 图鉴 tab 过滤逻辑
