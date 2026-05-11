@@ -20,30 +20,30 @@ export const SUIT_TIER_NAMES: Record<Suit, { tier1: string; tier2: string; tier3
   club:    { tier1: "魔法庇护", tier2: "护体真言", tier3: "禁咒蓄能", ult: "群体禁咒" },
 };
 
-// 各档与大招的具体效果描述
+// 各档与大招的具体效果描述（v3 强化版 — 花色构筑 fantasy 才能立稳）
 export const SUIT_TIER_DESCS: Record<Suit, { tier1: string; tier2: string; tier3: string; ult: string }> = {
   spade: {
-    tier1: "攻击 +5%；额外 5% 概率暴击 ×2。",
-    tier2: "破甲 +当前楼层数。",
-    tier3: "可释放大招（消耗 10 亲和）。",
+    tier1: "攻击 +10%；额外 5% 概率暴击 ×2；激活『锐利』keyword — 所有 ♠ 攻击 +1 pierce。",
+    tier2: "破甲 +当前楼层数；真伤 +3。",
+    tier3: "可释放大招（消耗 8 亲和）。",
     ult: "对当前目标造成其当前 HP 50% 的真实伤害（无视护甲）。",
   },
   diamond: {
-    tier1: "闪避 +5%；受击反弹 +2 伤害。",
-    tier2: "攻击 35% 概率额外 +1 hit。",
-    tier3: "可释放大招（消耗 10 亲和）。",
+    tier1: "闪避 +8%；受击反弹 +3 伤害；激活『迅捷』keyword — 所有 ♦ 攻击 25% 概率额外 +1 hit（与 T2 叠加）。",
+    tier2: "攻击 40% 概率额外 +1 hit（叠加 ♦ 迅捷）。",
+    tier3: "可释放大招（消耗 8 亲和）。",
     ult: "本回合敌人攻击全部闪避，下次攻击 hits ×3。",
   },
   heart: {
-    tier1: "每回合开始 +1 HP；攻击吸血 5%。",
-    tier2: "HP <50% 受击 -30%；HP <25% 攻击 +25%。",
-    tier3: "可释放大招（消耗 10 亲和）。",
+    tier1: "每回合开始 +2 HP；攻击吸血 8%；激活『贪婪』keyword — 所有 ♥ 攻击 + ♥ 装备 吸血 +5%。",
+    tier2: "HP <50% 受击 -35%；HP <25% 攻击 +30%。",
+    tier3: "可释放大招（消耗 8 亲和）。",
     ult: "HP 回满，永久 maxHP +5。",
   },
   club: {
-    tier1: "受击 -1。",
-    tier2: "受击再 -2（共 -3）。",
-    tier3: "可释放大招（消耗 10 亲和）。",
+    tier1: "受击 -2；激活『守序』keyword — 每出 1 张 ♣ 牌本回合 +1 临时护盾。",
+    tier2: "受击再 -3（共 -5）。",
+    tier3: "可释放大招（消耗 8 亲和）。",
     ult: "对全体敌人 +3 沉默 +3 易伤 +3 中毒。",
   },
 };
@@ -320,6 +320,7 @@ export interface BattleContext {
   log: (msg: string, kind?: LogKind) => void;
   attackSuit?: Suit;         // 当前打出的攻击牌花色（用于伤害公式）
   slotScale: number;         // 武器叠加倍率（计算时设置）
+  floor: number;             // 当前楼层，用于技能/道具数值缩放
 }
 
 // ── 装备效果 / 特性效果（4 级叠加） ─────────────────────

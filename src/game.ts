@@ -811,8 +811,8 @@ export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
     log(`★♣ 群体禁咒！全体敌人 +沉默 +易伤 +中毒。`, "win");
   }
 
-  // 消耗 10 亲和度
-  consumeSuitAffinity(state.battle, suit, 10);
+  // A 强化：消耗 10 → 8 亲和（让玩家早 burst）
+  consumeSuitAffinity(state.battle, suit, 8);
   return true;
 }
 

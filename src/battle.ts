@@ -329,6 +329,7 @@ function getCtx(state: BattleState, log: (m: string, k?: LogKind) => void, attac
     log,
     attackSuit,
     slotScale: 1.0,
+    floor: state.floor,
   };
 }
 
@@ -478,27 +479,45 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
   // ★ 花色专精：仅"激活的那一个"花色生效（多并列时由 activeSpecialtyOverride / 玩家选择决定）
   const activeSuit = getActiveSpecialty(state);
   const activeTier = activeSuit ? suitTier(state, activeSuit) : 0;
-  // ♠ 莽夫流（暴击率受中毒削减）
+  // ♠ 莽夫流（A 强化：+5% → +10%；暴击率受中毒削减）
   if (activeSuit === "spade" && activeTier >= 1) {
-    dmg *= 1.05;
-    const critChance = Math.max(0, 5 - getPoisonCritPenalty(player));  // 百分点
+    dmg *= 1.10;
+    const critChance = Math.max(0, 5 - getPoisonCritPenalty(player));
     if (critChance > 0 && Math.random() * 100 < critChance) {
       dmg *= 2;
       log(`♠ 黑桃专精·暴击！伤害 ×2（${critChance.toFixed(0)}%）`, "player");
     }
   }
-  // ♥ 吸血流
+  // ♠ T2 加成：真伤 +3（穿透 armor 的固定加成，在 armor 计算后）
+  // 在下面 armor 减伤段后追加，这里仅 dmg += 3，但需要 bypassArmor 不影响逻辑
+  // → 改为在 dmg 计算最后阶段直接加（见下方）
+
+  // ♥ 吸血流（A 强化：5% → 8%）
   if (activeSuit === "heart" && activeTier >= 1) {
-    const heal = Math.max(0, Math.floor(dmg * 0.05));
+    const heal = Math.max(0, Math.floor(dmg * 0.08));
     if (heal > 0) {
       player.vita = Math.min(player.vitaMax, player.vita + heal);
       log(`♥ 红心专精·吸血 ${heal}。`, "player");
     }
   }
   if (activeSuit === "heart" && activeTier >= 2 && player.vita < player.vitaMax * 0.25) {
-    dmg *= 1.25;
-    log("♥ 红心专精·绝境：攻击 +25%", "player");
+    dmg *= 1.30;  // A 强化：+25% → +30%
+    log("♥ 红心专精·绝境：攻击 +30%", "player");
   }
+
+  // === A 花色 keyword 系统（亲和度 ≥ 5 即 T1 激活，跟随主流派）===
+  // ♠ 锐利：所有 ♠ 攻击 +1 pierce（与武器 pierce 叠加 — 在下方 armor 段计算）
+  // ♦ 迅捷：所有 ♦ 攻击 25% 额外 +1 hit（与 T2 40% 叠加 → 实质 ≥ T1 时 25% +1 hit / ≥ T2 时多一档 40%）
+  //         这个 keyword 在 playAttack hits 循环里实现（见下文）
+  // ♥ 贪婪：所有 ♥ 攻击 + ♥ 装备 吸血 +5%（已通过 attackSuit 是 heart 时 +5% 实现）
+  if (activeSuit === "heart" && activeTier >= 1 && ctx.attackSuit === "heart") {
+    const greedHeal = Math.max(0, Math.floor(dmg * 0.05));
+    if (greedHeal > 0) {
+      player.vita = Math.min(player.vitaMax, player.vita + greedHeal);
+      log(`♥ 贪婪 keyword：额外吸血 ${greedHeal}。`, "player");
+    }
+  }
+  // ♣ 守序：在 playSkillOrItem 出 ♣ 牌时实装（见 playSkillOrItem）
 
   // ★ 穿甲射状态：本次攻击无视全部 armor（一次性）
   const pierceNext = player.statuses.find(s => s.id === "pierce_next");
@@ -506,6 +525,18 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     bypassArmor = true;
     player.statuses = player.statuses.filter(s => s.id !== "pierce_next");
     log("穿甲蓄势触发：本次攻击无视护甲。", "player");
+  }
+
+  // 骑士铠充能：受击 stack 起来，下次攻击 +X 直伤（按 stack 加成）
+  const knightCharge = player.statuses.find(s => s.id === "knight_charge");
+  if (knightCharge && player.armors[0]?.defId === "knight_plate") {
+    const stackArm = Math.min(player.armors.length, 4);
+    const bonusByStack = [3, 4, 5, 6];
+    const bonusPer = bonusByStack[stackArm - 1] ?? 3;
+    const total = bonusPer * knightCharge.stacks;
+    dmg += total;
+    player.statuses = player.statuses.filter(s => s.id !== "knight_charge");
+    log(`骑士铠充能爆发 +${total} 直伤（${knightCharge.stacks} stack × ${bonusPer}）。`, "player");
   }
 
   // 敌人 armor 减伤（受 pierce 影响；夺命斩杀绕过；穿甲射绕过）
@@ -526,6 +557,10 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
       if (activeSuit === "spade" && activeTier >= 2) {
         pierce += state.floor;
       }
+      // ♠ keyword「锐利」：当 ♠ active T1+ 且本攻击花色为 ♠ → 额外 +1 pierce
+      if (activeSuit === "spade" && activeTier >= 1 && ctx.attackSuit === "spade") {
+        pierce += 1;
+      }
       // 穿甲油（本场战斗内永久 +2）
       const pierceOil = player.statuses.find(s => s.id === "pierce_perm");
       if (pierceOil) pierce += pierceOil.stacks;
@@ -544,6 +579,11 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
       }
       dmg = Math.max(0, dmg - effective);
     }
+  }
+
+  // ♠ T2 真伤 +3（armor 减伤之后加，真正"无视 armor"的 base 加成）
+  if (activeSuit === "spade" && activeTier >= 2) {
+    dmg += 3;
   }
 
   return Math.max(0, Math.floor(dmg));
@@ -611,11 +651,27 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
     log("影袭：本次攻击 +1 hit。", "player");
     state.player.statuses = state.player.statuses.filter(s => s.id !== "shadow_double");
   }
-  // 方块 Tier 2：25% 概率额外 +1 hit（仅激活的方块专精生效）
+  // 方块 Tier 2：40% 概率额外 +1 hit（A 强化：35% → 40%）
   let diamondBonus = 0;
-  if (getActiveSpecialty(state) === "diamond" && suitTier(state, "diamond") >= 2 && Math.random() < 0.35) {
+  const dSuitActive = getActiveSpecialty(state);
+  const dTier = dSuitActive === "diamond" ? suitTier(state, "diamond") : 0;
+  if (dSuitActive === "diamond" && dTier >= 2 && Math.random() < 0.40) {
     diamondBonus = 1;
-    log("方块·灵巧：额外触发 +1 hit。", "player");
+    log("方块·灵巧：额外触发 +1 hit（T2 40%）。", "player");
+  }
+  // ♦ keyword「迅捷」：T1 激活且攻击花色为 ♦ → 25% 额外 +1 hit（与 T2 叠加，但避免双触发）
+  // 简化：T1 时单独 25%；T2 时合并为 50%（不分开 roll，避免数值过高）
+  if (dSuitActive === "diamond" && dTier >= 1 && dTier < 2 && baseSuit === "diamond") {
+    if (Math.random() < 0.25) {
+      diamondBonus = 1;
+      log("♦ 迅捷 keyword：额外 +1 hit（25%）。", "player");
+    }
+  } else if (dSuitActive === "diamond" && dTier >= 2 && baseSuit === "diamond" && diamondBonus === 0) {
+    // T2 已 roll 失败但 keyword 给第二次机会（25%）
+    if (Math.random() < 0.25) {
+      diamondBonus = 1;
+      log("♦ 迅捷 keyword：补救 +1 hit。", "player");
+    }
   }
   // ♦ 大招 影舞步：本次攻击 hits ×3（一次性）
   let tripleMult = 1;
@@ -655,12 +711,14 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
       log(`法杖：${target.name} +易伤（×1.5）。`, "player");
     }
 
-    // 链刃：对其他存活敌人溅射 2 伤
+    // 链刃：对其他存活敌人溅射，叠加值按 stack 升级 3/4/5/6
     if (weaponId === "chain_whip") {
+      const splashByStack = [3, 4, 5, 6];
+      const splash = splashByStack[Math.min(state.player.weapons.length, 4) - 1] ?? 3;
       for (const e of state.enemies) {
         if (!e.alive || e === target) continue;
-        e.hp = Math.max(0, e.hp - 2);
-        log(`链刃溅射：${e.name} -2。`, "player");
+        e.hp = Math.max(0, e.hp - splash);
+        log(`链刃溅射：${e.name} -${splash}。`, "player");
         if (e.hp <= 0) { e.alive = false; log(`★ 击败 ${e.name}！`, "win"); }
       }
     }
@@ -711,6 +769,20 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
     const sc = state.player.weapons.length;
     ctx.slotScale = [1.0, 1.4, 1.8, 2.2][Math.min(sc, 4) - 1] * (state.player.weapons[0].scale ?? 1.0);
   }
+
+  // A 花色 keyword「♣ 守序」：当 ♣ active T1+ 且本牌花色为 ♣ → 本回合 +1 临时护盾
+  // 检查方式：def.defaultSuit === "club" 或 def 描述里明确 ♣ 关联
+  const activeClub = getActiveSpecialty(state);
+  if (activeClub === "club" && suitTier(state, "club") >= 1 && def.defaultSuit === "club") {
+    const sh = state.player.statuses.find(s => s.id === "shield_block");
+    if (sh) {
+      sh.stacks += 1;
+    } else {
+      state.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 1, duration: 1 });
+    }
+    log("♣ 守序 keyword：+1 临时护盾。", "player");
+  }
+
   if (def.onPlay) def.onPlay(ctx);
 
   // 花色手选（染色术 / 共鸣咒）——暂停到玩家选完花色再继续
@@ -755,6 +827,15 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
   if (state.player.armors[0]?.defId === "mage_robe") {
     drawCards(state.player, 1, log);
     log("法袍：摸 1 张。", "player");
+  }
+
+  // 生机长杖：出技能/道具时回 (1×stack) HP
+  if (state.player.weapons[0]?.defId === "lifebloom_staff") {
+    const stack = Math.min(state.player.weapons.length, 4);
+    const heal = stack;  // 1/2/3/4 HP per stack
+    const before = state.player.vita;
+    state.player.vita = Math.min(state.player.vitaMax, state.player.vita + heal);
+    if (state.player.vita > before) log(`生机长杖：回 ${state.player.vita - before} HP。`, "player");
   }
 
   // 战斗节奏：本回合内每出 1 张牌额外摸 1 张
@@ -1001,11 +1082,11 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     dmg = Math.floor(dmg * 0.7);
     log(`♥ 红心专精·生存：受击 ${before}→${dmg}。`, "player");
   }
-  // ♣ Tier 1：-1；Tier 2：再 -2（共 -3）
+  // ♣ Tier 1：-2；Tier 2：再 -3（共 -5）— A 强化
   if (activeSuitD === "club") {
     const cTier = suitTier(state, "club");
-    if (cTier >= 1) dmg = Math.max(0, dmg - 1);
-    if (cTier >= 2) dmg = Math.max(0, dmg - 2);
+    if (cTier >= 1) dmg = Math.max(0, dmg - 2);
+    if (cTier >= 2) dmg = Math.max(0, dmg - 3);
   }
 
   // 防具 onTakeDamage
@@ -1053,9 +1134,23 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
       state.player.statuses.push({ id: "took_damage_turn", name: "本回合受伤", stacks: 1, duration: -1 });
     }
 
-    // ★ 花色专精 · 方块 Tier 1（≥5）：受击反弹 +2（仅激活的方块专精生效）
+    // 骑士铠（♠ 防具）：受击后下次攻击充能 +X 直伤（cap 5 stack）
+    if (state.player.armors[0]?.defId === "knight_plate") {
+      const stack = Math.min(state.player.armors.length, 4);
+      const bonusByStack = [3, 4, 5, 6];
+      const bonus = bonusByStack[stack - 1] ?? 3;
+      const existing = state.player.statuses.find(s => s.id === "knight_charge");
+      if (existing) {
+        existing.stacks = Math.min(5, existing.stacks + 1);
+      } else {
+        state.player.statuses.push({ id: "knight_charge", name: `骑士充能 +${bonus}`, stacks: 1, duration: -1 });
+      }
+      log(`骑士铠充能：下次攻击 +${bonus} 直伤（×${existing?.stacks ?? 1}）。`, "player");
+    }
+
+    // ★ 花色专精 · 方块 Tier 1（≥5）：受击反弹 +3 — A 强化：+2 → +3
     if (activeSuitD === "diamond" && suitTier(state, "diamond") >= 1 && attackerEnemy?.alive) {
-      damageEnemy(attackerEnemy, 2, log, `♦ 方块专精反伤 → ${attackerEnemy.name} -2。`);
+      damageEnemy(attackerEnemy, 3, log, `♦ 方块专精反伤 → ${attackerEnemy.name} -3。`);
     }
 
     // 不灭之心：HP 即将归 0 时复活，整局仅 1 次（用 player.revivesUsed 持久化）
@@ -1273,11 +1368,12 @@ export function endPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) 
   state.attackedThisTurn = false;
   log(`── 回合 ${state.turn}（你的回合）──`, "system");
 
-  // ★ 花色专精 · 红心 Tier 1（≥5）：每回合开始 +1 HP（仅激活的红心专精生效）
+  // ★ 花色专精 · 红心 Tier 1（≥5）：每回合开始 +2 HP（A 强化：+1 → +2）
   if (getActiveSpecialty(state) === "heart" && suitTier(state, "heart") >= 1
       && state.player.vita < state.player.vitaMax) {
-    state.player.vita = Math.min(state.player.vitaMax, state.player.vita + 1);
-    log("♥ 红心专精·生机：+1 HP。", "player");
+    const heal = Math.min(2, state.player.vitaMax - state.player.vita);
+    state.player.vita += heal;
+    log(`♥ 红心专精·生机：+${heal} HP。`, "player");
   }
 
   // 守护契附魔：每回合开始 +1 HP

@@ -137,6 +137,40 @@ const raider = icf(`
   <circle cx="7" cy="32" r="2" fill="currentColor" stroke="none"/>
 `);
 
+// 流派资源补全：4 张新卡 icon
+// 吸血獠牙 (♥ rare)：弯曲尖牙 + 血滴
+const vampire_fang = icf(`
+  <path d="M14 6 Q14 20 18 28 Q22 20 22 6 Z" stroke-width="2"/>
+  <line x1="10" y1="6" x2="26" y2="6" stroke-width="2"/>
+  <circle cx="18" cy="32" r="2" fill="currentColor" stroke="none"/>
+  <circle cx="15" cy="31" r="1" fill="currentColor" stroke="none"/>
+  <circle cx="21" cy="31" r="1" fill="currentColor" stroke="none"/>
+`);
+
+// 生机长杖 (♥ super_rare)：长杖 + 顶部叶芽 / 心形
+const lifebloom_staff = icf(`
+  <line x1="18" y1="14" x2="18" y2="32" stroke-width="2.2"/>
+  <line x1="12" y1="32" x2="24" y2="32"/>
+  <path d="M18 14 Q12 9 15 5 Q18 8 18 12" stroke-width="1.6"/>
+  <path d="M18 14 Q24 9 21 5 Q18 8 18 12" stroke-width="1.6"/>
+  <circle cx="18" cy="9" r="2.5" fill="currentColor" stroke="none"/>
+`);
+
+// 骑士铠 (♠ rare)：胸甲 + 十字星
+const knight_plate = icf(`
+  <path d="M10 8 L26 8 L24 28 Q18 32 12 28 Z" stroke-width="2.2"/>
+  <line x1="18" y1="12" x2="18" y2="24" stroke-width="1.6"/>
+  <line x1="13" y1="18" x2="23" y2="18" stroke-width="1.6"/>
+  <circle cx="18" cy="18" r="2" fill="currentColor" stroke="none"/>
+`);
+
+// 棒槌 (无花色 common)：朴素的木棒
+const crude_club = icf(`
+  <ellipse cx="22" cy="11" rx="7" ry="9" stroke-width="2"/>
+  <line x1="16" y1="16" x2="6" y2="30" stroke-width="2.4"/>
+  <circle cx="5" cy="31" r="2" fill="currentColor" stroke="none"/>
+`);
+
 // ─────────────────────────────────────────────────────────
 // 防具
 // ─────────────────────────────────────────────────────────
@@ -606,6 +640,8 @@ const CARD_ICONS: Record<string, string> = {
   battle_staff, chain_whip, berserker_blade, wizard_staff, repeating_bow,
   // 新加武器 + EPIC 武器（之前漏 → 回退到通用 equipment 盾牌图标）
   raider, blood_blade, excalibur, divine_blade,
+  // 流派资源补全 4 张
+  vampire_fang, lifebloom_staff, knight_plate, crude_club,
   // 防具
   round_shield, leather_armor, spike_armor, heavy_armor, mage_robe,
   cloak, full_plate, scale_mail, mind_armor,
