@@ -270,7 +270,7 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
   // HP
   let hp = baseHpForFloor(opts.floor) * RACE_HP_MULT[race];
   if (tier === "elite") hp *= 1.40;  // 之前 ×1.6
-  if (tier === "boss")  hp *= 2.20;  // 之前 ×2.60；模拟器显示 F3 死亡率 62%，再砍 15%
+  if (tier === "boss")  hp *= 2.00;  // 之前 ×2.20；2000 局 sim 显示 F3 死亡率仍 58.7% / F6 54.6%，再砍 10%
   if (opts.groupSize && opts.groupSize > 1) {
     hp = hp / (1 + (opts.groupSize - 1) * 0.5);
   }
@@ -379,7 +379,7 @@ export function buildFixedBoss(floor: number): EnemyState | null {
   if (floor === 9) {
     const e = buildRandomEnemy({
       floor, tier: "boss", race: "undead",
-      hpMultOverride: 1.6,  // 比普通 boss × 1.6
+      hpMultOverride: 1.3,  // 比普通 boss × 1.3（sim 显示 1.6 → 死亡率 80.6%，砍到 1.3）
     });
     e.name = "亡灵之主 · 不朽君王";
     e.weaponMult = 1.2;
@@ -391,7 +391,7 @@ export function buildFixedBoss(floor: number): EnemyState | null {
   if (floor === 12) {
     const e = buildRandomEnemy({
       floor, tier: "boss", race: "dark",
-      hpMultOverride: 2.0,  // 比普通 boss × 2
+      hpMultOverride: 1.4,  // 比普通 boss × 1.4（sim 显示 2.0 → 100% 死亡率，砍到 1.4）
     });
     e.name = "无相之主 · 终末注视";
     e.weaponMult = 1.3;
@@ -399,7 +399,7 @@ export function buildFixedBoss(floor: number): EnemyState | null {
     const baseIntents = generateAllIntents("dark", floor, "boss");
     baseIntents.push({
       type: "attack",
-      value: Math.max(1, Math.round(scaleAttack(14, floor, "boss") * 1.3)),
+      value: Math.max(1, Math.round(scaleAttack(10, floor, "boss") * 1.1)),
       desc: "终末注视（极重击）",
     });
     e.intents = baseIntents;

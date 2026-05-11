@@ -449,7 +449,7 @@ function goAfterCardReward(state: GameState) {
 }
 
 function calcVitaUpAmount(floor: number): number {
-  return Math.min(8 + floor * 3, 24);
+  return Math.min(8 + floor * 3, 30);  // 之前上限 24；sim 显示 F12 玩家 maxHP 仅 ~106，上限拉到 30 让后期成长更快
 }
 
 // ─────────────────────────────────────────────────────────
