@@ -353,8 +353,8 @@ export function makeEnemyGroupsForFloor(floor: number): EnemyState[][] {
   const isBossFloor = floor % 3 === 0;
   const groups: EnemyState[][] = [];
 
-  // 第 1 场：普通（偶尔多人小怪）
-  if (floor >= 2 && Math.random() < 0.3) {
+  // 第 1 场：普通（偶尔多人小怪 — 40% 概率，让群伤技能更有用武之地）
+  if (floor >= 2 && Math.random() < 0.40) {
     // 多人小怪战：2-3 个低 HP 普通
     const size = Math.random() < 0.5 ? 2 : 3;
     const arr: EnemyState[] = [];
@@ -366,8 +366,8 @@ export function makeEnemyGroupsForFloor(floor: number): EnemyState[][] {
     groups.push([buildRandomEnemy({ floor, tier: "normal" })]);
   }
 
-  // 第 2 场：普通（or 多人）
-  if (floor >= 3 && Math.random() < 0.25) {
+  // 第 2 场：普通（or 多人 — 35%）
+  if (floor >= 3 && Math.random() < 0.35) {
     const size = 2;
     groups.push([
       buildRandomEnemy({ floor, tier: "normal", groupSize: size }),

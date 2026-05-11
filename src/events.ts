@@ -59,6 +59,36 @@ export const MERCHANT_PRICES: Record<CardRarity, number> = {
   epic: 30,
 };
 
+// 卖卡：玩家把牌库里的卡卖给商人换碎片（按稀有度给）
+export const MERCHANT_SELL_PRICES: Record<CardRarity, number> = {
+  common: 1,
+  rare: 2,
+  super_rare: 4,
+  epic: 7,
+};
+
+// 玩家卖卡：从牌库（含手牌/弃牌堆）移除一张卡，获得指定种族的碎片
+export function trySellCard(
+  state: GameState,
+  cardUid: string,
+  gainRace: EnemyRace,
+): { ok: boolean; reason?: string; gained?: number } {
+  // 在 deck / hand / discard 里找
+  const deckIdx = state.player.deck.findIndex(c => c.uid === cardUid);
+  const handIdx = state.player.hand.findIndex(c => c.uid === cardUid);
+  const discardIdx = state.player.discard.findIndex(c => c.uid === cardUid);
+  let removed: CardInstance | undefined;
+  if (deckIdx >= 0) removed = state.player.deck.splice(deckIdx, 1)[0];
+  else if (handIdx >= 0) removed = state.player.hand.splice(handIdx, 1)[0];
+  else if (discardIdx >= 0) removed = state.player.discard.splice(discardIdx, 1)[0];
+  if (!removed) return { ok: false, reason: "牌不存在" };
+  const def = CARD_DB[removed.defId];
+  const rarity = (def.rarity ?? "common") as CardRarity;
+  const gained = MERCHANT_SELL_PRICES[rarity];
+  state.player.fragments[gainRace] = (state.player.fragments[gainRace] ?? 0) + gained;
+  return { ok: true, gained };
+}
+
 export function generateMerchantStock(floor: number): CardInstance[] {
   // 5 张候选，按楼层稀有度权重无放回抽
   const pool = floor >= 3
@@ -97,17 +127,37 @@ export function tryPurchaseMerchantCardMixed(
   return { ok: true };
 }
 
-// 兑换碎片：3 个 source → 1 个 target
-export function tradeFragments(
+// 兑换碎片（混搭）：花掉的碎片任意混搭，总和必须是 3 的倍数；换出的碎片可分配到多种族，总和 = 花掉/3
+export function tradeFragmentsMixed(
   state: GameState,
-  fromRace: EnemyRace,
-  toRace: EnemyRace,
+  fromSpend: Partial<Record<EnemyRace, number>>,
+  toGain: Partial<Record<EnemyRace, number>>,
 ): { ok: boolean; reason?: string } {
-  if (fromRace === toRace) return { ok: false, reason: "不能换自己" };
-  const have = state.player.fragments[fromRace] ?? 0;
-  if (have < 3) return { ok: false, reason: `${FRAGMENT_NAMES[fromRace]} 不足 3 个` };
-  state.player.fragments[fromRace] = have - 3;
-  state.player.fragments[toRace] = (state.player.fragments[toRace] ?? 0) + 1;
+  let spendTotal = 0;
+  for (const r in fromSpend) spendTotal += fromSpend[r as EnemyRace] ?? 0;
+  let gainTotal = 0;
+  for (const r in toGain) gainTotal += toGain[r as EnemyRace] ?? 0;
+  if (spendTotal <= 0 || spendTotal % 3 !== 0) {
+    return { ok: false, reason: `花掉总数必须是 3 的倍数（当前 ${spendTotal}）` };
+  }
+  if (gainTotal !== spendTotal / 3) {
+    return { ok: false, reason: `换出总数必须 = ${spendTotal / 3}（当前 ${gainTotal}）` };
+  }
+  // 校验库存
+  for (const r in fromSpend) {
+    const need = fromSpend[r as EnemyRace] ?? 0;
+    if ((state.player.fragments[r as EnemyRace] ?? 0) < need) {
+      return { ok: false, reason: `${FRAGMENT_NAMES[r as EnemyRace]} 库存不足` };
+    }
+  }
+  // 扣 + 加
+  for (const r in fromSpend) {
+    state.player.fragments[r as EnemyRace] -= fromSpend[r as EnemyRace] ?? 0;
+  }
+  for (const r in toGain) {
+    state.player.fragments[r as EnemyRace] =
+      (state.player.fragments[r as EnemyRace] ?? 0) + (toGain[r as EnemyRace] ?? 0);
+  }
   return { ok: true };
 }
 

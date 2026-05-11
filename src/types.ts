@@ -144,6 +144,15 @@ export const STATUS_META: Record<string, StatusMeta> = {
   silenced:   { name: "沉默", desc: "下回合无法 buff。", kind: "debuff" },
   bleed:      { name: "出血", desc: "每回合扣当前 HP × stacks × 5%。施加在玩家身上时副作用：闪避率 -stacks × 5%（cap -50%）。", kind: "debuff" },
   attuned:    { name: "已共鸣", desc: "花色被共鸣咒改变，剩余 duration 回合后回归原色。", kind: "neutral" },
+  fear:       { name: "恐惧", desc: "本回合攻击伤害 -50%。", kind: "debuff" },
+
+  // 新增技能/道具 buff
+  blood_pact:    { name: "血契", desc: "本回合内所有攻击吸血 +20%。", kind: "buff" },
+  arcane_burst:  { name: "奥术爆裂", desc: "本回合每张非攻击牌使下张攻击 +3。", kind: "buff" },
+  brew_regen:    { name: "药剂", desc: "本场战斗内每回合开始 +stacks HP。", kind: "buff" },
+  no_skill:      { name: "技能锁", desc: "本回合不能再出技能牌（速摸副作用）。", kind: "neutral" },
+  pierce_bonus:  { name: "穿甲斩", desc: "下张攻击额外 +stacks pierce（用一次清除）。", kind: "buff" },
+  pierce_perm:   { name: "穿甲油", desc: "本场战斗内武器永久 +stacks pierce。", kind: "buff" },
 
   // 持续/延时类玩家 buff
   frenzy:        { name: "激奋", desc: "每打出 1 张攻击牌后 stacks +1，下次攻击 +stacks × 5 伤。", kind: "buff" },

@@ -51,7 +51,8 @@ import {
 import {
   generateMerchantStock,
   tryPurchaseMerchantCardMixed,
-  tradeFragments,
+  tradeFragmentsMixed,
+  trySellCard,
   GAMBLER_OPTIONS,
   SHRINE_OPTIONS,
   generateWizardChoices,
@@ -361,11 +362,15 @@ function enterRewardCard(state: GameState) {
   const pool = state.floor >= 3
     ? [...REWARD_CARD_POOL_BASE, ...REWARD_CARD_POOL_AOE]
     : REWARD_CARD_POOL_BASE;
-  // 玩家牌库已有的 defId（用于花色操作牌去重）
-  const owned = new Set<string>();
-  for (const c of state.player.deck) owned.add(c.defId);
-  for (const c of state.player.hand) owned.add(c.defId);
-  for (const c of state.player.discard) owned.add(c.defId);
+  // 玩家牌库已有的 defId → 数量（含装备/特性，用于平滑去重 + 流派偏好计算）
+  const owned = new Map<string, number>();
+  const accumulate = (id: string) => owned.set(id, (owned.get(id) ?? 0) + 1);
+  for (const c of state.player.deck) accumulate(c.defId);
+  for (const c of state.player.hand) accumulate(c.defId);
+  for (const c of state.player.discard) accumulate(c.defId);
+  for (const c of state.player.weapons) accumulate(c.defId);
+  for (const c of state.player.armors) accumulate(c.defId);
+  for (const c of state.player.perks) accumulate(c.defId);
   // 装备保底：连续 3 场无装备奖励 → 下场强制
   const forceEquip = (state.player.battlesSinceEquipReward ?? 0) >= 3;
   state.choices = rollRewardChoices(pool, REWARD_CHOICE_COUNT, state.floor, owned, forceEquip);
@@ -591,14 +596,34 @@ export function merchantBuyCardMixed(
 }
 
 // 商人换碎片
-export function merchantTradeFragments(state: GameState, fromRace: EnemyRace, toRace: EnemyRace): boolean {
+export function merchantTradeFragmentsMixed(
+  state: GameState,
+  fromSpend: Partial<Record<EnemyRace, number>>,
+  toGain: Partial<Record<EnemyRace, number>>,
+): boolean {
   if (state.phase !== "floor_event" || state.activeEventId !== "merchant") return false;
-  const result = tradeFragments(state, fromRace, toRace);
+  const result = tradeFragmentsMixed(state, fromSpend, toGain);
   if (!result.ok) {
     pushLog(state, `兑换失败：${result.reason}`, "system");
     return false;
   }
-  pushLog(state, `3 ${fromRace} 碎片 → 1 ${toRace} 碎片。`, "player");
+  const fromSum = Object.entries(fromSpend).filter(([, n]) => (n ?? 0) > 0)
+    .map(([r, n]) => `${r}×${n}`).join("+");
+  const toSum = Object.entries(toGain).filter(([, n]) => (n ?? 0) > 0)
+    .map(([r, n]) => `${r}×${n}`).join("+");
+  pushLog(state, `兑换：${fromSum} → ${toSum}`, "player");
+  return true;
+}
+
+// 商人卖卡
+export function merchantSellCard(state: GameState, cardUid: string, gainRace: EnemyRace): boolean {
+  if (state.phase !== "floor_event" || state.activeEventId !== "merchant") return false;
+  const result = trySellCard(state, cardUid, gainRace);
+  if (!result.ok) {
+    pushLog(state, `卖卡失败：${result.reason}`, "system");
+    return false;
+  }
+  pushLog(state, `卖出卡牌 → ${gainRace} 碎片 +${result.gained}`, "player");
   return true;
 }
 

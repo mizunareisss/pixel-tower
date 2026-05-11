@@ -30,7 +30,8 @@ import {
   applyForgeRecolor,
   skipFloorEvent,
   merchantBuyCardMixed,
-  merchantTradeFragments,
+  merchantTradeFragmentsMixed,
+  merchantSellCard,
   merchantLeave,
   gamblerBet,
   shrineSacrifice,
@@ -43,7 +44,7 @@ import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
 import { ABILITY_DESCS } from "./enemies.ts";
 import { getCurrentDodgeChance, getSuitAffinity, suitTier, getActiveSpecialty, getDisplayedSpecialty, getTiedSpecialties } from "./battle.ts";
 import {
-  EVENT_META, MERCHANT_PRICES, GAMBLER_OPTIONS, SHRINE_OPTIONS, CHEST_TRAP_DESCS,
+  EVENT_META, MERCHANT_PRICES, MERCHANT_SELL_PRICES, GAMBLER_OPTIONS, SHRINE_OPTIONS, CHEST_TRAP_DESCS,
 } from "./events.ts";
 import type { EventId } from "./events.ts";
 import { NODE_TYPE_META, getReachableNodes } from "./map.ts";
@@ -1358,9 +1359,11 @@ function renderMerchant(parent: HTMLElement) {
   actions.className = "merchant-actions";
   actions.innerHTML = `
     <button class="merchant-trade-btn">⇄ 兑换碎片（3:1）</button>
+    <button class="merchant-sell-btn">💰 卖卡换碎片</button>
     <button class="merchant-leave-btn">离开</button>
   `;
   actions.querySelector(".merchant-trade-btn")!.addEventListener("click", () => showFragmentTradeModal());
+  actions.querySelector(".merchant-sell-btn")!.addEventListener("click", () => showSellCardModal());
   actions.querySelector(".merchant-leave-btn")!.addEventListener("click", () => {
     merchantLeave(state);
     render();
@@ -1395,13 +1398,208 @@ function showRacePicker(title: string, onPick: (race: import("./types.ts").Enemy
   document.body.appendChild(overlay);
 }
 
-// 兑换碎片弹窗（选源 → 选目标）
+// 兑换碎片弹窗（混搭：上层选花掉 → 下层选换出，3:1 汇率）
 function showFragmentTradeModal() {
-  showRacePicker("选要花掉的碎片（消耗 3）", from => {
-    showRacePicker(`换什么？（${FRAGMENT_ICONS[from]} 3 → ? 1）`, to => {
-      if (merchantTradeFragments(state, from, to)) render();
+  document.getElementById("trade-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "trade-overlay";
+  overlay.className = "ic-overlay";
+  const fromSpend: Partial<Record<EnemyRace, number>> = {};
+  const toGain: Partial<Record<EnemyRace, number>> = {};
+  for (const r of RACES) { fromSpend[r] = 0; toGain[r] = 0; }
+
+  const totals = () => {
+    const from = RACES.reduce((s, r) => s + (fromSpend[r] ?? 0), 0);
+    const to = RACES.reduce((s, r) => s + (toGain[r] ?? 0), 0);
+    return { from, to };
+  };
+
+  const renderFromRows = (): string => RACES.map(r => {
+    const have = state.player.fragments[r] ?? 0;
+    const cur = fromSpend[r] ?? 0;
+    const rare = isRareRace(r);
+    return `
+      <div class="mxpay-row${rare ? " rare" : ""}">
+        <span class="mxpay-icon">${FRAGMENT_ICONS[r]}</span>
+        <span class="mxpay-name">${FRAGMENT_NAMES[r]}</span>
+        <span class="mxpay-have">库存 ${have}</span>
+        <button class="trade-from-minus" data-race="${r}" ${cur <= 0 ? "disabled" : ""}>−</button>
+        <span class="mxpay-cur">${cur}</span>
+        <button class="trade-from-plus" data-race="${r}" ${cur >= have ? "disabled" : ""}>+</button>
+      </div>
+    `;
+  }).join("");
+
+  const renderToRows = (allowance: number): string => RACES.map(r => {
+    const cur = toGain[r] ?? 0;
+    const rare = isRareRace(r);
+    const toTotal = RACES.reduce((s, rr) => s + (toGain[rr] ?? 0), 0);
+    return `
+      <div class="mxpay-row${rare ? " rare" : ""}">
+        <span class="mxpay-icon">${FRAGMENT_ICONS[r]}</span>
+        <span class="mxpay-name">${FRAGMENT_NAMES[r]}</span>
+        <span class="mxpay-have">&nbsp;</span>
+        <button class="trade-to-minus" data-race="${r}" ${cur <= 0 ? "disabled" : ""}>−</button>
+        <span class="mxpay-cur">${cur}</span>
+        <button class="trade-to-plus" data-race="${r}" ${toTotal >= allowance ? "disabled" : ""}>+</button>
+      </div>
+    `;
+  }).join("");
+
+  const update = () => {
+    const { from, to } = totals();
+    const allowance = Math.floor(from / 3);
+    overlay.querySelector(".trade-from-rows")!.innerHTML = renderFromRows();
+    overlay.querySelector(".trade-to-rows")!.innerHTML = renderToRows(allowance);
+    overlay.querySelector(".trade-from-total")!.innerHTML =
+      `花掉 <b>${from}</b> 个${from > 0 && from % 3 !== 0 ? `<span class="mxpay-mismatch">（不是 3 的倍数）</span>` : ""}`;
+    overlay.querySelector(".trade-to-total")!.innerHTML =
+      `换出 <b class="${to === allowance && to > 0 ? "mxpay-ok" : "mxpay-mismatch"}">${to}</b> / ${allowance}`;
+    const confirmBtn = overlay.querySelector(".ic-confirm") as HTMLButtonElement;
+    confirmBtn.disabled = !(from > 0 && from % 3 === 0 && to === allowance);
+    bind();
+  };
+
+  const bind = () => {
+    overlay.querySelectorAll<HTMLButtonElement>(".trade-from-plus").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const r = btn.dataset.race as EnemyRace;
+        fromSpend[r] = (fromSpend[r] ?? 0) + 1;
+        update();
+      });
+    });
+    overlay.querySelectorAll<HTMLButtonElement>(".trade-from-minus").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const r = btn.dataset.race as EnemyRace;
+        fromSpend[r] = Math.max(0, (fromSpend[r] ?? 0) - 1);
+        // 同步收紧 toGain（如果 allowance 缩小）
+        const allowance = Math.floor(RACES.reduce((s, rr) => s + (fromSpend[rr] ?? 0), 0) / 3);
+        let toTotal = RACES.reduce((s, rr) => s + (toGain[rr] ?? 0), 0);
+        while (toTotal > allowance) {
+          // 从某种族减 1
+          for (const rr of RACES) {
+            if ((toGain[rr] ?? 0) > 0) {
+              toGain[rr] = (toGain[rr] ?? 0) - 1;
+              toTotal--;
+              break;
+            }
+          }
+        }
+        update();
+      });
+    });
+    overlay.querySelectorAll<HTMLButtonElement>(".trade-to-plus").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const r = btn.dataset.race as EnemyRace;
+        toGain[r] = (toGain[r] ?? 0) + 1;
+        update();
+      });
+    });
+    overlay.querySelectorAll<HTMLButtonElement>(".trade-to-minus").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const r = btn.dataset.race as EnemyRace;
+        toGain[r] = Math.max(0, (toGain[r] ?? 0) - 1);
+        update();
+      });
+    });
+  };
+
+  overlay.innerHTML = `
+    <div class="ic-modal mxpay-modal trade-modal">
+      <div class="ic-title">⇄ 兑换碎片（3 : 1）</div>
+      <div class="mxpay-tip">花掉的碎片数必须是 <b>3 的倍数</b>，换出 = 花掉 / 3。</div>
+      <div class="trade-section-label">花掉</div>
+      <div class="trade-from-rows mxpay-rows">${renderFromRows()}</div>
+      <div class="trade-from-total mxpay-total">花掉 <b>0</b> 个</div>
+      <div class="trade-section-label">换成</div>
+      <div class="trade-to-rows mxpay-rows">${renderToRows(0)}</div>
+      <div class="trade-to-total mxpay-total">换出 <b>0</b> / 0</div>
+      <div class="ic-actions">
+        <button class="ic-cancel">取消</button>
+        <button class="ic-confirm" disabled>确认兑换</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  bind();
+  overlay.querySelector(".ic-cancel")!.addEventListener("click", () => overlay.remove());
+  overlay.querySelector(".ic-confirm")!.addEventListener("click", () => {
+    if (merchantTradeFragmentsMixed(state, fromSpend, toGain)) {
+      overlay.remove();
+      render();
+    }
+  });
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+}
+
+// 卖卡 modal：从牌库/手牌/弃牌堆里选 1 张 → 选获得的种族碎片
+function showSellCardModal() {
+  document.getElementById("sell-overlay")?.remove();
+  const allCards = [...state.player.deck, ...state.player.hand, ...state.player.discard];
+  // 排除起始基础卡（atk_spade 等），避免玩家把基础牌全卖了
+  const sellable = allCards.filter(c => {
+    const def = CARD_DB[c.defId];
+    if (!def) return false;
+    if (c.defId === "short_sword") return false;  // 起始过渡品
+    // atk_* / 起始牌库的 common 基础牌允许卖（玩家自由决定）
+    return true;
+  });
+  if (sellable.length === 0) {
+    showConfirm({ title: "无卡可卖", body: "牌库里没有可卖的卡。", confirmLabel: "知道了", onConfirm: () => {} });
+    return;
+  }
+  // 按稀有度分组排序：epic → super_rare → rare → common
+  const rarityOrder: Record<string, number> = { epic: 0, super_rare: 1, rare: 2, common: 3 };
+  sellable.sort((a, b) => {
+    const ra = rarityOrder[CARD_DB[a.defId].rarity ?? "common"];
+    const rb = rarityOrder[CARD_DB[b.defId].rarity ?? "common"];
+    if (ra !== rb) return ra - rb;
+    return CARD_DB[a.defId].name.localeCompare(CARD_DB[b.defId].name, "zh");
+  });
+
+  const overlay = document.createElement("div");
+  overlay.id = "sell-overlay";
+  overlay.className = "ic-overlay";
+
+  const cardItems = sellable.map(inst => {
+    const def = CARD_DB[inst.defId];
+    const rarity = def.rarity ?? "common";
+    const price = MERCHANT_SELL_PRICES[rarity];
+    return `
+      <button class="sell-card-item rarity-${rarity}" data-uid="${inst.uid}">
+        <div class="sell-card-name">${escapeHTML(def.name)}</div>
+        <div class="sell-card-meta">${rarityLabel(rarity)} · ${categoryLabel(def.category)}</div>
+        <div class="sell-card-price">💰 ${price} 碎片</div>
+      </button>
+    `;
+  }).join("");
+
+  overlay.innerHTML = `
+    <div class="ic-modal sell-modal">
+      <div class="ic-title">💰 卖卡换碎片</div>
+      <div class="mxpay-tip">选 1 张卡卖给商人换碎片：common = 1，rare = 2，super_rare = 4，epic = 7。</div>
+      <div class="sell-cards-grid">${cardItems}</div>
+      <div class="ic-actions"><button class="ic-cancel">取消</button></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll<HTMLButtonElement>(".sell-card-item").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.uid!;
+      const inst = sellable.find(c => c.uid === uid)!;
+      const def = CARD_DB[inst.defId];
+      const rarity = def.rarity ?? "common";
+      const price = MERCHANT_SELL_PRICES[rarity];
+      showRacePicker(`「${def.name}」卖 ${price} 碎片 — 选要哪个种族的`, race => {
+        if (merchantSellCard(state, uid, race)) {
+          overlay.remove();
+          render();
+        }
+      });
     });
   });
+  overlay.querySelector(".ic-cancel")!.addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
 }
 
 // 混搭支付 modal：5 种族 ± 按钮 + 实时校验总额 = 价格

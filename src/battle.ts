@@ -398,7 +398,7 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
   // 激奋：每次攻击 +stacks×5；攻击末尾 stacks +1（在 playAttack 末尾处理）
   const frenzy = player.statuses.find(s => s.id === "frenzy");
   if (frenzy) {
-    const bonus = frenzy.stacks * 5;
+    const bonus = frenzy.stacks * 2;
     dmg += bonus;
     log(`激奋 +${bonus}（×${frenzy.stacks}）。`, "player");
   }
@@ -443,14 +443,15 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
   // 楼层倍率（武器 instance）
   dmg *= player.weapons[0].scale ?? 1.0;
 
-  // 法师杖（武器特性）+ 算计/凝神 附魔的"非攻击牌累积器"统一计算
-  // 每出 1 张非攻击牌累积 1 stack，攻击时按 stacks × multiplier 加伤
+  // 法师杖（武器特性）+ 算计/凝神 附魔 + 奥术爆裂 的"非攻击牌累积器"统一计算
   const charge = player.statuses.find(s => s.id === "calc_charge");
   if (charge && charge.stacks > 0) {
     let mul = 0;
     if (player.weapons[0]?.defId === "wizard_staff") mul += 3;
     if (player.weaponEnchant === "e_strategist") mul += 2;
     if (player.weaponEnchant === "ec_focus") mul += 1;
+    // 奥术爆裂：本回合每张非攻击牌 +3
+    if (player.statuses.find(s => s.id === "arcane_burst")) mul += 3;
     if (mul > 0) {
       const bonus = charge.stacks * mul;
       dmg += bonus;
@@ -504,10 +505,11 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
   if (!bypassArmor) {
     const enemyArmor = ctx.target.armor ?? 0;
     if (enemyArmor > 0) {
-      // pierce 来源汇总：武器 + 洞察特性 + 破军 + ♠ Tier 2 (+楼层)
+      // pierce 来源汇总：武器 + 洞察特性 + 破甲专家特性 + 破军 + ♠ Tier 2 + 穿甲斩 + 穿甲油
       let pierce = wDef.pierce ?? 0;
       const insightStacks = player.perks.filter(p => p.defId === "p_insight").length;
-      pierce += insightStacks;
+      const armorBreakStacks = player.perks.filter(p => p.defId === "p_armor_break").length;
+      pierce += insightStacks + armorBreakStacks;
       if (wDef.id === "raider") {
         const stacks = Math.min(player.weapons.length, 4);
         const ratio = [0.50, 0.50, 0.60, 0.70][stacks - 1];
@@ -516,6 +518,15 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
       // ♠ Tier 2：pierce += 楼层数（仅激活的黑桃专精生效）
       if (activeSuit === "spade" && activeTier >= 2) {
         pierce += state.floor;
+      }
+      // 穿甲油（本场战斗内永久 +2）
+      const pierceOil = player.statuses.find(s => s.id === "pierce_perm");
+      if (pierceOil) pierce += pierceOil.stacks;
+      // 穿甲斩（本回合 +N，用一次清除）
+      const pierceBonus = player.statuses.find(s => s.id === "pierce_bonus");
+      if (pierceBonus) {
+        pierce += pierceBonus.stacks;
+        player.statuses = player.statuses.filter(s => s.id !== "pierce_bonus");
       }
       const effective = Math.max(0, enemyArmor - pierce);
       const actualPierce = Math.min(pierce, enemyArmor);
@@ -549,6 +560,11 @@ export function playCard(state: BattleState, cardUid: string, log: (m: string, k
   // 持咒本场限 1 次
   if (card.defId === "sk_chant" && state.player.statuses.find(s => s.id === "chanted_used")) {
     log(`${def.name} 本场已经触发过，不能再用。`, "system");
+    return false;
+  }
+  // 速摸触发的"本回合技能锁"
+  if (def.category === "skill" && state.player.statuses.find(s => s.id === "no_skill")) {
+    log(`本回合已使用速摸，不能再出技能。`, "system");
     return false;
   }
 
@@ -614,6 +630,14 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
     if (target.hp <= 0) {
       target.alive = false;
       log(`★ 击败 ${target.name}！`, "win");
+    }
+
+    // 血契 buff：本回合内攻击吸血额外 +20%（独立于 p_vampire）
+    if (dmg > 0 && state.player.statuses.find(s => s.id === "blood_pact")) {
+      const heal = Math.max(1, Math.floor(dmg * 0.20));
+      const before = state.player.vita;
+      state.player.vita = Math.min(state.player.vitaMax, state.player.vita + heal);
+      if (state.player.vita > before) log(`血契：回 ${state.player.vita - before} HP。`, "player");
     }
 
     // 法杖：每次攻击给目标 +1 易伤（×1.5 受伤）持续 2 回合
@@ -1111,6 +1135,11 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
         value = Math.floor(value * 0.5);
         log(`${enemy.name} 被冰冻，伤害减半。`, "player");
       }
+      // 恐惧：攻击伤害 -50%（duration 1 回合）
+      if (enemy.statuses.find(s => s.id === "fear")) {
+        value = Math.floor(value * 0.5);
+        log(`${enemy.name} 陷入恐惧，伤害减半。`, "player");
+      }
       // 敌人虚弱：攻击 -stacks
       const eWeak = enemy.statuses.find(s => s.id === "weak");
       if (eWeak) {
@@ -1261,6 +1290,14 @@ export function endPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) 
 
   // 玩家 DOT 结算（中毒 / 燃烧 / 出血 — 每回合开始受伤）
   // 中毒：扣 stacks，stacks-1；副作用：玩家暴击率 -stacks × 3%（cap -30%）
+  // 药剂回血（本场战斗每回合开始 +2 HP，duration -1 永久）
+  const brew = state.player.statuses.find(s => s.id === "brew_regen");
+  if (brew && state.player.vita < state.player.vitaMax) {
+    const heal = brew.stacks;
+    state.player.vita = Math.min(state.player.vitaMax, state.player.vita + heal);
+    log(`药剂：+${heal} HP。`, "player");
+  }
+
   const playerPoison = state.player.statuses.find(s => s.id === "poison");
   if (playerPoison && playerPoison.stacks > 0) {
     state.player.vita = Math.max(0, state.player.vita - playerPoison.stacks);
