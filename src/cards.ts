@@ -1703,8 +1703,9 @@ export const STARTING_DECK_IDS: string[] = [
   "atk_diamond", "atk_diamond", "atk_diamond", "atk_diamond", "atk_diamond",
   "atk_heart", "atk_heart", "atk_heart", "atk_heart", "atk_heart",
   "atk_club", "atk_club", "atk_club", "atk_club", "atk_club",
-  // 7 技能（含 1 张染色术：保底前期能调整花色，避免因敌人花色克制走死）
-  "sk_poison_blade", "sk_battle_cry", "sk_focus", "sk_evasive", "sk_frenzy", "sk_rend",
+  // 6 技能（含 1 张染色术：保底前期能调整花色，避免因敌人花色克制走死）
+  // 注：激奋已挪到奖励池（super_rare，不再起手就送）
+  "sk_poison_blade", "sk_battle_cry", "sk_focus", "sk_evasive", "sk_rend",
   "sk_dye",
   // 6 道具（回血 ×2，驱毒 ×0，其余各 1）
   "it_heal", "it_heal", "it_whetstone", "it_regroup", "it_bomb", "it_elixir",
@@ -1727,7 +1728,7 @@ export const REWARD_CARD_POOL_BASE = [
   "spike_armor", "scale_mail", "full_plate", "mage_robe", "mind_armor",
   "crown_of_vitality",
   // 单体技能（24 = 22 + 风步 + 穿甲射）
-  "sk_poison_blade", "sk_battle_cry", "sk_frenzy", "sk_evasive",
+  "sk_poison_blade", "sk_battle_cry", "sk_evasive", "sk_frenzy",
   "sk_silence", "sk_freeze", "sk_rend", "sk_focus",
   "sk_aegis", "sk_charge", "sk_weakening_bolt", "sk_shadow_strike",
   "sk_quick_draw", "sk_counter_stance", "sk_blast", "sk_dbl_pummel",
