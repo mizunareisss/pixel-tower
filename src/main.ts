@@ -165,11 +165,13 @@ function render() {
       && state.phase !== "suit_pick") {
     playBattleExitAnimation();
     _battleExitInFlight = true;
+    // 时序：0ms 敌人销毁开始 → 220ms 胜利 banner 入场 → 480ms 手牌收回开始
+    //       → 880ms banner 淡出 → 1050ms render reward_card
     setTimeout(() => {
       _battleExitInFlight = false;
-      _prevPhase = state.phase; // 标记 phase 已过渡
+      _prevPhase = state.phase;
       render();
-    }, 560); // 敌人 ~440ms + 手牌 ~280ms (含 delay) 略让最后一帧落定
+    }, 1050);
     return;
   }
   if (_battleExitInFlight) return;
@@ -268,18 +270,44 @@ function render() {
   _prevPhase = state.phase;
 }
 
-// 战斗出场动画：敌人卡随机三种销毁方式 + 玩家手牌飞向右下牌库
+// 战斗出场动画 — 分三阶段，节奏感更强，玩家能看清"击杀"
+//   阶段 A (0-440ms)：敌人卡随机销毁方式（烧毁/撕毁/炸碎）
+//   阶段 B (220ms 起)：大胜利 banner 浮出
+//   阶段 C (480ms 起)：玩家手牌飞向右下牌库 + 玩家卡左滑淡出
+//   阶段 D (880ms 起)：banner 淡出
 function playBattleExitAnimation() {
+  // 阶段 A：敌人立即销毁
   const exitClasses = ["exit-burn", "exit-tear", "exit-shatter"];
   document.querySelectorAll<HTMLElement>("#enemies-row .enemy-card").forEach(el => {
-    // 死敌人也一起销毁掉（视觉一致），但已死的不再加 grayscale 转换
     const pick = exitClasses[Math.floor(Math.random() * exitClasses.length)];
     el.classList.add(pick);
   });
-  document.querySelectorAll<HTMLElement>("#active .hand-card").forEach(el => {
-    el.classList.add("is-collecting");
-  });
-  document.getElementById("player-card")?.classList.add("is-exiting");
+
+  // 阶段 B：220ms 后展示胜利 banner
+  setTimeout(() => {
+    document.getElementById("victory-banner-overlay")?.remove();
+    const banner = document.createElement("div");
+    banner.id = "victory-banner-overlay";
+    banner.innerHTML = `
+      <div class="vb-inner">
+        <div class="vb-sub">★ ★ ★</div>
+        <div class="vb-title">胜 利</div>
+        <div class="vb-sub">VICTORY</div>
+      </div>
+    `;
+    document.body.appendChild(banner);
+    // 880ms 时让 banner 淡出，1050ms 自动移除
+    setTimeout(() => banner.classList.add("vb-fade"), 660);
+    setTimeout(() => banner.remove(), 850);
+  }, 220);
+
+  // 阶段 C：480ms 后开始手牌收回 + 玩家卡淡出
+  setTimeout(() => {
+    document.querySelectorAll<HTMLElement>("#active .hand-card").forEach(el => {
+      el.classList.add("is-collecting");
+    });
+    document.getElementById("player-card")?.classList.add("is-exiting");
+  }, 480);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -2600,7 +2628,8 @@ function renderHandCard(inst: CardInstance): HTMLElement {
 
 // 出装备/打牌的统一入口，封装出牌动效触发
 function playEquipCard(def: import("./types.ts").CardDef, inst: CardInstance): void {
-  const targetIdx = state.battle?.targetIndex ?? 0;
+  // snapshot 攻击前的 targetIndex（用于克隆动画起飞位置）
+  const targetIdxPre = state.battle?.targetIndex ?? 0;
 
   // 出牌前：克隆手牌卡到 body 层做飞行动画，使 render 可立即执行而动画照常播放
   const handCardEl = document.querySelector<HTMLElement>(`.hand-card[data-uid="${inst.uid}"]`);
@@ -2634,8 +2663,12 @@ function playEquipCard(def: import("./types.ts").CardDef, inst: CardInstance): v
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 
   if (gamePlayCard(state, inst.uid)) {
+    // 关键修复：battle.ts playAttack 攻击前会调 ensureValidTarget，如果原 targetIndex
+    // 已死会自动切到下一个活着的敌人。所以 hit 动画的目标必须用攻击 *后* 的 targetIndex，
+    // 否则多敌人战斗里第一只死后默认换 2 号目标时，hit 动画还会播在 1 号尸体上。
+    const realIdx = state.battle?.targetIndex ?? targetIdxPre;
     render();
-    triggerCardAnimation(def, targetIdx);
+    triggerCardAnimation(def, realIdx);
   }
 }
 

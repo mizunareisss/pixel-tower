@@ -95,6 +95,48 @@ const repeating_bow = icf(`
   <polygon points="31,18 26,15 26,21" fill="currentColor" stroke="none"/>
 `);
 
+// EPIC 武器（先前没有 icon，会回退到通用 equipment 盾牌 → 视觉错位）
+
+// 王者之剑：双锋长剑 + 顶部三尖王冠 + 剑柄宝石
+const excalibur = icf(`
+  <line x1="18" y1="6" x2="18" y2="28" stroke-width="2.4"/>
+  <polyline points="14,9 18,5 22,9" stroke-width="1.6"/>
+  <line x1="12" y1="26" x2="24" y2="26" stroke-width="2"/>
+  <line x1="14" y1="29" x2="22" y2="29" stroke-width="1.6"/>
+  <circle cx="18" cy="32" r="2" fill="currentColor" stroke="none"/>
+  <polyline points="10,11 13,8 13,14" stroke-width="1.4"/>
+  <polyline points="26,11 23,8 23,14" stroke-width="1.4"/>
+  <polyline points="15,7 18,4 21,7" stroke-width="1.4"/>
+  <circle cx="18" cy="14" r="1.4" fill="currentColor" stroke="none"/>
+`);
+
+// 天命之刃：稍弯的太刀 + 顶部星芒（天命）
+const divine_blade = icf(`
+  <path d="M9 30 Q14 22 22 12 Q26 8 28 6" stroke-width="2.4"/>
+  <line x1="12" y1="22" x2="6" y2="28" stroke-width="1.8"/>
+  <circle cx="6" cy="30" r="2" fill="currentColor" stroke="none"/>
+  <polyline points="22,4 24,7 27,5 25,8 28,10 25,11 27,14 24,12 23,15 22,12 19,13 21,10 19,7 22,8 Z" stroke-width="1.3"/>
+`);
+
+// 血裂刃：直剑 + 剑身血滴
+const blood_blade = icf(`
+  <line x1="8" y1="28" x2="26" y2="10" stroke-width="2.2"/>
+  <line x1="12" y1="20" x2="6" y2="26"/>
+  <line x1="20" y1="12" x2="26" y2="6"/>
+  <circle cx="6" cy="30" r="2" fill="currentColor" stroke="none"/>
+  <circle cx="16" cy="20" r="1.6" fill="currentColor" stroke="none"/>
+  <circle cx="20" cy="16" r="1.2" fill="currentColor" stroke="none"/>
+  <circle cx="13" cy="24" r="1" fill="currentColor" stroke="none"/>
+`);
+
+// 破军：粗大弯刀 + 锯齿口
+const raider = icf(`
+  <path d="M8 30 Q18 24 28 8" stroke-width="2.6"/>
+  <polyline points="26,10 24,12 25,14 23,15 24,17 22,18 23,20" stroke-width="1.3"/>
+  <line x1="12" y1="26" x2="7" y2="31"/>
+  <circle cx="7" cy="32" r="2" fill="currentColor" stroke="none"/>
+`);
+
 // ─────────────────────────────────────────────────────────
 // 防具
 // ─────────────────────────────────────────────────────────
@@ -164,6 +206,13 @@ const mind_armor = icf(`
   <circle cx="18" cy="18" r="2" fill="currentColor" stroke="none"/>
   <line x1="18" y1="6" x2="18" y2="4"/>
   <line x1="25" y1="9" x2="27" y2="7"/>
+`);
+
+// 不灭之心（EPIC ♥ armor）：心形 + 内部跳动光点
+const undying_heart = icf(`
+  <path d="M18 32 C8 24 4 18 6 12 C8 6 14 6 18 12 C22 6 28 6 30 12 C32 18 28 24 18 32 Z" stroke-width="2"/>
+  <circle cx="18" cy="18" r="3" fill="currentColor" stroke="none"/>
+  <path d="M14 16 Q18 14 22 16" stroke-width="1.4"/>
 `);
 
 // ─────────────────────────────────────────────────────────
@@ -369,6 +418,14 @@ const sk_chroma_wave = ic(`
   <path d="M4 22 Q10 14 18 22 Q26 30 32 22"/>
 `);
 
+// 众神之怒（EPIC skill）：天空裂开 + 闪电劈下
+const sk_wrath = icf(`
+  <path d="M4 8 L10 12 L8 18 L14 20 L11 26 L16 28 L13 33" stroke-width="2.4"/>
+  <polyline points="22,4 26,12 22,12 28,22 23,22 30,32" stroke-width="2.2"/>
+  <line x1="6" y1="4" x2="14" y2="4" stroke-width="1.4"/>
+  <line x1="22" y1="6" x2="32" y2="6" stroke-width="1.4"/>
+`);
+
 // ─────────────────────────────────────────────────────────
 // 道具
 // ─────────────────────────────────────────────────────────
@@ -411,6 +468,14 @@ const it_elixir = icf(`
   <line x1="14" y1="4" x2="22" y2="4"/>
   <circle cx="18" cy="22" r="5" fill="currentColor" fill-opacity="0.4"/>
   <line x1="18" y1="10" x2="18" y2="15"/>
+`);
+
+// 复读机（EPIC item）：两个重叠的回环箭头
+const it_echo = icf(`
+  <path d="M8 14 Q8 6 18 6 Q28 6 28 14" stroke-width="2"/>
+  <polyline points="28,14 28,9 33,12" stroke-width="1.6"/>
+  <path d="M28 22 Q28 30 18 30 Q8 30 8 22" stroke-width="2"/>
+  <polyline points="8,22 8,27 3,24" stroke-width="1.6"/>
 `);
 
 // ─────────────────────────────────────────────────────────
@@ -539,9 +604,13 @@ const CARD_ICONS: Record<string, string> = {
   // 武器
   short_sword, long_sword, dagger, war_bow, twin_blades, warhammer,
   battle_staff, chain_whip, berserker_blade, wizard_staff, repeating_bow,
+  // 新加武器 + EPIC 武器（之前漏 → 回退到通用 equipment 盾牌图标）
+  raider, blood_blade, excalibur, divine_blade,
   // 防具
   round_shield, leather_armor, spike_armor, heavy_armor, mage_robe,
   cloak, full_plate, scale_mail, mind_armor,
+  // EPIC 防具
+  undying_heart,
   // 技能
   sk_poison_blade, sk_battle_cry, sk_frenzy, sk_evasive, sk_silence,
   sk_freeze, sk_rend, sk_focus, sk_aegis, sk_charge, sk_weakening_bolt,
@@ -549,8 +618,12 @@ const CARD_ICONS: Record<string, string> = {
   sk_dbl_pummel, sk_dye, sk_attune,
   sk_chain_bolt, sk_fire_wall, sk_shockwave, sk_group_curse, sk_sonic,
   sk_mass_weak, sk_lightning, sk_curse_vortex, sk_chroma_wave,
+  // EPIC 技能
+  sk_wrath,
   // 道具
   it_heal, it_purify, it_whetstone, it_regroup, it_bomb, it_elixir,
+  // EPIC 道具
+  it_echo,
   // 特性
   p_bleed, p_dodge, p_regen, p_crit, p_tough, p_vampire, p_thorns,
   p_iron_will, p_lifetap, p_overload, p_executioner, p_resonance, p_coldblood,

@@ -877,7 +877,77 @@ h2.lose::before { display: none; }
   100% { transform: translateX(-40px); opacity: 0; }
 }
 #player-card.is-exiting {
-  animation: battle-exit-player 320ms cubic-bezier(0.4, 0, 1, 1) 100ms forwards;
+  animation: battle-exit-player 320ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+/* ───── 大胜利 banner — 战斗结束时浮出 ───── */
+#victory-banner-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 9000;
+  animation: vb-bg-in 280ms cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+#victory-banner-overlay.vb-fade {
+  animation: vb-bg-out 220ms ease-in forwards;
+}
+#victory-banner-overlay .vb-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 20px 40px;
+  background: linear-gradient(180deg, rgba(40,30,0,0.92), rgba(15,10,0,0.92));
+  border: 2px solid var(--gold-bright, #fbbf24);
+  border-radius: 8px;
+  box-shadow:
+    0 0 40px 8px rgba(245,197,24,0.5),
+    0 0 80px 16px rgba(245,197,24,0.25),
+    inset 0 0 30px rgba(245,197,24,0.18);
+  transform: scale(0.7) rotate(-2deg);
+  animation: vb-pop-in 380ms cubic-bezier(0.2, 0.9, 0.3, 1.3) forwards;
+}
+#victory-banner-overlay.vb-fade .vb-inner {
+  animation: vb-pop-out 220ms ease-in forwards;
+}
+#victory-banner-overlay .vb-title {
+  font-family: var(--font-display, serif);
+  font-size: 52px;
+  font-weight: 900;
+  color: var(--gold-bright, #fbbf24);
+  letter-spacing: 0.4em;
+  line-height: 1;
+  text-shadow:
+    0 0 20px rgba(245,197,24,0.9),
+    0 2px 0 rgba(0,0,0,0.6);
+  padding: 4px 0 8px;
+}
+#victory-banner-overlay .vb-sub {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  color: var(--gold, #d4940a);
+  letter-spacing: 0.5em;
+  font-weight: 700;
+}
+@keyframes vb-bg-in {
+  0%   { background: rgba(0,0,0,0); }
+  100% { background: rgba(0,0,0,0.55); }
+}
+@keyframes vb-bg-out {
+  0%   { background: rgba(0,0,0,0.55); }
+  100% { background: rgba(0,0,0,0); }
+}
+@keyframes vb-pop-in {
+  0%   { transform: scale(0.5) rotate(-6deg); opacity: 0; }
+  60%  { transform: scale(1.08) rotate(1deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes vb-pop-out {
+  0%   { transform: scale(1) rotate(0); opacity: 1; }
+  100% { transform: scale(0.85) rotate(2deg) translateY(-20px); opacity: 0; }
 }
 
 /* category top accent */
