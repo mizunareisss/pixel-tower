@@ -349,6 +349,66 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
 // 中间偶尔来一场多人小怪战（30% 概率，第 2 关起）
 // ─────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────
+// 固定 Boss（F9 / F12 — 塔的守门人）
+// 与随机 Boss 区别：
+//   - 固定名字 + 阵营（不抽 namePool）
+//   - HP 额外 ×1.6 / ×2.0（最厚）
+//   - 招式池全开（普通 Boss 是 6 招里随机 4-6，固定 Boss 是 6 招全用）
+//   - 武器倍率额外加成
+//   - 特能描述特别版（在 ABILITY_DESCS 里加 boss 专属说明）
+// ─────────────────────────────────────────────────────────
+
+// 全招式版本（不抽样，全部 INTENT_POOLS[race] 转 EnemyIntent）
+function generateAllIntents(race: EnemyRace, floor: number, tier: "boss"): EnemyIntent[] {
+  return INTENT_POOLS[race].map(t => ({
+    type: t.type,
+    value: t.type === "attack" || t.type === "debuff" ? scaleAttack(t.baseValue, floor, tier) : 0,
+    hits: t.hits,
+    desc: t.desc,
+    debuffId: t.debuffId,
+    debuffName: t.debuffName,
+    debuffDuration: t.debuffDuration,
+  }));
+}
+
+// F9: 亡灵之主 · 不朽君王（undead 阵营守门）
+// F12: 无相之主 · 终末注视（dark 阵营 · 塔顶）
+// 返回 null 表示该楼层不是固定 Boss 楼层，调用方应该回退到 buildRandomEnemy
+export function buildFixedBoss(floor: number): EnemyState | null {
+  if (floor === 9) {
+    const e = buildRandomEnemy({
+      floor, tier: "boss", race: "undead",
+      hpMultOverride: 1.6,  // 比普通 boss × 1.6
+    });
+    e.name = "亡灵之主 · 不朽君王";
+    e.weaponMult = 1.2;
+    // 招式池全开（6 招 undead 全用），招式开始位置随机
+    e.intents = generateAllIntents("undead", floor, "boss");
+    e.intentIndex = Math.floor(Math.random() * e.intents.length);
+    return e;
+  }
+  if (floor === 12) {
+    const e = buildRandomEnemy({
+      floor, tier: "boss", race: "dark",
+      hpMultOverride: 2.0,  // 比普通 boss × 2
+    });
+    e.name = "无相之主 · 终末注视";
+    e.weaponMult = 1.3;
+    // 招式池全开（7 招 dark） + 追加一招"终末注视"（极重击）
+    const baseIntents = generateAllIntents("dark", floor, "boss");
+    baseIntents.push({
+      type: "attack",
+      value: Math.max(1, Math.round(scaleAttack(14, floor, "boss") * 1.3)),
+      desc: "终末注视（极重击）",
+    });
+    e.intents = baseIntents;
+    e.intentIndex = Math.floor(Math.random() * e.intents.length);
+    return e;
+  }
+  return null;
+}
+
 export function makeEnemyGroupsForFloor(floor: number): EnemyState[][] {
   const isBossFloor = floor % 3 === 0;
   const groups: EnemyState[][] = [];

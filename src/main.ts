@@ -157,13 +157,17 @@ const floorEl = $("floor-display");
 const phaseEl = $("phase-display");
 
 function render() {
-  // 战斗出场动画拦截：phase 从 battle → battle_victory 时先播销毁动画，再 render 胜利界面
-  if (!_battleExitInFlight && _prevPhase === "battle" && state.phase === "battle_victory") {
+  // 战斗出场动画拦截：phase 从 battle → 任何非战斗 phase（且不是 game_over 失败 / suit_pick 暂停选花色）
+  // 修：原条件用废弃 phase "battle_victory"，但 onBattleWon 实际直接跳 reward_card，从不经过中间 phase
+  if (!_battleExitInFlight && _prevPhase === "battle"
+      && state.phase !== "battle"
+      && state.phase !== "game_over"
+      && state.phase !== "suit_pick") {
     playBattleExitAnimation();
     _battleExitInFlight = true;
     setTimeout(() => {
       _battleExitInFlight = false;
-      _prevPhase = "battle_victory"; // 标记 phase 已过渡
+      _prevPhase = state.phase; // 标记 phase 已过渡
       render();
     }, 560); // 敌人 ~440ms + 手牌 ~280ms (含 delay) 略让最后一帧落定
     return;
@@ -2603,6 +2607,11 @@ function playEquipCard(def: import("./types.ts").CardDef, inst: CardInstance): v
   if (handCardEl) {
     const rect = handCardEl.getBoundingClientRect();
     const clone = handCardEl.cloneNode(true) as HTMLElement;
+    // 关键修复：cloneNode(true) 会复制 class list，如果用户在战斗入场动画进行中（is-dealing 类还在）
+    // 出牌，克隆会同时带 is-dealing 和 is-playing。CSS 后定义的 .hand-card.is-dealing 会覆盖
+    // .card.is-playing 的 animation，导致克隆播 battle-enter-hand（translateY 120→0，从下方升起），
+    // 视觉上变成"向下打出"。这里清掉所有入场/出场动画相关类，只保留 is-playing。
+    clone.classList.remove("is-dealing", "is-collecting", "is-entering", "picked-card", "is-exiting");
     clone.style.position = "fixed";
     clone.style.left = `${rect.left}px`;
     clone.style.top = `${rect.top}px`;

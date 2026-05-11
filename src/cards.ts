@@ -824,8 +824,14 @@ const SK_TIME_STOP: CardDef = {
 // 群体技能（第 3 关后加入牌池）
 const SK_CHAIN_BOLT: CardDef = {
   id: "sk_chain_bolt", name: "链电", category: "skill", target: "all",
-  desc: "对所有敌人造成 4 点伤害。",
-  onPlay: (c) => { for (const e of c.enemies) if (e.alive) dealDirectDamage(c, e, 4); },
+  desc: "对所有敌人造成各自 HP 上限 4% 的直伤（向上取整，下限 1）。",
+  onPlay: (c) => {
+    for (const e of c.enemies) {
+      if (!e.alive) continue;
+      const dmg = Math.max(1, Math.ceil(e.maxHp * 0.04));
+      dealDirectDamage(c, e, dmg);
+    }
+  },
 };
 
 const SK_FIRE_WALL: CardDef = {
