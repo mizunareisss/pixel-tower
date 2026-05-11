@@ -704,7 +704,7 @@ function renderBattle() {
   const battle = state.battle;
 
   const hpPct = Math.round(state.player.vita / state.player.vitaMax * 100);
-  const dodgePct = getCurrentDodgeChance(state.player);
+  const dodgePct = getCurrentDodgeChance(state.player, battle);
   const dodgeChip = dodgePct > 0
     ? `<span class="pcard-dodge-chip" title="闪避概率 ${dodgePct}%">🎯${dodgePct}%</span>`
     : "";
@@ -2556,7 +2556,14 @@ function renderHandCard(inst: CardInstance): HTMLElement {
   // 持咒本场已用 → 同名副本灰显
   const chantSpent = inst.defId === "sk_chant"
     && !!state.battle?.player.statuses.find(s => s.id === "chanted_used");
-  el.className = `card hand-card cat-${def.category} rarity-${rarity}${attackUsed ? " disabled" : ""}${epicSpent ? " epic-spent" : ""}${chantSpent ? " chant-spent" : ""}`;
+  // 装备槽满 4 张同款 → 第 5 张该卡置灰（同槽不同款仍允许点击触发"替换"modal）
+  const slotFull = def.category === "equipment" && !!state.battle && (
+    (def.equipKind === "weapon" && state.player.weapons.length >= 4
+      && state.player.weapons[0]?.defId === def.id) ||
+    (def.equipKind === "armor" && state.player.armors.length >= 4
+      && state.player.armors[0]?.defId === def.id)
+  );
+  el.className = `card hand-card cat-${def.category} rarity-${rarity}${attackUsed ? " disabled" : ""}${epicSpent ? " epic-spent" : ""}${chantSpent ? " chant-spent" : ""}${slotFull ? " disabled slot-full" : ""}`;
   el.setAttribute("data-uid", inst.uid);  // 出牌动画用：飞行选择器需要找到具体的卡 DOM
   const suitSym = def.attackSuit ? SUIT_SYMBOLS[def.attackSuit]
     : def.equipSuit ? SUIT_SYMBOLS[def.equipSuit] : "";
@@ -2576,6 +2583,7 @@ function renderHandCard(inst: CardInstance): HTMLElement {
 
   const catTag = `<span class="cat-tag">${categoryLabel(def.category)}</span>`;
   const usedTag = attackUsed ? `<span class="used-tag">本回合已攻击</span>` : "";
+  const slotFullTag = slotFull ? `<span class="used-tag slot-full-tag">穿戴已达上限</span>` : "";
   const epicUsesTag = isEpic
     ? `<span class="epic-uses-tag${epicSpent ? " spent" : ""}" title="史诗卡每场限 3 次，用尽后回到牌库">★ ${inst.usesRemaining ?? 0}/3</span>`
     : "";
@@ -2587,9 +2595,13 @@ function renderHandCard(inst: CardInstance): HTMLElement {
     <div class="card-name">${escapeHTML(def.name)}</div>
     <div class="card-desc">${escapeHTML(def.desc)}</div>
     ${usedTag}
+    ${slotFullTag}
     ${catTag}
   `;
   el.addEventListener("click", () => {
+    // 装备槽已满（同款 4 张）：点击直接无效（视觉已经置灰 + "穿戴已达上限"）
+    // 不进入 playEquipCard 避免触发飞出动画
+    if (slotFull) return;
     // 装备牌：换装确认（游戏内弹窗）
     if (def.category === "equipment") {
       if (def.equipKind === "weapon" && state.player.weapons.length > 0 && state.player.weapons[0].defId !== def.id) {

@@ -731,7 +731,7 @@ h2.lose::before { display: none; }
 }
 /* hover 只对真鼠标设备生效（避免移动端触摸后 sticky hover 残留到下张卡） */
 @media (hover: hover) and (pointer: fine) {
-  .card:hover:not(.disabled):not(.epic-spent):not(.chant-spent) {
+  .card:hover:not(.disabled):not(.epic-spent):not(.chant-spent):not(.slot-full) {
     transform: translateY(-4px);
     border-color: var(--gold);
     z-index: 5;
@@ -3958,6 +3958,33 @@ body.is-touch button:hover:not(:disabled) {
   font-size: 12px;
   font-weight: 900;
   pointer-events: none;
+}
+
+/* 装备槽满 4 张同款 → 第 5 张该卡置灰 + 金色"穿戴已达上限"封条 */
+.hand-card.slot-full {
+  opacity: 0.42;
+  filter: grayscale(0.55);
+  cursor: not-allowed;
+}
+.hand-card.slot-full::after {
+  content: "穿戴已达上限";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.55);
+  color: var(--gold-bright);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  pointer-events: none;
+}
+/* 封条 tag（底部内嵌也保留） */
+.slot-full-tag {
+  color: var(--gold);
+  background: rgba(245,197,24,0.14);
+  border-left: 2px solid var(--gold);
 }
 .hand-card.chant-spent {
   opacity: 0.40;

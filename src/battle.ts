@@ -228,6 +228,13 @@ export function drawCards(player: PlayerState, n: number, log: (m: string, k?: L
       i--;  // 不算这次摸牌，再摸一次
       continue;
     }
+    // 本场耗尽的史诗卡（含被替换下来的史诗装备 usesRemaining=0）：抽到自动跳过 → 抽下一张
+    if (top && CARD_DB[top.defId]?.rarity === "epic" && (top.usesRemaining ?? 0) <= 0) {
+      const c = player.deck.pop()!;
+      player.discard.push(c);
+      i--;
+      continue;
+    }
     player.hand.push(player.deck.pop()!);
     drawn++;
   }
@@ -851,8 +858,12 @@ export function discardArmors(state: BattleState, log: (m: string, k?: LogKind) 
 // 玩家受击
 // ─────────────────────────────────────────────────────────
 
-// 当前总闪避概率（百分比）— 来源：意念甲叠加 + p_dodge 特性 + 烟雾弹临时 buff，cap 75%
-export function getCurrentDodgeChance(player: PlayerState): number {
+// 当前总闪避概率（百分比）— 全部来源汇总，cap 75%
+// 之前漏算 ec_swift / swift_dodge_temp / ♦T1 / bleed 扣减 → UI 显示与实际不一致
+// 来源（与 damagePlayer line 930-938 实际 roll 同步）：
+//   意念甲叠加 + p_dodge 特性 + 烟雾弹 + ec_swift 附魔 +10% + 风行余势 stacks
+//   + ♦ T1 active 时 +5% - 出血每层 -5% → cap 75%
+export function getCurrentDodgeChance(player: PlayerState, state?: BattleState): number {
   let chance = 0;
   // 意念甲：每层 +10%（×1=10, ×2=20, ×3=30, ×4=40）
   if (player.armors[0]?.defId === "mind_armor") {
@@ -862,9 +873,21 @@ export function getCurrentDodgeChance(player: PlayerState): number {
   // p_dodge 特性：每张 +3%，cap 50%
   const dodgePerks = player.perks.filter(p => p.defId === "p_dodge").length;
   chance += Math.min(50, dodgePerks * 3);
-  // 烟雾弹临时 buff
+  // 烟雾弹临时 buff（多回合）
   const smoke = player.statuses.find(s => s.id === "smoke_dodge");
   if (smoke) chance += smoke.stacks;
+  // 风行步附魔：常驻 +10%
+  if (player.weaponEnchant === "ec_swift") chance += 10;
+  // 风行余势：闪避触发后本回合临时叠加
+  const swiftTemp = player.statuses.find(s => s.id === "swift_dodge_temp");
+  if (swiftTemp) chance += swiftTemp.stacks;
+  // ♦ T1 active：当前激活方块专精 ≥ T1 时 +5%
+  if (state && getActiveSpecialty(state) === "diamond" && suitTier(state, "diamond") >= 1) {
+    chance += 5;
+  }
+  // 出血扣减：每层 -5%，cap -50
+  const bleedPenalty = getBleedDodgePenalty(player);
+  chance = Math.max(0, chance - bleedPenalty);
   return Math.min(75, chance);
 }
 
@@ -926,16 +949,10 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
     return;
   }
-  // ★ 闪避优先级 2：闪避概率 roll（含 ♦ Tier 1 +5%、风行步附魔 +10%、风行余势叠加）
-  let dodgeChance = getCurrentDodgeChance(state.player);
+  // ★ 闪避优先级 2：闪避概率 roll（来源已全部统一进 getCurrentDodgeChance）
+  const dodgeChance = getCurrentDodgeChance(state.player, state);
+  // activeSuitD 在后面 ♥ / ♣ / ♦ 受击/反伤逻辑里继续用，保留一份
   const activeSuitD = getActiveSpecialty(state);
-  if (activeSuitD === "diamond" && suitTier(state, "diamond") >= 1) dodgeChance += 5;
-  if (state.player.weaponEnchant === "ec_swift") dodgeChance += 10;
-  const swiftTemp = state.player.statuses.find(s => s.id === "swift_dodge_temp");
-  if (swiftTemp) dodgeChance += swiftTemp.stacks;
-  // 出血：闪避率 -bleed × 5%
-  const bleedPenalty = getBleedDodgePenalty(state.player);
-  dodgeChance = Math.max(0, Math.min(75, dodgeChance) - bleedPenalty);
   if (dodgeChance > 0 && Math.random() * 100 < dodgeChance) {
     log(`★ 闪避！（${dodgeChance}%）`, "player");
     onDodgeTriggered(state, attackerEnemy);
