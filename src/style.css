@@ -887,7 +887,8 @@ h2.lose::before { display: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
+  /* pointer-events: auto — 拦截所有点击，骰子动画期间玩家不能出牌/结束回合 */
+  pointer-events: auto;
   z-index: 9500;
   background: rgba(0,0,0,0.55);
   animation: dice-bg-in 200ms ease-out forwards;

@@ -61,17 +61,25 @@ function makeFaceTexture(num: number): THREE.CanvasTexture {
 
 // 根据期望的最终面（1-6），返回让 BoxGeometry 该面 normal 朝 +Y 所需的旋转
 // BoxGeometry 默认 material 顺序：[+X, -X, +Y, -Y, +Z, -Z]
-// 我们把贴图按真实骰子放：[1, 6, 2, 5, 3, 4]（1↔6, 2↔5, 3↔4 对面）
-// 然后让 final face 朝 +Y
+// 贴图分配：[1, 6, 2, 5, 3, 4]（1↔6, 2↔5, 3↔4 对面，标准骰子布局）
+// 然后让目标面的法线方向旋转到 +Y（屏幕"上"）
+//
+// 旋转推导（Three.js 右手坐标系，rotateZ(+) = 从 +Z 看 X 轴逆时针）：
+//   +X → +Y: rotateZ(+90°)    [(1,0,0) → (cos90°, sin90°, 0) = (0,1,0) ✓]
+//   -X → +Y: rotateZ(-90°)    [(-1,0,0) → (0,1,0) ✓]
+//   +Y → +Y: 不旋转
+//   -Y → +Y: rotateX(180°)
+//   +Z → +Y: rotateX(-90°)    [(0,0,1) → (0,1,0) ✓ — sin/cos 的对应位是 (cos×0 - sin×1, sin×0 + cos×1)... let me re-check]
+//   -Z → +Y: rotateX(+90°)
 function getFinalRotation(num: number): { x: number; y: number; z: number } {
   const P = Math.PI / 2;
   switch (num) {
-    case 1: return { x: 0,    y: 0,  z: -P };   // +X (1) → +Y
-    case 6: return { x: 0,    y: 0,  z:  P };   // -X (6) → +Y
+    case 1: return { x: 0,    y: 0,  z: +P };   // +X (1) → +Y  (fix: 原 -P 错了)
+    case 6: return { x: 0,    y: 0,  z: -P };   // -X (6) → +Y  (fix: 原 +P 错了)
     case 2: return { x: 0,    y: 0,  z:  0 };   // +Y (2) → +Y (default)
-    case 5: return { x: P*2,  y: 0,  z:  0 };   // -Y (5) → +Y (旋 180°)
+    case 5: return { x: Math.PI, y: 0,  z: 0 }; // -Y (5) → +Y (旋 180°)
     case 3: return { x: -P,   y: 0,  z:  0 };   // +Z (3) → +Y
-    case 4: return { x:  P,   y: 0,  z:  0 };   // -Z (4) → +Y
+    case 4: return { x: +P,   y: 0,  z:  0 };   // -Z (4) → +Y
     default: return { x: 0, y: 0, z: 0 };
   }
 }
@@ -126,12 +134,13 @@ export function rollDice3D(opts: {
   // 翻滚动画参数
   const startTime = performance.now();
   const finalRot = getFinalRotation(finalRoll);
-  // 起始姿态（带初始 tilt）+ 累计圈数让翻滚看得清
+  // 起始姿态（带初始 tilt 让两面同时可见，更立体）
   const startX = dice.rotation.x;
   const startY = dice.rotation.y;
-  // 让 X / Y 各自多转 2-3 圈，停在 finalRot 上
-  const totalRotX = startX + Math.PI * 2 * 3 + finalRot.x;
-  const totalRotY = startY + Math.PI * 2 * 4 + finalRot.y;
+  // 终态：纯 finalRot + 整圈数（不含 startX/Y 偏置，避免最终面有 tilt 残留）
+  // 整圈 2π 在 Euler XYZ 序下等价于无旋转，所以最终等效于纯 finalRot
+  const totalRotX = Math.PI * 2 * 3 + finalRot.x;
+  const totalRotY = Math.PI * 2 * 4 + finalRot.y;
   const totalRotZ = finalRot.z;
 
   let frameId = 0;

@@ -266,9 +266,17 @@ function render() {
 
     // 战斗开始骰子先手动画：roll 1d6，单数玩家先手 / 双数敌人先手
     // 入场动画后 800ms 出骰子（避免视觉冲突），骰子动画 1.6s
+    // 注：先放一个占位"骰子锁"全屏阻止玩家在 800ms 等待期间出牌/操作
     if (state.battle?.diceRoll && !state.battle.diceAnimationShown) {
       state.battle.diceAnimationShown = true;
-      setTimeout(() => showDiceRoll(state.battle!.diceRoll!), 800);
+      const lock = document.createElement("div");
+      lock.id = "dice-lock";
+      lock.style.cssText = "position:fixed;inset:0;z-index:9499;pointer-events:auto;background:transparent;";
+      document.body.appendChild(lock);
+      setTimeout(() => {
+        lock.remove();
+        showDiceRoll(state.battle!.diceRoll!);
+      }, 800);
     }
   }
 
