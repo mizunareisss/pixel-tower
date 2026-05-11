@@ -571,14 +571,25 @@ function renderStarterPerks() {
   stageEl.appendChild(grid);
 }
 
-// 选牌动画 helper：标记选中卡 + 触发飞出动画，280ms 后执行实际 pick
+// 选牌动画 helper：克隆 grid 到 body 做飞出动画，主流程立即 pick
 function animateChoicePick(grid: HTMLElement, pickedUid: string, then: () => void) {
-  grid.classList.add("is-picked");
-  const cards = grid.querySelectorAll<HTMLElement>(".card");
-  cards.forEach(c => {
+  const rect = grid.getBoundingClientRect();
+  const clone = grid.cloneNode(true) as HTMLElement;
+  clone.style.position = "fixed";
+  clone.style.left = `${rect.left}px`;
+  clone.style.top = `${rect.top}px`;
+  clone.style.width = `${rect.width}px`;
+  clone.style.margin = "0";
+  clone.style.zIndex = "9998";
+  clone.style.pointerEvents = "none";
+  clone.classList.add("is-picked");
+  const cloneCards = clone.querySelectorAll<HTMLElement>(".card");
+  cloneCards.forEach(c => {
     if (c.dataset.uid === pickedUid) c.classList.add("picked-card");
   });
-  setTimeout(then, 280);
+  document.body.appendChild(clone);
+  setTimeout(() => clone.remove(), 320);
+  then();
 }
 
 // ─────────────────────────────────────────────────────────
@@ -2498,14 +2509,25 @@ function renderHandCard(inst: CardInstance): HTMLElement {
 function playEquipCard(def: import("./types.ts").CardDef, inst: CardInstance): void {
   const targetIdx = state.battle?.targetIndex ?? 0;
 
-  // 出牌前：给手牌卡加飞行动画（240ms 完成 → render）
+  // 出牌前：克隆手牌卡到 body 层做飞行动画，使 render 可立即执行而动画照常播放
   const handCardEl = document.querySelector<HTMLElement>(`.hand-card[data-uid="${inst.uid}"]`);
   if (handCardEl) {
-    handCardEl.classList.add("is-playing");
+    const rect = handCardEl.getBoundingClientRect();
+    const clone = handCardEl.cloneNode(true) as HTMLElement;
+    clone.style.position = "fixed";
+    clone.style.left = `${rect.left}px`;
+    clone.style.top = `${rect.top}px`;
+    clone.style.width = `${rect.width}px`;
+    clone.style.height = `${rect.height}px`;
+    clone.style.margin = "0";
+    clone.style.zIndex = "9999";
+    clone.style.pointerEvents = "none";
+    clone.classList.add("is-playing");
+    document.body.appendChild(clone);
+    clone.addEventListener("animationend", () => clone.remove(), { once: true });
+    setTimeout(() => clone.remove(), 500);
   }
 
-  // 兜底清除 hover sticky：移动端点击后浏览器会把 :hover 留到下一张同位置卡
-  // 短时间禁用手牌容器交互，强制浏览器丢掉 hover 状态
   const activeEl = document.getElementById("active");
   if (activeEl) {
     activeEl.classList.add("no-hover-burst");
@@ -2513,16 +2535,10 @@ function playEquipCard(def: import("./types.ts").CardDef, inst: CardInstance): v
   }
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 
-  // 延迟一点让飞行动画前半段播完再 render（防止瞬间消失突兀）
-  setTimeout(() => {
-    if (gamePlayCard(state, inst.uid)) {
-      render();
-      triggerCardAnimation(def, targetIdx);
-    } else {
-      // 出牌失败：移除动画类
-      handCardEl?.classList.remove("is-playing");
-    }
-  }, 180);
+  if (gamePlayCard(state, inst.uid)) {
+    render();
+    triggerCardAnimation(def, targetIdx);
+  }
 }
 
 // 游戏内确认弹窗（替代 native confirm）
@@ -2700,6 +2716,11 @@ function categoryLabel(c: string): string {
 // ─────────────────────────────────────────────────────────
 
 function renderPermanent() {
+  // #perks-panel 默认 display:none，只有按 "装备" 按钮才 open。
+  // 该按钮在 7cadf77 已移除（信息搬到玩家面板 summary），所以这块 DOM 基本永远看不到。
+  // 跳过整段重建以省每帧渲染开销（cold render 在 dev 模式约省 1-3ms）。
+  const panel = document.getElementById("perks-panel");
+  if (panel && !panel.classList.contains("open")) return;
   permaEl.innerHTML = "";
 
   const sections: Array<{ label: string; cards: CardInstance[]; clearAction?: () => void }> = [
@@ -2867,6 +2888,9 @@ function rarityLabel(r: string): string {
 function renderStatsPanel() {
   const statsEl = $("stats");
   if (!statsEl) return;
+  // 同 renderPermanent：#stats-panel 默认 display:none，跳过重建。
+  const panel = document.getElementById("stats-panel");
+  if (panel && !panel.classList.contains("open")) return;
   const lines: string[] = [];
 
   // 武器
