@@ -757,6 +757,127 @@ h2.lose::before { display: none; }
   100% { transform: translateY(-200px) scale(0.5) rotate(8deg); opacity: 0; }
 }
 
+/* ────────────────────────────────────────
+   战斗入场 / 出场动画
+   触发：main.ts 检测 phase 转换时给元素加类
+   设计原则：总时长 < 700ms，不让玩家觉得拖沓
+   ──────────────────────────────────────── */
+
+/* 入场：敌人卡从顶上"翻面降落"，每张错开 70ms */
+@keyframes battle-enter-enemy {
+  0%   { transform: translateY(-80px) rotateX(70deg) scale(0.85); opacity: 0; }
+  60%  { opacity: 1; }
+  100% { transform: translateY(0) rotateX(0) scale(1); opacity: 1; }
+}
+.enemy-card.is-entering {
+  animation: battle-enter-enemy 360ms cubic-bezier(0.2, 0.9, 0.3, 1.1) backwards;
+  transform-origin: center top;
+}
+.enemy-card.is-entering:nth-child(1) { animation-delay: 80ms; }
+.enemy-card.is-entering:nth-child(2) { animation-delay: 150ms; }
+.enemy-card.is-entering:nth-child(3) { animation-delay: 220ms; }
+.enemy-card.is-entering:nth-child(4) { animation-delay: 290ms; }
+.enemy-card.is-entering:nth-child(5) { animation-delay: 360ms; }
+
+/* 入场：手牌从底下"发牌"，每张错开 40ms */
+@keyframes battle-enter-hand {
+  0%   { transform: translateY(120px) rotate(-14deg) scale(0.92); opacity: 0; }
+  100% { transform: translateY(0) rotate(0) scale(1); opacity: 1; }
+}
+.hand-card.is-dealing {
+  animation: battle-enter-hand 320ms var(--ease-out) backwards;
+}
+.hand-card.is-dealing:nth-child(1)  { animation-delay: 60ms;  }
+.hand-card.is-dealing:nth-child(2)  { animation-delay: 100ms; }
+.hand-card.is-dealing:nth-child(3)  { animation-delay: 140ms; }
+.hand-card.is-dealing:nth-child(4)  { animation-delay: 180ms; }
+.hand-card.is-dealing:nth-child(5)  { animation-delay: 220ms; }
+.hand-card.is-dealing:nth-child(6)  { animation-delay: 260ms; }
+.hand-card.is-dealing:nth-child(7)  { animation-delay: 300ms; }
+.hand-card.is-dealing:nth-child(8)  { animation-delay: 340ms; }
+.hand-card.is-dealing:nth-child(9)  { animation-delay: 380ms; }
+.hand-card.is-dealing:nth-child(10) { animation-delay: 420ms; }
+
+/* 入场：玩家状态卡从左侧滑入 */
+@keyframes battle-enter-player {
+  0%   { transform: translateX(-60px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+#player-card.is-entering {
+  animation: battle-enter-player 320ms var(--ease-out) 40ms backwards;
+}
+
+/* ── 出场：敌人卡的三种销毁方式（main.ts 随机选） ── */
+
+/* A 烧毁：颜色变橙红 → 烧穿 → 消散 */
+@keyframes enemy-exit-burn {
+  0%   { filter: brightness(1); opacity: 1; transform: scale(1); }
+  35%  { filter: brightness(1.4) sepia(0.4) hue-rotate(-15deg) saturate(1.8); }
+  70%  { filter: brightness(0.6) sepia(1) saturate(3) hue-rotate(-20deg); opacity: 0.5;
+         transform: scale(0.96) translateY(4px); }
+  100% { filter: brightness(0.2) opacity(0); opacity: 0; transform: scale(0.85) translateY(12px); }
+}
+.enemy-card.exit-burn {
+  animation: enemy-exit-burn 440ms cubic-bezier(0.5, 0, 0.7, 0.4) forwards;
+  pointer-events: none;
+}
+
+/* B 撕毁：上下分两半错位飞 — clip-path 模拟 */
+@keyframes enemy-exit-tear {
+  0%   { transform: scale(1) rotate(0); opacity: 1;
+         clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+  35%  { transform: scale(1.04) rotate(1deg); opacity: 1;
+         clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+  60%  { transform: translateX(-6px) rotate(-3deg); opacity: 0.85;
+         clip-path: polygon(0 0, 100% 0, 110% 48%, -10% 52%); }
+  100% { transform: translateY(20px) translateX(-14px) rotate(-9deg); opacity: 0;
+         clip-path: polygon(0 0, 100% 0, 100% 40%, 0 40%); }
+}
+.enemy-card.exit-tear {
+  animation: enemy-exit-tear 420ms cubic-bezier(0.3, 0, 0.5, 0.6) forwards;
+  pointer-events: none;
+}
+
+/* C 炸碎：scale + rotate + blur 飞散 */
+@keyframes enemy-exit-shatter {
+  0%   { transform: scale(1) rotate(0); opacity: 1; filter: blur(0); }
+  20%  { transform: scale(1.12) rotate(-2deg); filter: blur(0.5px); }
+  100% { transform: scale(1.4) rotate(10deg) translateY(-10px); opacity: 0; filter: blur(2.5px); }
+}
+.enemy-card.exit-shatter {
+  animation: enemy-exit-shatter 380ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
+
+/* 出场：玩家手牌收回（飞向右下牌库方向） */
+@keyframes hand-collect-fly {
+  0%   { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
+  100% { transform: translate(180px, 220px) rotate(22deg) scale(0.35); opacity: 0; }
+}
+.hand-card.is-collecting {
+  animation: hand-collect-fly 380ms cubic-bezier(0.5, 0, 0.7, 0.3) forwards;
+  pointer-events: none;
+}
+.hand-card.is-collecting:nth-child(1)  { animation-delay: 0ms; }
+.hand-card.is-collecting:nth-child(2)  { animation-delay: 30ms; }
+.hand-card.is-collecting:nth-child(3)  { animation-delay: 60ms; }
+.hand-card.is-collecting:nth-child(4)  { animation-delay: 90ms; }
+.hand-card.is-collecting:nth-child(5)  { animation-delay: 120ms; }
+.hand-card.is-collecting:nth-child(6)  { animation-delay: 150ms; }
+.hand-card.is-collecting:nth-child(7)  { animation-delay: 180ms; }
+.hand-card.is-collecting:nth-child(8)  { animation-delay: 210ms; }
+.hand-card.is-collecting:nth-child(9)  { animation-delay: 240ms; }
+.hand-card.is-collecting:nth-child(10) { animation-delay: 270ms; }
+
+/* 出场：玩家状态卡淡出（与敌人销毁同时） */
+@keyframes battle-exit-player {
+  0%   { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(-40px); opacity: 0; }
+}
+#player-card.is-exiting {
+  animation: battle-exit-player 320ms cubic-bezier(0.4, 0, 1, 1) 100ms forwards;
+}
+
 /* category top accent */
 .card.cat-attack,    .hand-card.cat-attack,    .discard-card.cat-attack    { border-top: 3px solid var(--red);    }
 .card.cat-skill,     .hand-card.cat-skill,     .discard-card.cat-skill     { border-top: 3px solid var(--purple); }
@@ -1052,26 +1173,32 @@ h2.lose::before { display: none; }
   overflow: hidden;     /* 让 aoe-wave 不溢出 */
 }
 
+/* ────────────────────────────────────────
+   敌人卡 — 大号手牌风格 v2
+   结构：tier 徽章 + 对角花色 + 大头像 + 名字 + meta + HP 条 + 状态 + 底部黑条
+   ──────────────────────────────────────── */
+
 .enemy-card {
-  background: linear-gradient(180deg, #1a1a24 0%, #14141c 100%);
-  border: 1.5px solid var(--red);
+  width: 145px;
+  min-height: 188px;
+  flex-shrink: 0;
+  padding: 4px 8px 18px;
+  background: var(--bg-card, #1a1a23);
+  border: 2px solid var(--red);
   border-radius: var(--r-md);
-  padding: 8px 8px 6px;
-  min-width: 100px;
-  max-width: 200px;
-  flex: 1;
   cursor: pointer;
   position: relative;
-  transition: transform var(--t-fast) var(--ease-default),
-              border-color var(--t-fast) var(--ease-default),
-              box-shadow var(--t-fast) var(--ease-default);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
   box-shadow: var(--sh-sm), var(--sh-inner);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
 }
 .enemy-card.selected {
   border-color: var(--gold);
   box-shadow: 0 0 20px 2px rgba(245,197,24,0.55), var(--sh-inner);
-  /* 去掉持续 pulse 动画：静态金边已经够明显，无限 box-shadow 动画对低端设备 paint 太重 */
 }
 .enemy-card.dead {
   opacity: 0.25;
@@ -1089,93 +1216,26 @@ h2.lose::before { display: none; }
   80%      { transform: translateX(4px); }
 }
 
-.enemy-emoji {
-  font-size: 42px;
-  line-height: 1;
-  text-align: center;
-  margin: 2px 0 4px;
-  display: block;
-  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.7));
-  transition: filter var(--t-base) var(--ease-default);
-}
-.enemy-card.selected .enemy-emoji {
-  filter: drop-shadow(0 0 12px rgba(245,197,24,0.6))
-          drop-shadow(0 2px 6px rgba(0,0,0,0.7));
-}
-.enemy-card.dead .enemy-emoji { filter: grayscale(1) opacity(0.4); }
-
-.enemy-name {
-  color: var(--white);
-  font-family: var(--font-display);
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  margin-bottom: 2px;
-}
-
-.enemy-hp-text {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--rose);
-  letter-spacing: 0.4px;
-  margin: 1px 0;
-  font-weight: 700;
-}
-
-.enemy-vita-segs {
-  display: flex;
-  gap: 2px;
-  justify-content: center;
-  margin: 6px 0 4px;
-}
-.hp-seg        {
-  width: 14px;
-  height: 8px;
-  background: linear-gradient(180deg, #ff6b6b 0%, var(--red) 50%, #c92a1f 100%);
-  border-radius: 2px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
-}
-.hp-seg.empty  {
-  background: #2a2a35;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
-}
-
-/* 敌人卡：大花色水印底纹（仿手牌花色背景） */
-.enemy-card { overflow: hidden; }
+/* 花色水印（保留，更大更明显） */
 .enemy-card::before {
   content: attr(data-suit-symbol);
   position: absolute;
-  top: 50%;
+  top: 52%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 110px;
+  font-size: 130px;
   line-height: 1;
   font-weight: 900;
-  color: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.06);
   pointer-events: none;
   z-index: 0;
   user-select: none;
 }
-.enemy-card[data-suit-red="1"]::before { color: rgba(230,51,41,0.13); }
+.enemy-card[data-suit-red="1"]::before { color: rgba(230,51,41,0.12); }
 .enemy-card.dead::before { opacity: 0.25; }
-/* 让正常内容浮在水印上 */
 .enemy-card > * { position: relative; z-index: 1; }
-/* ── 精英 / Boss 视觉 ───────────────────────────────────── */
-.enemy-card.tier-elite {
-  border-color: #ff8c28;
-  box-shadow: 0 0 14px rgba(255,140,40,0.45);
-}
-.enemy-card.tier-boss {
-  border: 2px solid #ff5e5e;
-  background: linear-gradient(180deg, #2a0e12 0%, #1a0608 100%);
-  box-shadow: 0 0 24px rgba(255,80,40,0.6), inset 0 0 18px rgba(255,80,40,0.20);
-  min-width: 110px;
-  /* 去掉 bossShimmer / bossGlow 双重 infinite 动画：persistent paint 太重 */
-}
-.enemy-card.tier-elite::after,
-.enemy-card.tier-boss::after { content: ""; }
 
-/* tier 徽章 — 不再用 absolute 出框，改成卡顶内嵌 row（不会被 overflow:hidden 吃掉） */
+/* tier 横条 — 卡顶 */
 .enemy-tier-badge {
   display: block;
   font-size: 10px;
@@ -1183,8 +1243,8 @@ h2.lose::before { display: none; }
   letter-spacing: 0.08em;
   text-align: center;
   padding: 2px 6px;
-  margin: -2px -2px 4px;
-  border-radius: 2px;
+  margin: -4px -8px 3px;
+  border-radius: 2px 2px 0 0;
   white-space: nowrap;
   position: relative;
   z-index: 2;
@@ -1198,20 +1258,191 @@ h2.lose::before { display: none; }
   background: linear-gradient(90deg, #ff2d2d, #ffaa00);
   color: #fff;
   box-shadow: 0 0 10px rgba(255,80,40,0.7);
-  animation: bossBadgePulse 1.2s ease-in-out infinite;
-}
-@keyframes bossBadgePulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(255,80,40,0.55); }
-  50%      { box-shadow: 0 0 16px rgba(255,140,40,0.95); }
 }
 
-/* 详情按钮：卡角的 ⓘ */
+/* 对角花色 — 仿真扑克牌左上 + 右下倒置 */
+.ec-corner {
+  position: absolute;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--gray-dim);
+  line-height: 1;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  user-select: none;
+}
+.ec-corner.red { color: var(--red); }
+.ec-corner small { font-size: 8px; font-weight: 700; letter-spacing: 0; }
+.ec-corner-tl { top: 4px; left: 4px; }
+.ec-corner-br { bottom: 19px; right: 4px; transform: rotate(180deg); }
+/* tier 徽章占据顶部时角标下移 */
+.enemy-card.tier-elite .ec-corner-tl,
+.enemy-card.tier-boss .ec-corner-tl { top: 22px; }
+
+/* 头像 */
+.ec-portrait {
+  font-size: 48px;
+  line-height: 1;
+  margin: 4px 0 4px;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.7));
+  transition: filter var(--t-base);
+}
+.enemy-card.selected .ec-portrait {
+  filter: drop-shadow(0 0 12px rgba(245,197,24,0.6)) drop-shadow(0 2px 6px rgba(0,0,0,0.7));
+}
+.enemy-card.dead .ec-portrait { filter: grayscale(1) opacity(0.4); }
+
+/* 名字 */
+.ec-name {
+  color: var(--white);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* meta inline 行 */
+.ec-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: center;
+  align-items: center;
+  font-size: 9px;
+  line-height: 1.3;
+  margin-bottom: 3px;
+  max-width: 100%;
+}
+.ec-race {
+  color: var(--gray);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-weight: 700;
+}
+.ec-equip {
+  color: var(--yellow);
+  background: rgba(245,197,24,0.12);
+  border: 1px solid rgba(245,197,24,0.3);
+  border-radius: 3px;
+  padding: 0 3px;
+  font-weight: 700;
+}
+.ec-equip.armor {
+  color: var(--blue);
+  background: rgba(74,144,217,0.12);
+  border-color: rgba(74,144,217,0.3);
+}
+.ec-ability {
+  color: #ffb060;
+  background: rgba(255,140,40,0.12);
+  border: 1px solid rgba(255,140,40,0.35);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-weight: 700;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* HP 横条（替代 10 段格） */
+.ec-hp-bar {
+  width: 92%;
+  height: 7px;
+  background: #2a2a35;
+  border-radius: 3px;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+  margin: 3px auto 2px;
+  overflow: hidden;
+}
+.ec-hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff6b6b 0%, var(--red) 60%, #c92a1f 100%);
+  border-radius: 3px;
+  transition: width var(--t-base) var(--ease-out);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+}
+.ec-hp-bar.low .ec-hp-fill { background: linear-gradient(90deg, #ff8a8a, var(--red)); }
+.ec-hp-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--rose);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  margin-bottom: 2px;
+}
+
+/* 状态条 */
+.ec-status {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+  flex-wrap: wrap;
+  min-height: 16px;
+  margin-bottom: 2px;
+}
+
+/* 底部黑条 — 仿手牌 .cat-tag */
+.ec-foot {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  background: transparent;
+  color: var(--gray-dim);
+  font-size: 8px;
+  padding: 2px 4px;
+  border-top: 1px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.enemy-card.tier-elite .ec-foot {
+  color: #ff8c28;
+  border-top-color: rgba(255,140,40,0.4);
+}
+.enemy-card.tier-boss .ec-foot {
+  color: var(--gold);
+  border-top-color: rgba(255,80,40,0.5);
+  background: linear-gradient(180deg, transparent, rgba(255,80,40,0.1));
+  font-weight: 900;
+}
+
+/* tier 边框 / 背景 */
+.enemy-card.tier-elite {
+  border-color: #ff8c28;
+  box-shadow: 0 0 14px rgba(255,140,40,0.45);
+}
+.enemy-card.tier-boss {
+  border: 2px solid #ff5e5e;
+  background: linear-gradient(180deg, #2a0e12 0%, #1a0608 100%);
+  box-shadow: 0 0 24px rgba(255,80,40,0.6), inset 0 0 18px rgba(255,80,40,0.20);
+  min-height: 210px;
+  width: 158px;
+}
+.enemy-card.tier-boss .ec-portrait { font-size: 58px; }
+.enemy-card.tier-boss .ec-name { font-size: 13px; }
+
+/* ⓘ 详情按钮 — 卡右上（精英/Boss 才有） */
 .enemy-info-btn {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 20px;
-  height: 20px;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: rgba(255,255,255,0.12);
   border: 1px solid rgba(255,255,255,0.25);
@@ -1225,57 +1456,22 @@ h2.lose::before { display: none; }
   cursor: pointer;
   z-index: 3;
 }
+.enemy-card.tier-elite .enemy-info-btn,
+.enemy-card.tier-boss .enemy-info-btn { top: 22px; }
 .enemy-info-btn:active { background: rgba(255,255,255,0.25); }
 
-/* Boss 战斗卡更大，留出空间给完整招式列表 */
-.enemy-card.tier-boss { min-height: 180px; }
-.enemy-card.tier-boss .enemy-emoji { font-size: 44px; }
-.enemy-card.tier-boss .enemy-name { font-size: 13px; }
-
-.enemy-ability-tag {
-  display: inline-block;
-  font-size: 9px;
-  font-weight: 700;
-  color: #ffb060;
-  background: rgba(255,140,40,0.12);
-  border: 1px solid rgba(255,140,40,0.35);
-  border-radius: 3px;
-  padding: 1px 5px;
-  margin-left: 4px;
-  letter-spacing: 0.04em;
-}
-
-/* 种族徽章 */
-.enemy-race-tag {
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--gray);
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
-  margin-top: 2px;
-  letter-spacing: 0.04em;
-}
-.enemy-equip-badge      { display: inline-block; margin-left: 4px; font-size: 10px; font-weight: 700; color: var(--yellow); background: rgba(245,197,24,0.12); border: 1px solid rgba(245,197,24,0.3); border-radius: 3px; padding: 0 3px; vertical-align: middle; }
-.enemy-equip-badge.armor { color: var(--blue); background: rgba(74,144,217,0.12); border-color: rgba(74,144,217,0.3); }
-
-.enemy-status {
-  margin-top: 4px;
-  display: flex;
-  justify-content: center;
-  gap: 3px;
-  flex-wrap: wrap;
-}
-
+/* 目标标 — 卡顶悬浮 ▼ */
 .target-badge {
-  color: var(--yellow);
-  font-size: 10px;
-  margin-top: 3px;
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--gold);
+  font-size: 14px;
   font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  text-shadow: 0 0 8px rgba(245,197,24,0.85);
+  z-index: 5;
+  pointer-events: none;
 }
 
 /* ═══════════════════════════════════════
