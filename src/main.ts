@@ -794,6 +794,21 @@ function renderBattle() {
     row.appendChild(renderEnemy(battle.enemies[i], i));
   }
 
+  // F12 boss flavor log — evolving AI 切 phase 时显示文字（一次性）+ banner flash
+  for (const e of battle.enemies) {
+    if (e.ai === "evolving" && e.alive) {
+      import("./bossAI.ts").then(({ getF12FlavorLog }) => {
+        const flavor = getF12FlavorLog(e);
+        if (flavor) {
+          // 加到 log（玩家可以回看）
+          state.log.push({ msg: `★ ${flavor}`, kind: "win" });
+          // 短暂 banner flash
+          showPhaseFlash(flavor);
+        }
+      });
+    }
+  }
+
   // 大招按钮绑定（含 v3 悬浮版 + legacy）
   stageEl.querySelectorAll<HTMLButtonElement>(".suit-ult-btn, .suit-ult-floating").forEach(btn => {
     const suit = btn.dataset.suit as Suit;
@@ -1149,12 +1164,23 @@ function renderEnemy(e: EnemyState, idx: number): HTMLElement {
 }
 
 // 敌人机制详情弹窗（精英 / Boss 专属）
+// 带 AI 的敌人（精英/boss）只显示已用过的招式 — 让玩家通过观察推断 boss 行为
+// 普通敌人显示完整招式池
 function showEnemyDetail(e: EnemyState): void {
   document.getElementById("enemy-detail-overlay")?.remove();
   const tier = e.tier ?? "normal";
   const emoji = ENEMY_EMOJI[e.name] ?? "👾";
   const tierLabel = tier === "boss" ? "👑 BOSS" : tier === "elite" ? "✦ 精英" : "普通";
-  const intentItems = e.intents.map(it => {
+
+  // AI 敌人：只显示玩家已见过的招式（用 _seenIntents 跟踪）
+  // 普通敌人：完整池
+  const hasAI = !!e.ai;
+  const seenIndices = (e as any)._seenIntents as number[] | undefined;
+  const visibleIntents = hasAI && seenIndices
+    ? seenIndices.map(i => e.intents[i]).filter(Boolean)
+    : e.intents;
+
+  const intentItems = visibleIntents.map(it => {
     const valStr = it.type === "attack"
       ? `⚔ ${it.value}${it.hits && it.hits > 1 ? ` × ${it.hits}` : ""}`
       : it.type === "debuff"
@@ -1164,6 +1190,12 @@ function showEnemyDetail(e: EnemyState): void {
           : "";
     return `<li><span class="ed-intent-name">${escapeHTML(it.desc)}</span><span class="ed-intent-val">${escapeHTML(valStr)}</span></li>`;
   }).join("");
+
+  // AI 敌人未展示过的招式 → 显示 ??? 隐藏条目
+  const hiddenCount = hasAI && seenIndices ? e.intents.length - seenIndices.length : 0;
+  const hiddenItems = hiddenCount > 0
+    ? Array.from({ length: hiddenCount }).map(() => `<li class="ed-intent-hidden"><span class="ed-intent-name">？？？</span><span class="ed-intent-val">未观察到</span></li>`).join("")
+    : "";
   const overlay = document.createElement("div");
   overlay.id = "enemy-detail-overlay";
   overlay.innerHTML = `
@@ -1188,8 +1220,8 @@ function showEnemyDetail(e: EnemyState): void {
         </div>
       ` : ""}
       <div class="ed-hp">HP <b>${e.hp}</b> / ${e.maxHp}</div>
-      <div class="ed-section-title">招式${tier === "boss" ? "（随机抽取）" : ""}</div>
-      <ul class="ed-intent-list">${intentItems}</ul>
+      <div class="ed-section-title">招式${hasAI ? "（已观察）" : tier === "boss" ? "（随机抽取）" : ""}</div>
+      <ul class="ed-intent-list">${intentItems}${hiddenItems}</ul>
       <p class="ed-hint">击败可获得 ${FRAGMENT_ICONS[e.race]} <b>${FRAGMENT_NAMES[e.race]}</b> ×1${tier === "boss" ? " · 战利品保底 1 张史诗" : ""}</p>
     </div>
   `;

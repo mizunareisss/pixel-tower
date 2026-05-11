@@ -800,23 +800,40 @@ const CLOAK: CardDef = {
   ],
 };
 
+// 重铠（rare）— v5 差异化：受击 + 反向"充能护盾"（受击后下回合开始 +N 临时护盾，攻防联动）
 const FULL_PLATE: CardDef = {
   id: "full_plate",
   name: "重铠",
   category: "equipment",
-  desc: "装备：受击 -5 / -7 / -9 / -12（叠加）。v5 去掉攻击 -2 副作用，纯减伤极致。",
+  desc: "装备：受击 -5 / -7 / -9 / -12（叠加）。每次受击后累积反震护盾，下回合开始时释放为临时护盾。",
   equipKind: "armor",
   equipSuit: "club",
   baseReduce: 5,
   equipEffects: [
-    { desc: "-5 受击。", stat: "-5 受击",
-      onTakeDamage: (_c, d) => Math.max(0, d - 5) },
-    { desc: "-7 受击。", stat: "-7 受击",
-      onTakeDamage: (_c, d) => Math.max(0, d - 7) },
-    { desc: "-9 受击。", stat: "-9 受击",
-      onTakeDamage: (_c, d) => Math.max(0, d - 9) },
-    { desc: "-12 受击。", stat: "-12 受击",
-      onTakeDamage: (_c, d) => Math.max(0, d - 12) },
+    { desc: "-5 受击 + 反震 +2 护盾 / 受击。", stat: "-5 受击 反震+2",
+      onTakeDamage: (c, d) => {
+        const ex = c.player.statuses.find(s => s.id === "shield_block");
+        if (ex) ex.stacks += 2; else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 2, duration: 1 });
+        return Math.max(0, d - 5);
+      } },
+    { desc: "-7 受击 + 反震 +3 护盾 / 受击。", stat: "-7 受击 反震+3",
+      onTakeDamage: (c, d) => {
+        const ex = c.player.statuses.find(s => s.id === "shield_block");
+        if (ex) ex.stacks += 3; else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 3, duration: 1 });
+        return Math.max(0, d - 7);
+      } },
+    { desc: "-9 受击 + 反震 +4 护盾 / 受击。", stat: "-9 受击 反震+4",
+      onTakeDamage: (c, d) => {
+        const ex = c.player.statuses.find(s => s.id === "shield_block");
+        if (ex) ex.stacks += 4; else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 4, duration: 1 });
+        return Math.max(0, d - 9);
+      } },
+    { desc: "-12 受击 + 反震 +5 护盾 / 受击。", stat: "-12 受击 反震+5",
+      onTakeDamage: (c, d) => {
+        const ex = c.player.statuses.find(s => s.id === "shield_block");
+        if (ex) ex.stacks += 5; else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 5, duration: 1 });
+        return Math.max(0, d - 12);
+      } },
   ],
 };
 

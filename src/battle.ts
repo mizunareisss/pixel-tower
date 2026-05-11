@@ -15,6 +15,7 @@ import type {
 } from "./types.ts";
 import { HAND_LIMIT, DRAW_PER_TURN, SUIT_SYMBOLS, SUITS } from "./types.ts";
 import { CARD_DB, suitMultiplier, damageEnemy, ENCHANT_EFFECTS, EPIC_USES_PER_BATTLE } from "./cards.ts";
+import { selectAIIntent } from "./bossAI.ts";
 
 // 检查玩家是否有染色/持咒 buff，返回强制使用的花色
 // 优先级：持咒（整场） > 染色（本回合）
@@ -1376,8 +1377,24 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
     if (skipActions) continue;
 
     const intent = enemy.intents[enemy.intentIndex];
-    // Boss 招式：随机抽下一招（避免立即重复）；其他档：顺序循环
-    if (enemy.tier === "boss" && enemy.intents.length > 1) {
+    // 跟踪玩家已见过的招式（AI 敌人 info modal 只显示见过的）
+    const seen = (enemy as any)._seenIntents as number[] ?? [];
+    if (!seen.includes(enemy.intentIndex)) {
+      seen.push(enemy.intentIndex);
+      (enemy as any)._seenIntents = seen;
+    }
+    // 招式决策：
+    //   1. 如果 enemy.ai 设置（精英 / boss 装备 AI）→ 调用 bossAI 决策（隐式行为，无 telegraph）
+    //   2. 否则：boss 随机抽（避免立即重复）/ 其他档：顺序循环
+    if (enemy.ai) {
+      const aiIdx = selectAIIntent(enemy, state);
+      if (aiIdx >= 0 && aiIdx < enemy.intents.length) {
+        enemy.intentIndex = aiIdx;
+      } else {
+        // fallback 到旧逻辑
+        enemy.intentIndex = (enemy.intentIndex + 1) % enemy.intents.length;
+      }
+    } else if (enemy.tier === "boss" && enemy.intents.length > 1) {
       let next: number;
       do {
         next = Math.floor(Math.random() * enemy.intents.length);

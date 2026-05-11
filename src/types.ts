@@ -454,6 +454,24 @@ export interface EnemyIntent {
   debuffDuration?: number;    // -1 表示由 stacks 自衰减（如中毒），>0 表示固定回合
 }
 
+// Boss AI 流派 ID（5 基础 + 5 复合 + 1 演化）
+// 隐式行为，无视觉提示；玩家只能通过观察 boss 招式偏好推断
+export type BossAIId =
+  // 基础（5）
+  | "berserker"        // 狂战士：HP 越低越猛
+  | "hunter"           // 猎手：看玩家 HP 切策略
+  | "builder"          // 构筑者：前堆 buff 后爆发
+  | "healer"           // 医者：慢性 dot 耗死
+  | "reactor"          // 报复者：隐式 react
+  // 复合（5）
+  | "dual_berserk"     // 双面狂战 = 狂战 + 构筑
+  | "cold_hunter"      // 冷血猎手 = 猎手 + 医者
+  | "fake_builder"     // 假动作构筑 = 构筑 + 报复（30% 假动作）
+  | "unstoppable_healer" // 不朽医者 = 医者 + 狂战
+  | "necro_hunter"     // 死灵猎手 = 报复 + 猎手 + 医者（三流派）
+  // F12 专属
+  | "evolving";        // 演化型 = 3 阶段切复合流派
+
 export interface EnemyState {
   id: string;
   name: string;
@@ -471,6 +489,16 @@ export interface EnemyState {
   eliteAbility?: string;    // 精英特能名称（显示用）
   // 共鸣咒：保存原始花色，4 回合后回归
   originalSuit?: Suit;
+  // Boss AI 行为流派（精英 + boss 装备），普通敌人不带；详见 bossAI.ts
+  ai?: BossAIId;
+  // AI 内部状态机（如演化型当前 phase、累积怒火 stack 等），对玩家不可见
+  aiState?: {
+    phase?: number;          // 当前阶段（演化型用）
+    lastPlayerDmg?: number;  // 上回合玩家输出（报复者用）
+    lastPlayerBuffs?: number; // 上回合玩家上的 buff 数（报复者用）
+    turnCount?: number;      // 战斗回合计数（构筑者用，前 N 回合堆 buff）
+    flavorShownPhases?: number[]; // 已显示过 flavor log 的 phase（避免重复）
+  };
 }
 
 // ── 战斗状态 ──────────────────────────────────────────────

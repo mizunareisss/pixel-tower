@@ -3192,6 +3192,13 @@ body.is-touch button:hover:not(:disabled) {
   font-size: 11px;
   margin-left: 12px;
 }
+/* AI 敌人未见过的招式：玩家通过观察推断行为 — 灰显 ??? 标记 */
+.ed-intent-hidden {
+  opacity: 0.5;
+  font-style: italic;
+}
+.ed-intent-hidden .ed-intent-name { color: var(--gray-dim); }
+.ed-intent-hidden .ed-intent-val { color: var(--gray); }
 
 .ed-hint {
   color: var(--gray);
