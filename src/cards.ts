@@ -312,7 +312,7 @@ const EVERLAST_FANG: CardDef = {
   })(),
 };
 
-// ── 武器：♣ epic 禁忌权杖 — 每张已出 ♣ 牌让攻击 +N 直伤（设计修正：不是 ×1.5 倍率） ──
+// ── 武器：♣ epic 禁忌权杖 — 每张已出 ♣ 牌让攻击 +N 直伤（nerf：5→3 at 4 stack） ──
 const FORBIDDEN_SCEPTER: CardDef = {
   id: "forbidden_scepter",
   name: "禁忌权杖",
@@ -327,10 +327,10 @@ const FORBIDDEN_SCEPTER: CardDef = {
       stat: `${baseStr} 伤 +${perClubBuff}/♣牌`,
     });
     return [
-      mk(2, "7"),
-      mk(3, "9.8"),
-      mk(4, "12.6"),
-      mk(5, "15.4"),
+      mk(1, "7"),
+      mk(2, "9.8"),
+      mk(2, "12.6"),
+      mk(3, "15.4"),
     ] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
   })(),
 };
@@ -962,9 +962,9 @@ const SK_AEGIS: CardDef = {
 
 const SK_CHARGE: CardDef = {
   id: "sk_charge", name: "蓄力", category: "skill", target: "self",
-  desc: "本回合 + 下回合都无法出攻击牌，但之后下次攻击 ×3（nerf：原本只 1 回合 cost）。",
+  desc: "本回合 + 下回合都无法出攻击牌，但之后下次攻击 ×2.5（nerf：×3 → ×2.5）。",
   onPlay: (c) => {
-    addStatus(c.player, "no_attack", "蓄力中", 1, 2);  // 持续 2 回合不攻击
+    addStatus(c.player, "no_attack", "蓄力中", 1, 2);
     addStatus(c.player, "charged", "已蓄力", 1, -1);
     c.log("蓄力中（2 回合不能攻击）。", "player");
   },
@@ -1238,8 +1238,8 @@ const IT_REGROUP: CardDef = {
 
 const IT_BOMB: CardDef = {
   id: "it_bomb", name: "炸弹", category: "item", target: "single",
-  desc: "对目标造成 (8 + 楼层×2) 点直接伤害。",
-  onPlay: (c) => dealDirectDamage(c, c.target, 8 + c.floor * 2),
+  desc: "对目标造成 (5 + 楼层) 点直接伤害。",
+  onPlay: (c) => dealDirectDamage(c, c.target, 5 + c.floor),
 };
 
 const IT_ELIXIR: CardDef = {
@@ -1521,14 +1521,14 @@ const UNDYING_HEART: CardDef = {
   ],
 };
 
-// Epic 群攻技能：众神之怒 — 全敌当前 HP 50% 直伤
+// Epic 群攻技能：众神之怒 — 全敌当前 HP 30% 直伤（nerf：50% → 30%，避免小怪秒杀 / boss 半血）
 const SK_WRATH: CardDef = {
   id: "sk_wrath", name: "众神之怒", category: "skill", target: "all",
-  desc: "所有存活敌人受到当前 HP 50% 直伤。",
+  desc: "所有存活敌人受到当前 HP 30% 直伤。",
   onPlay: (c) => {
     for (const e of c.enemies) {
       if (!e.alive) continue;
-      const dmg = Math.max(1, Math.round(e.hp * 0.5));
+      const dmg = Math.max(1, Math.round(e.hp * 0.3));
       dealDirectDamage(c, e, dmg);
     }
     c.log("众神之怒：天空裂开，神罚降临。", "player");

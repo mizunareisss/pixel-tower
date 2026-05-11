@@ -10,6 +10,7 @@ import {
   gamePlayCard,
   gameSelectTarget,
   gameEndTurn,
+  gameEnemyFirstStrike,
   gameDiscardWeapons,
   gameDiscardArmors,
   pickRewardCard,
@@ -262,12 +263,70 @@ function render() {
     document.querySelectorAll<HTMLElement>("#active .hand-card")
       .forEach(el => el.classList.add("is-dealing"));
     document.getElementById("player-card")?.classList.add("is-entering");
+
+    // 战斗开始骰子先手动画：roll 1d6，单数玩家先手 / 双数敌人先手
+    // 入场动画后 800ms 出骰子（避免视觉冲突），骰子动画 1.6s
+    if (state.battle?.diceRoll && !state.battle.diceAnimationShown) {
+      state.battle.diceAnimationShown = true;
+      setTimeout(() => showDiceRoll(state.battle!.diceRoll!), 800);
+    }
   }
 
   _prevVita = snapVita;
   _prevEnemyHps = snapEnemyHps;
   _prevTurn = snapTurn;
   _prevPhase = state.phase;
+}
+
+// 战斗开始骰子先手动画：1.6s 翻滚 + 显示结果
+// 单数玩家先手 / 双数敌人先手；播完后如果是敌人先手则触发 gameEnemyFirstStrike
+function showDiceRoll(finalRoll: number): void {
+  document.getElementById("dice-overlay")?.remove();
+  const enemyFirst = finalRoll % 2 === 0;
+  const overlay = document.createElement("div");
+  overlay.id = "dice-overlay";
+  overlay.innerHTML = `
+    <div class="dice-container">
+      <div class="dice-3d">
+        <div class="dice-face f1">⚀</div>
+        <div class="dice-face f2">⚁</div>
+        <div class="dice-face f3">⚂</div>
+        <div class="dice-face f4">⚃</div>
+        <div class="dice-face f5">⚄</div>
+        <div class="dice-face f6">⚅</div>
+      </div>
+      <div class="dice-result" style="display:none">
+        <div class="dr-num">${finalRoll}</div>
+        <div class="dr-side ${enemyFirst ? "enemy" : "player"}">${enemyFirst ? "敌 人 先 手" : "你 先 手"}</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // 1.1s 后停止翻滚，显示最终骰面
+  setTimeout(() => {
+    const dice = overlay.querySelector(".dice-3d") as HTMLElement | null;
+    if (dice) {
+      dice.classList.add("stopped");
+      dice.setAttribute("data-final", String(finalRoll));
+    }
+  }, 1100);
+
+  // 1.4s 显示文字结果
+  setTimeout(() => {
+    const r = overlay.querySelector(".dice-result") as HTMLElement | null;
+    if (r) r.style.display = "flex";
+  }, 1400);
+
+  // 2.2s 淡出 + 如果敌人先手，触发敌人攻击
+  setTimeout(() => {
+    overlay.classList.add("fade-out");
+    setTimeout(() => overlay.remove(), 280);
+    if (enemyFirst) {
+      gameEnemyFirstStrike(state);
+      render();
+    }
+  }, 2200);
 }
 
 // 战斗出场动画 — 分三阶段，节奏感更强，玩家能看清"击杀"
@@ -781,11 +840,16 @@ function renderBattle() {
   }
 
   // Player card — status row
+  // 隐藏内部状态：took_damage_turn / 类似 marker 玩家不关心的内部 flag
+  const HIDDEN_STATUSES = new Set([
+    "took_damage_turn", "busi_triggered", "chanted_used",
+  ]);
   const ps = $("pcard-statuses");
-  if (state.player.statuses.length === 0) {
+  const visibleStatuses = state.player.statuses.filter(s => !HIDDEN_STATUSES.has(s.id));
+  if (visibleStatuses.length === 0) {
     ps.innerHTML = '<span class="status-empty">—</span>';
   } else {
-    ps.innerHTML = state.player.statuses.map(s => renderStatusTag(s)).join("");
+    ps.innerHTML = visibleStatuses.map(s => renderStatusTag(s)).join("");
   }
 
 }
@@ -1117,6 +1181,8 @@ const STATUS_ICONS: Record<string, string> = {
   battle_cry: "📢", double_strike: "⚔", evasive: "🌬", sharpened: "🔪",
   weapon_buff: "💪", shield_block: "🛡", shadow_double: "👥", heavy_strike: "💥",
   counter_stance: "🪞", frenzy: "💢", charged: "⚡", no_attack: "🚫",
+  // 新加装备触发
+  knight_charge: "⚡", scepter_clubs: "🔮",
   combat_rhythm: "🥁", time_stop: "⏸",
   smoke_dodge: "💨", guaranteed_dodge: "🌟", pierce_next: "🎯",
   phantom_charge: "👤", echo: "🔁",
@@ -1151,8 +1217,8 @@ function renderStatusTag(s: StatusEffect): string {
 // 状态详情弹窗
 function showStatusInfo(id: string, stacks: number, duration: number) {
   if (document.getElementById("status-info-overlay")) return;
-  const meta = STATUS_META[id];
-  if (!meta) return;
+  // 兜底：没注册的 status 也允许点击，显示 id 作为名字 + 提示"未注册"
+  const meta = STATUS_META[id] ?? { name: id, desc: `（此状态尚未在 STATUS_META 注册，请联系开发者）`, kind: "neutral" as const };
   const overlay = document.createElement("div");
   overlay.id = "status-info-overlay";
   const durationText =
@@ -2603,7 +2669,8 @@ function renderHandCard(inst: CardInstance): HTMLElement {
     // 不进入 playEquipCard 避免触发飞出动画
     if (slotFull) return;
     // 装备牌：换装确认（游戏内弹窗）
-    if (def.category === "equipment") {
+    // EPIC 装备是临时覆写机制（用尽自动恢复原装备），不弹替换 modal，直接装上
+    if (def.category === "equipment" && def.rarity !== "epic") {
       if (def.equipKind === "weapon" && state.player.weapons.length > 0 && state.player.weapons[0].defId !== def.id) {
         const cur = CARD_DB[state.player.weapons[0].defId].name;
         const cnt = state.player.weapons.length;

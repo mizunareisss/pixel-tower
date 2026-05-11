@@ -174,6 +174,11 @@ export const STATUS_META: Record<string, StatusMeta> = {
   enc_runic_immune:  { name: "符文护盾", desc: "本场战斗第 1 次受击免疫（由符文护盾附魔提供）。", kind: "buff" },
   enc_dot_immune:    { name: "圣化", desc: "中毒 / 燃烧 / 出血对你无效（由符文护盾附魔提供）。", kind: "buff" },
   warblood_perm_atk: { name: "血誓积累", desc: "本场战斗：每损 10% maxHP，攻击 +1（cap +5，由战狂血誓附魔触发）。", kind: "buff" },
+  // 新加装备触发的 status（v2 流派资源补全）
+  knight_charge:     { name: "骑士充能", desc: "受击充能：下次攻击 +N 直伤（N 由骑士铠 stack 决定，骑士铠 cap 5 stack）。", kind: "buff" },
+  scepter_clubs:     { name: "禁忌权杖蓄势", desc: "本回合已出 ♣ 牌数（攻击/技能/道具/装备均计入）。本回合内攻击伤害 += stacks × (N 由禁忌权杖 stack 决定，1/2/2/3)。", kind: "buff" },
+  took_damage_turn:  { name: "本回合受伤", desc: "（内部状态，玩家无需关注）本回合受到过伤害，用于附魔机制末段判断。", kind: "neutral" },
+  calc_charge:       { name: "法术蓄能", desc: "本回合已出非攻击牌数。配合法师杖 / 算计附魔 / 凝神附魔 / 奥术爆裂 → 下次攻击 +X 直伤。", kind: "buff" },
 };
 
 // ── 敌人种族 ──────────────────────────────────────────────
@@ -428,8 +433,13 @@ export interface PlayerState {
   // 装备保底：连续未在 reward_card 拿到装备的场次，达 3 次下场必出装备
   battlesSinceEquipReward?: number;
 
-  // 花色专精大招的整局使用次数（跨战斗保留；目前仅 ♥ 生命洪流限 3 次）
+  // 花色专精大招的整局使用次数（跨战斗保留；4 花色都限 3 次）
   ultsUsed?: Record<Suit, number>;
+
+  // EPIC 临时装备机制：装备 EPIC 武器/防具时把当前装备暂存到 backup，
+  // EPIC 用尽（3 次）后自动恢复 backup。比"替换 modal"更灵活，玩家不丢原装备
+  tempWeaponBackup?: CardInstance[];
+  tempArmorBackup?: CardInstance[];
 }
 
 // ── 敌人 ──────────────────────────────────────────────────
@@ -477,6 +487,12 @@ export interface BattleState {
   pendingSuitPick?: string;     // 等待玩家手选花色的动作 ("dye" | "resonance")
   floor: number;                // 当前楼层（calcAttackDamage 里的 sharp 附魔需要）
   pendingDodgeFx?: number;      // 待播放的闪避动效次数（main.ts 渲染时消费）
+
+  // 战斗开始时的骰子先手机制：roll 1d6，单数玩家先手 / 双数敌人先手
+  // diceRoll 由 game.ts startNodeBattle 设置；main.ts 渲染时显示骰子动画
+  diceRoll?: number;            // 1-6 骰子点数
+  enemyFirst?: boolean;         // true = 敌人先手（diceRoll 为偶数）
+  diceAnimationShown?: boolean; // main.ts 标记是否已播过骰子动画（避免重复）
 
   // 花色专精：玩家手动指定的激活花色（仅在多花色亲和度并列时有效）
   activeSpecialtyOverride?: Suit;

@@ -183,14 +183,23 @@ function startNodeBattle(state: GameState, node: MapNode) {
   state.battle = newBattle(state.player, node.enemies, state.floor);
   state.phase = "battle";
   state.choices = [];
+
+  // Roll 骰子先手：1-6 点；单数玩家先手（默认），双数敌人先手
+  const diceRoll = Math.floor(Math.random() * 6) + 1;
+  state.battle.diceRoll = diceRoll;
+  state.battle.enemyFirst = (diceRoll % 2 === 0);
+  state.battle.diceAnimationShown = false;
+
   const tierLabel = node.type === "boss" ? "BOSS" : node.type === "elite" ? "精英战" : "战斗";
   pushLog(state, `── ${tierLabel} ──`, "system");
   for (const e of node.enemies) pushLog(state, `${e.name}（HP ${e.hp}）出现！`, "enemy");
+  pushLog(state, `🎲 骰子 ${diceRoll} → ${state.battle.enemyFirst ? "敌人先手" : "你先手"}。`, "system");
+
   // 起手摸 6
   drawCards(state.player, STARTING_HAND, logFn(state));
   // 应用跨场战斗惩罚（神秘宝箱陷阱）
   applyNextBattlePenalty(state.battle, logFn(state));
-  pushLog(state, `回合 1（你的回合）`, "system");
+  pushLog(state, `回合 1（${state.battle.enemyFirst ? "敌人的回合" : "你的回合"}）`, "system");
 }
 
 function startNodeEvent(state: GameState, node: MapNode) {
@@ -328,6 +337,23 @@ export function gameEndTurn(state: GameState) {
   endPlayerTurn(state.battle, logFn(state));
   if (state.battle.phase === "won") onBattleWon(state);
   else if (state.battle.phase === "lost") {
+    state.phase = "game_over";
+    pushLog(state, `第 ${state.floor} 关倒下。`, "lose");
+  }
+}
+
+// 骰子先手敌人 — 战斗开始骰子翻出双数时调用：敌人先打一击，但不推进 turn 计数
+// 实现：直接走 enemyTurn 但不增 turn / 不进 endPlayerTurn 的"摸牌" 流程
+export function gameEnemyFirstStrike(state: GameState) {
+  if (state.phase !== "battle" || !state.battle) return;
+  if (!state.battle.enemyFirst) return;  // 仅 enemyFirst 时触发
+  const log = logFn(state);
+  // 直接调 endPlayerTurn 走完整流程（含 enemy turn + 推进到下一玩家回合）
+  // turn 会变 2，但 log 里清楚是"敌人先手已结算"
+  endPlayerTurn(state.battle, log);
+  // 防止 enemyFirst 重复触发
+  state.battle.enemyFirst = false;
+  if (state.battle.phase === "lost") {
     state.phase = "game_over";
     pushLog(state, `第 ${state.floor} 关倒下。`, "lose");
   }
@@ -764,6 +790,14 @@ export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
   const player = state.battle.player;
   const enemies = state.battle.enemies;
 
+  // 整局限 3 次：4 花色统一（之前只有 ♥ 有限次，导致跨场战斗 ♠/♦/♣ 大招无限释放）
+  if (!state.player.ultsUsed) state.player.ultsUsed = { spade: 0, diamond: 0, heart: 0, club: 0 };
+  const usedCount = state.player.ultsUsed[suit] ?? 0;
+  if (usedCount >= 3) {
+    log(`大招：整局每花色限 3 次，${suit} 已用完。`, "system");
+    return false;
+  }
+
   if (suit === "spade") {
     // 狂战之击：当前目标 50% 真实伤害（无视护甲）
     const target = enemies[state.battle.targetIndex] ?? enemies.find(e => e.alive);
@@ -780,19 +814,12 @@ export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
     player.statuses.push({ id: "time_stop",       name: "时停",       stacks: 1,  duration: 1 });
     log(`★♦ 影舞步！本回合 100% 闪避，下次攻击三连击，敌人下回合停顿。`, "win");
   } else if (suit === "heart") {
-    // 生命洪流：HP +50% maxHP + maxHP +3，整局限 3 次（强力但有上限）
-    const used = state.player.ultsUsed?.heart ?? 0;
-    if (used >= 3) {
-      log(`★♥ 生命洪流：整局限 3 次，已用完。`, "system");
-      return false;
-    }
+    // 生命洪流：HP +50% maxHP + maxHP +3
     const heal = Math.ceil(player.vitaMax * 0.5);
     const before = player.vita;
     player.vitaMax += 3;
     player.vita = Math.min(player.vitaMax, player.vita + heal);
-    if (!state.player.ultsUsed) state.player.ultsUsed = { spade: 0, diamond: 0, heart: 0, club: 0 };
-    state.player.ultsUsed.heart++;
-    log(`★♥ 生命洪流！HP ${before} → ${player.vita}（+${heal}），maxHP +3。剩余 ${3 - state.player.ultsUsed.heart} 次。`, "win");
+    log(`★♥ 生命洪流！HP ${before} → ${player.vita}（+${heal}），maxHP +3。`, "win");
   } else if (suit === "club") {
     // 群体禁咒：全敌 +3 沉默 / +3 易伤 / +3 中毒
     for (const e of enemies) {
@@ -810,6 +837,10 @@ export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
     }
     log(`★♣ 群体禁咒！全体敌人 +沉默 +易伤 +中毒。`, "win");
   }
+
+  // 4 花色 ult 都计入 ultsUsed（整局限 3 次）
+  state.player.ultsUsed[suit]++;
+  log(`大招 ${suit}：剩余 ${3 - state.player.ultsUsed[suit]} 次。`, "system");
 
   // A 强化：消耗 10 → 8 亲和（让玩家早 burst）
   consumeSuitAffinity(state.battle, suit, 8);

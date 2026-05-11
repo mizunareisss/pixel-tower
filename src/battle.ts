@@ -164,23 +164,35 @@ function dispatchPlayedCardEpicAware(state: BattleState, card: CardInstance, log
   }
 }
 
-// 史诗装备耗尽：从 weapons/armors 拔出，放回牌库；触发替换 modal
+// 史诗装备耗尽：从 weapons/armors 拔出，放回牌库；新机制 — 自动恢复 backup（如果有）
 function exhaustEpicEquipment(state: BattleState, slot: "weapon" | "armor", log: (m: string, k?: LogKind) => void): void {
   const arr = slot === "weapon" ? state.player.weapons : state.player.armors;
   if (arr.length === 0) return;
-  const removed = arr.splice(0, arr.length);  // 拔光所有同槽叠加
-  // 放回牌库（保留 usesRemaining = 0 状态）
+  const removed = arr.splice(0, arr.length);
   for (const c of removed) {
     c.usesRemaining = 0;
     state.player.deck.push(c);
   }
   shuffleArr(state.player.deck);
   const name = removed[0] ? CARD_DB[removed[0].defId].name : "史诗装备";
-  log(`★ ${name} 本场使用次数已耗尽，已返回牌库（请选 1 件替换装备）。`, "lose");
-  state.pendingEpicReplacement = {
-    slot,
-    candidates: pickEpicReplacementCandidates(state, slot),
-  };
+
+  // 新机制：恢复 backup（如果有），不弹替换 modal
+  const backupKey = slot === "weapon" ? "tempWeaponBackup" : "tempArmorBackup";
+  const backup = state.player[backupKey];
+  if (backup && backup.length > 0) {
+    if (slot === "weapon") state.player.weapons = backup;
+    else state.player.armors = backup;
+    state.player[backupKey] = undefined;
+    const backupName = CARD_DB[backup[0].defId].name;
+    log(`★ ${name} 已耗尽（回卡池）→ 自动恢复 ${backupName} ×${backup.length}。`, "win");
+  } else {
+    // 没 backup（玩家裸装时装的 EPIC）— 旧逻辑回退到替换 modal
+    log(`★ ${name} 本场使用次数已耗尽，已返回牌库（请选 1 件替换装备）。`, "lose");
+    state.pendingEpicReplacement = {
+      slot,
+      candidates: pickEpicReplacementCandidates(state, slot),
+    };
+  }
 }
 
 // 出过同花色攻击牌时累积（在 playAttack 调用）
@@ -410,11 +422,11 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     dmg += bonus;
     log(`激奋 +${bonus}（×${frenzy.stacks}）。`, "player");
   }
-  // 蓄力：×3，用一次清除
+  // 蓄力：×2.5，用一次清除（nerf：×3 → ×2.5）
   const charged = player.statuses.find(s => s.id === "charged");
   if (charged) {
-    dmg = dmg * 3;
-    log("蓄力 ×3！", "player");
+    dmg = dmg * 2.5;
+    log("蓄力 ×2.5！", "player");
     player.statuses = player.statuses.filter(s => s.id !== "charged");
   }
   // 玩家被虚弱：攻击伤害减少 stacks
@@ -468,10 +480,10 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     player.statuses = player.statuses.filter(s => s.id !== "calc_charge");
   }
 
-  // 禁忌权杖（♣ epic 武器）：每张本回合已出 ♣ 牌让攻击 +N 直伤（N 随 stack 决定）
+  // 禁忌权杖（♣ epic 武器）：每张本回合已出 ♣ 牌让攻击 +N 直伤（nerf 5→3 at 4 stack）
   if (player.weapons[0]?.defId === "forbidden_scepter") {
     const stack = Math.min(player.weapons.length, 4);
-    const perClub = [2, 3, 4, 5][stack - 1] ?? 2;
+    const perClub = [1, 2, 2, 3][stack - 1] ?? 1;
     const scepterClubs = player.statuses.find(s => s.id === "scepter_clubs");
     if (scepterClubs && scepterClubs.stacks > 0) {
       const bonus = scepterClubs.stacks * perClub;
@@ -925,7 +937,32 @@ function playEquipment(state: BattleState, card: CardInstance, def: CardDef, log
     if (ex) ex.stacks += 1;
     else state.player.statuses.push({ id: "scepter_clubs", name: "禁忌权杖蓄势", stacks: 1, duration: 1 });
   }
+  const isEpic = def.rarity === "epic";
+
   if (def.equipKind === "weapon") {
+    // EPIC 临时装备机制：覆写当前武器，原武器进 tempWeaponBackup
+    // 3 次后 exhaustEpicEquipment 自动恢复 backup，原武器保留
+    if (isEpic) {
+      // 已有 EPIC 武器装着？同款则叠加（罕见），不同款则报错（不允许同时挂 2 个 EPIC）
+      if (player.weapons.length > 0 && CARD_DB[player.weapons[0].defId]?.rarity === "epic" && player.weapons[0].defId !== def.id) {
+        log(`已有 EPIC 武器在场，需用尽后才能换。`, "system");
+        return false;
+      }
+      // 第一次装 EPIC：把当前非 EPIC 武器移到 backup
+      if (player.weapons.length > 0 && CARD_DB[player.weapons[0].defId]?.rarity !== "epic") {
+        player.tempWeaponBackup = [...player.weapons];
+        player.weapons = [];
+        log(`★ EPIC 临时覆写：${CARD_DB[player.tempWeaponBackup[0].defId].name} ×${player.tempWeaponBackup.length} 暂存，EPIC 用尽后自动恢复。`, "system");
+      }
+      // 装上 EPIC（如果已经是同款 EPIC 则叠加）
+      if (player.weapons.length >= 4) { log(`武器已叠满 4 张。`, "system"); return false; }
+      player.weapons.push(card);
+      player.hand = player.hand.filter(c => c.uid !== card.uid);
+      log(`装备 ${def.name} ×${player.weapons.length}（EPIC：3 次后自动回卡池）。`, "player");
+      accumulateCalcCharge(state, log);
+      return true;
+    }
+    // 非 EPIC 武器（原逻辑）
     if (player.weapons.length > 0 && player.weapons[0].defId !== def.id) {
       log(`需要先弃当前武器才能装备 ${def.name}。`, "system");
       return false;
@@ -937,7 +974,25 @@ function playEquipment(state: BattleState, card: CardInstance, def: CardDef, log
     accumulateCalcCharge(state, log);
     return true;
   }
+
   if (def.equipKind === "armor") {
+    if (isEpic) {
+      if (player.armors.length > 0 && CARD_DB[player.armors[0].defId]?.rarity === "epic" && player.armors[0].defId !== def.id) {
+        log(`已有 EPIC 防具在场，需用尽后才能换。`, "system");
+        return false;
+      }
+      if (player.armors.length > 0 && CARD_DB[player.armors[0].defId]?.rarity !== "epic") {
+        player.tempArmorBackup = [...player.armors];
+        player.armors = [];
+        log(`★ EPIC 临时覆写：${CARD_DB[player.tempArmorBackup[0].defId].name} ×${player.tempArmorBackup.length} 暂存，EPIC 用尽后自动恢复。`, "system");
+      }
+      if (player.armors.length >= 4) { log(`防具已叠满 4 张。`, "system"); return false; }
+      player.armors.push(card);
+      player.hand = player.hand.filter(c => c.uid !== card.uid);
+      log(`装备 ${def.name} ×${player.armors.length}（EPIC：3 次后自动回卡池）。`, "player");
+      accumulateCalcCharge(state, log);
+      return true;
+    }
     if (player.armors.length > 0 && player.armors[0].defId !== def.id) {
       log(`需要先弃当前防具才能装备 ${def.name}。`, "system");
       return false;
