@@ -210,7 +210,7 @@ h1 {
   font-size: var(--fs-xs);
   border-radius: var(--r-sm);
   cursor: pointer;
-  transition: all var(--t-fast) var(--ease-default);
+  transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
 }
 #log-btn:hover, #hamburger-btn:hover {
   border-color: var(--gold);
@@ -483,7 +483,7 @@ section {
   border-radius: var(--r-md);
   cursor: pointer;
   clip-path: none;
-  transition: all var(--t-fast) var(--ease-default);
+  transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
   min-height: 44px;  /* 拇指点击友好 */
 }
 #active-actions button:active { transform: scale(0.96); }
@@ -521,7 +521,7 @@ section {
   font-weight: 700;
   border-radius: var(--r-md);
   clip-path: none;
-  transition: all var(--t-fast) var(--ease-default);
+  transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
 }
 #perma-toggle-btn:hover {
   background: linear-gradient(180deg, rgba(245,197,24,0.20), rgba(245,197,24,0.08));
@@ -712,11 +712,11 @@ h2.lose::before { display: none; }
 ═══════════════════════════════════════ */
 
 .card {
-  background: linear-gradient(180deg, #20202a 0%, #15151c 100%);
+  background: #1a1a23;  /* 纯色背景，比 gradient 便宜很多 */
   border: 1.5px solid var(--border);
   border-radius: var(--r-md);
   padding: 8px 8px 26px;
-  width: 132px;  /* +20% 尺寸 */
+  width: 132px;
   flex-shrink: 0;
   cursor: pointer;
   position: relative;
@@ -724,16 +724,13 @@ h2.lose::before { display: none; }
   overflow: hidden;
   transition:
     transform var(--t-fast) var(--ease-default),
-    border-color var(--t-fast) var(--ease-default),
-    box-shadow var(--t-fast) var(--ease-default),
-    opacity var(--t-fast) var(--ease-default);
-  box-shadow: var(--sh-sm), var(--sh-inner);
+    border-color var(--t-fast) var(--ease-default);
+  box-shadow: var(--sh-sm);
 }
 /* hover 只对真鼠标设备生效（避免移动端触摸后 sticky hover 残留到下张卡） */
 @media (hover: hover) and (pointer: fine) {
   .card:hover:not(.disabled):not(.epic-spent):not(.chant-spent) {
-    transform: translateY(-8px);
-    box-shadow: var(--sh-md), 0 0 16px rgba(245,197,24,0.25);
+    transform: translateY(-4px);
     border-color: var(--gold);
     z-index: 5;
   }
@@ -907,13 +904,13 @@ h2.lose::before { display: none; }
 }
 .choice-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 
-/* 选牌页面：卡牌大尺寸 + 入场动画 */
+/* 选牌页面：轻量入场（opacity + 微 translateY），无 scale/rotate；无 fan-out（之前 rotate + hover 重置抖卡） */
 .choice-grid .card {
   width: 100%;
   min-height: 160px;
   padding: 8px 6px 22px;
-  animation: choice-enter var(--t-slow) var(--ease-bounce) both;
-  transform-origin: bottom center;
+  animation: choice-enter 200ms var(--ease-out) both;
+  will-change: opacity;
 }
 .choice-grid .card .card-icon {
   width: 40px;
@@ -927,49 +924,43 @@ h2.lose::before { display: none; }
 .choice-grid .card .card-desc {
   font-size: 10px;
 }
-/* 入场延迟（前 9 张依次出现） */
+/* 入场延迟（小间隔；9 张最多 240ms 全部 ready） */
 .choice-grid .card:nth-child(1) { animation-delay: 0ms; }
-.choice-grid .card:nth-child(2) { animation-delay: 60ms; }
-.choice-grid .card:nth-child(3) { animation-delay: 120ms; }
-.choice-grid .card:nth-child(4) { animation-delay: 180ms; }
-.choice-grid .card:nth-child(5) { animation-delay: 240ms; }
-.choice-grid .card:nth-child(6) { animation-delay: 300ms; }
-.choice-grid .card:nth-child(7) { animation-delay: 360ms; }
-.choice-grid .card:nth-child(8) { animation-delay: 420ms; }
-.choice-grid .card:nth-child(9) { animation-delay: 480ms; }
-/* 仅 3 张的情况下做 fan-out 微旋转（reward / 大招选牌） */
-.choice-grid.cols-3:has(.card:nth-child(3):last-child) .card:nth-child(1) { transform: rotate(-3deg); }
-.choice-grid.cols-3:has(.card:nth-child(3):last-child) .card:nth-child(2) { transform: rotate(0deg); }
-.choice-grid.cols-3:has(.card:nth-child(3):last-child) .card:nth-child(3) { transform: rotate(3deg); }
+.choice-grid .card:nth-child(2) { animation-delay: 30ms; }
+.choice-grid .card:nth-child(3) { animation-delay: 60ms; }
+.choice-grid .card:nth-child(4) { animation-delay: 90ms; }
+.choice-grid .card:nth-child(5) { animation-delay: 120ms; }
+.choice-grid .card:nth-child(6) { animation-delay: 150ms; }
+.choice-grid .card:nth-child(7) { animation-delay: 180ms; }
+.choice-grid .card:nth-child(8) { animation-delay: 210ms; }
+.choice-grid .card:nth-child(9) { animation-delay: 240ms; }
 @media (hover: hover) and (pointer: fine) {
   .choice-grid .card:hover {
-    transform: translateY(-14px) rotate(0deg) scale(1.06) !important;
+    transform: translateY(-6px);
+    border-color: var(--gold);
     z-index: 10;
-    box-shadow: var(--sh-lg), 0 0 28px rgba(245,197,24,0.4);
   }
 }
 
 @keyframes choice-enter {
-  from { opacity: 0; transform: translateY(30px) scale(0.85) rotate(0deg); }
-  to   { opacity: 1; }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* 选牌后飞出动画（main.ts 在点击时给容器加 .is-picked） */
+/* 选牌后飞出动画（main.ts 在点击时给容器加 .is-picked）— 简化 */
 .choice-grid.is-picked .card { pointer-events: none; }
 .choice-grid.is-picked .card.picked-card {
-  animation: choice-picked var(--t-slow) var(--ease-bounce) forwards;
+  animation: choice-picked 280ms var(--ease-out) forwards;
 }
 .choice-grid.is-picked .card:not(.picked-card) {
-  animation: choice-discard var(--t-base) var(--ease-default) forwards;
+  animation: choice-discard 180ms var(--ease-default) forwards;
 }
 @keyframes choice-picked {
-  0%   { transform: scale(1.06) translateY(-14px); opacity: 1; }
-  50%  { transform: scale(1.25) translateY(-30px); opacity: 1;
-         box-shadow: 0 0 40px 8px rgba(245,197,24,0.7); }
-  100% { transform: scale(0.5) translateY(-200px); opacity: 0; }
+  0%   { transform: translateY(-6px); opacity: 1; }
+  100% { transform: translateY(-80px); opacity: 0; }
 }
 @keyframes choice-discard {
-  to { transform: translateY(60px) scale(0.7); opacity: 0; }
+  to { transform: translateY(20px); opacity: 0; }
 }
 
 .stack-future {
@@ -1080,11 +1071,7 @@ h2.lose::before { display: none; }
 .enemy-card.selected {
   border-color: var(--gold);
   box-shadow: 0 0 20px 2px rgba(245,197,24,0.55), var(--sh-inner);
-  animation: enemy-selected-pulse 1.5s ease-in-out infinite;
-}
-@keyframes enemy-selected-pulse {
-  0%, 100% { box-shadow: 0 0 20px 2px rgba(245,197,24,0.55), var(--sh-inner); }
-  50%      { box-shadow: 0 0 28px 4px rgba(245,197,24,0.85), var(--sh-inner); }
+  /* 去掉持续 pulse 动画：静态金边已经够明显，无限 box-shadow 动画对低端设备 paint 太重 */
 }
 .enemy-card.dead {
   opacity: 0.25;
@@ -1179,21 +1166,11 @@ h2.lose::before { display: none; }
   box-shadow: 0 0 14px rgba(255,140,40,0.45);
 }
 .enemy-card.tier-boss {
-  border: 2px solid transparent;
-  background:
-    linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
-    linear-gradient(135deg, #ff5e5e, #ff2d2d, #ff5e5e, #ffaa00, #ff5e5e) border-box;
-  background-size: 100% 100%, 300% 300%;
-  animation: bossShimmer 3s linear infinite, bossGlow 1.6s ease-in-out infinite;
+  border: 2px solid #ff5e5e;
+  background: linear-gradient(180deg, #2a0e12 0%, #1a0608 100%);
+  box-shadow: 0 0 24px rgba(255,80,40,0.6), inset 0 0 18px rgba(255,80,40,0.20);
   min-width: 110px;
-}
-@keyframes bossShimmer {
-  0%   { background-position: 0% 0%, 0% 50%; }
-  100% { background-position: 0% 0%, 300% 50%; }
-}
-@keyframes bossGlow {
-  0%, 100% { box-shadow: 0 0 18px rgba(255,80,40,0.55), inset 0 0 16px rgba(255,80,40,0.2); }
-  50%      { box-shadow: 0 0 32px rgba(255,140,40,1), 0 0 48px rgba(255,80,40,0.6), inset 0 0 22px rgba(255,140,40,0.45); }
+  /* 去掉 bossShimmer / bossGlow 双重 infinite 动画：persistent paint 太重 */
 }
 .enemy-card.tier-elite::after,
 .enemy-card.tier-boss::after { content: ""; }
@@ -1403,7 +1380,7 @@ h2.lose::before { display: none; }
   text-transform: none;
   letter-spacing: 0;
   clip-path: none;
-  transition: all var(--t-fast) var(--ease-default);
+  transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
 }
 .pcard-summary-btn:hover, .pcard-summary-btn:active {
   border-color: var(--gold);
@@ -1511,7 +1488,7 @@ h2.lose::before { display: none; }
   cursor: pointer;
   user-select: none;
   border-radius: var(--r-md);
-  transition: all var(--t-fast) var(--ease-default);
+  transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
   font-weight: 500;
 }
 .bstat-chip:hover, .bstat-chip:active {
@@ -1693,12 +1670,8 @@ h2.lose::before { display: none; }
   letter-spacing: 0.05em;
   text-align: center;
   border-radius: var(--r-md);
-  box-shadow: 0 0 16px rgba(245,197,24,0.5), inset 0 1px 0 rgba(255,255,255,0.3);
-  animation: discount-pulse 2s ease-in-out infinite;
-}
-@keyframes discount-pulse {
-  0%, 100% { box-shadow: 0 0 16px rgba(245,197,24,0.5), inset 0 1px 0 rgba(255,255,255,0.3); }
-  50%      { box-shadow: 0 0 28px rgba(245,197,24,0.9), inset 0 1px 0 rgba(255,255,255,0.3); }
+  box-shadow: 0 0 20px rgba(245,197,24,0.6), inset 0 1px 0 rgba(255,255,255,0.3);
+  /* 静态金色 banner（去掉 infinite pulse，已经足够醒目） */
 }
 
 #forge-list {
@@ -3161,24 +3134,22 @@ body.is-touch button:hover:not(:disabled) {
 .map-node.is-current {
   opacity: 1;
   transform: translate(-50%, -50%) rotate(45deg) scale(1.25);
-  box-shadow: 0 0 18px currentColor, inset 0 0 8px currentColor;
-  animation: nodePulseCurrent 1.6s ease-in-out infinite;
+  box-shadow: 0 0 22px currentColor, inset 0 0 10px currentColor;
   z-index: 5;
-}
-@keyframes nodePulseCurrent {
-  0%, 100% { box-shadow: 0 0 14px currentColor, inset 0 0 6px currentColor; }
-  50%      { box-shadow: 0 0 24px currentColor, inset 0 0 12px currentColor; }
+  /* 当前节点静态高亮（去掉 infinite pulse） */
 }
 
 .map-node.is-reachable {
   opacity: 1;
   cursor: pointer;
-  box-shadow: 0 0 12px currentColor;
-  animation: nodePulseReachable 2.2s ease-in-out infinite;
+  box-shadow: 0 0 14px currentColor;
+  /* 可达节点静态光晕（去掉 infinite pulse + scale 来回弹跳） */
 }
-@keyframes nodePulseReachable {
-  0%, 100% { box-shadow: 0 0 8px currentColor; }
-  50%      { box-shadow: 0 0 16px currentColor, 0 0 28px currentColor; transform: translate(-50%, -50%) rotate(45deg) scale(1.10); }
+@media (hover: hover) and (pointer: fine) {
+  .map-node.is-reachable:hover {
+    box-shadow: 0 0 20px currentColor, 0 0 32px currentColor;
+    transform: translate(-50%, -50%) rotate(45deg) scale(1.10);
+  }
 }
 
 .map-node.is-completed {
@@ -3339,7 +3310,7 @@ body.is-touch button:hover:not(:disabled) {
 .suit-block.tier-3 {
   border-color: #ff5e5e;
   box-shadow: 0 0 14px rgba(255,94,94,0.5);
-  animation: tier3Pulse 1.6s ease-in-out infinite;
+  /* tier3Pulse 静态光晕已够，无限动画移除 */
 }
 .suit-block.is-tied-inactive { opacity: 0.65; border-style: dashed; }
 .suit-block-fill {
@@ -3417,8 +3388,8 @@ body.is-touch button:hover:not(:disabled) {
   clip-path: none !important;
   text-transform: none;
   z-index: 10;
-  box-shadow: 0 0 16px rgba(255,140,40,0.7);
-  animation: ult-floating-pulse 1.4s ease-in-out infinite;
+  box-shadow: 0 0 18px rgba(255,140,40,0.8);
+  /* 大招按钮静态金色（去掉 infinite pulse；改成 hover/active 时反馈） */
 }
 .suit-ult-floating::after {
   /* 小三角指向方块 */
@@ -3431,10 +3402,8 @@ body.is-touch button:hover:not(:disabled) {
   border-top-color: #ff5e5e;
   pointer-events: none;
 }
-@keyframes ult-floating-pulse {
-  0%, 100% { box-shadow: 0 0 14px rgba(255,140,40,0.6); transform: translateX(-50%) translateY(-4px) scale(1); }
-  50%      { box-shadow: 0 0 22px rgba(255,180,40,1);   transform: translateX(-50%) translateY(-6px) scale(1.04); }
-}
+.suit-ult-floating:hover { box-shadow: 0 0 24px rgba(255,180,40,1); }
+.suit-ult-floating:active { transform: translateX(-50%) translateY(-2px) scale(0.96); }
 
 /* 单芯片 v2：进度填充背景 + 内容覆盖层 */
 .suit-aff-chip-v2 {
@@ -3465,7 +3434,7 @@ body.is-touch button:hover:not(:disabled) {
 }
 .suit-aff-chip-v2.tier-3 {
   border-color: #ff5e5e;
-  animation: tier3Pulse 1.2s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(255,140,40,0.6);
 }
 .saff-fill {
   position: absolute;
@@ -4033,7 +4002,7 @@ body.is-touch button:hover:not(:disabled) {
   text-transform: none !important;
   letter-spacing: 0.05em !important;
   border-radius: var(--r-md);
-  transition: all var(--t-fast) var(--ease-default);
+  transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
 }
 .map-loadout-btn:hover {
   background: linear-gradient(180deg, rgba(245,197,24,0.20), rgba(245,197,24,0.08));

@@ -571,14 +571,14 @@ function renderStarterPerks() {
   stageEl.appendChild(grid);
 }
 
-// 选牌动画 helper：标记选中卡 + 触发飞出动画，350ms 后执行实际 pick
+// 选牌动画 helper：标记选中卡 + 触发飞出动画，280ms 后执行实际 pick
 function animateChoicePick(grid: HTMLElement, pickedUid: string, then: () => void) {
   grid.classList.add("is-picked");
   const cards = grid.querySelectorAll<HTMLElement>(".card");
   cards.forEach(c => {
     if (c.dataset.uid === pickedUid) c.classList.add("picked-card");
   });
-  setTimeout(then, 380);
+  setTimeout(then, 280);
 }
 
 // ─────────────────────────────────────────────────────────
