@@ -762,37 +762,9 @@ function renderEnemy(e: EnemyState, idx: number): HTMLElement {
   // ⓘ 详情按钮（仅精英 / boss 才有）
   const infoBtn = tier !== "normal" ? `<button class="enemy-info-btn" data-info-idx="${idx}" aria-label="查看机制">i</button>` : "";
 
-  // 下次行动 intent badge（玩家信息透明：让 deck-builder 节奏感更清晰）
-  let intentBadge = "";
-  if (e.alive && e.intents && e.intents.length > 0) {
-    const nextIntent = e.intents[e.intentIndex];
-    if (nextIntent) {
-      let intentIcon = "•";
-      let intentText = "";
-      let intentClass = "";
-      if (nextIntent.type === "attack") {
-        intentIcon = "⚔";
-        const v = nextIntent.value;
-        const hits = nextIntent.hits && nextIntent.hits > 1 ? ` × ${nextIntent.hits}` : "";
-        intentText = `${v}${hits}`;
-        intentClass = "intent-attack";
-      } else if (nextIntent.type === "debuff") {
-        intentIcon = "💀";
-        intentText = nextIntent.debuffName ?? "debuff";
-        intentClass = "intent-debuff";
-      } else if (nextIntent.type === "buff") {
-        intentIcon = "🛡";
-        intentText = "强化";
-        intentClass = "intent-buff";
-      }
-      intentBadge = `<div class="enemy-intent ${intentClass}" title="${escapeHTML(nextIntent.desc)}">${intentIcon} ${escapeHTML(intentText)}</div>`;
-    }
-  }
-
   wrap.innerHTML = `
     ${tierBadge}
     ${infoBtn}
-    ${intentBadge}
     <div class="enemy-emoji">${emoji}</div>
     <div class="enemy-name">${escapeHTML(e.name)}${weaponBadge}${armorBadge}</div>
     <div class="enemy-race-row">${raceTag}${e.eliteAbility ? `<span class="enemy-ability-tag">★ ${escapeHTML(e.eliteAbility)}</span>` : ""}</div>
@@ -2337,6 +2309,15 @@ function playEquipCard(def: import("./types.ts").CardDef, inst: CardInstance): v
   if (handCardEl) {
     handCardEl.classList.add("is-playing");
   }
+
+  // 兜底清除 hover sticky：移动端点击后浏览器会把 :hover 留到下一张同位置卡
+  // 短时间禁用手牌容器交互，强制浏览器丢掉 hover 状态
+  const activeEl = document.getElementById("active");
+  if (activeEl) {
+    activeEl.classList.add("no-hover-burst");
+    setTimeout(() => activeEl.classList.remove("no-hover-burst"), 300);
+  }
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 
   // 延迟一点让飞行动画前半段播完再 render（防止瞬间消失突兀）
   setTimeout(() => {

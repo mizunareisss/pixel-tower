@@ -261,7 +261,7 @@ section {
   border-bottom: 1px solid var(--border-soft);
 }
 
-#stage { padding: 12px 14px; position: relative; }
+#stage { padding: 8px 12px; position: relative; }
 
 /* ═══════════════════════════════════════
    ENEMY TURN BANNER (full-screen overlay)
@@ -396,28 +396,28 @@ section {
 #active-panel {
   background: linear-gradient(180deg, #14141c 0%, #0a0a0e 100%);
   border-top: 1px solid var(--gold);
-  padding: 10px 0;
+  padding: 6px 0 8px;
   position: sticky;
   bottom: 0;
   z-index: 40;
   flex-shrink: 0;
-  box-shadow: 0 -4px 16px rgba(0,0,0,0.45);
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.55);
 }
 
 #active-header {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  padding: 0 var(--sp-4) var(--sp-2);
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3) 4px;
   border-bottom: 1px solid var(--border-soft);
-  margin-bottom: var(--sp-2);
+  margin-bottom: var(--sp-1);
 }
 
 .panel-label {
   font-family: var(--font-display);
   font-size: var(--fs-xs);
   font-weight: 900;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.20em;
   text-transform: uppercase;
   color: var(--gold);
 }
@@ -426,38 +426,66 @@ section {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--gray);
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
 }
 
+/* 手牌：横向滑动单排（手机一屏不需要垂直滚） */
 #active {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  grid-template-rows: repeat(2, 168px);
+  display: flex;
+  flex-direction: row;
   gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3) var(--sp-2);
-  overflow: hidden;
+  padding: 4px var(--sp-3) 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+#active::-webkit-scrollbar { height: 4px; }
+#active::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+#active::-webkit-scrollbar-track { background: transparent; }
+#active .hand-card {
+  scroll-snap-align: start;
+  flex: 0 0 96px;       /* 单卡固定宽度，能横向滚 */
+  width: 96px;
+  height: 142px;
+  padding: 6px 5px 16px;
 }
 #active.is-processing { pointer-events: none; opacity: 0.55; }
 
-/* End-turn button — in hand header (thumb zone) */
+/* End-turn button — primary action（拇指 thumb zone） */
 #end-turn-btn {
   margin-left: auto;
-  font-size: 11px;
-  padding: 5px 14px;
-  clip-path: polygon(0 0, 100% 0, 94% 100%, 0 100%);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  padding: 6px 16px;
+  background: linear-gradient(180deg, #fbbf24 0%, #d4940a 100%);
+  border: 1px solid var(--gold);
+  color: #1a1408;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  clip-path: none;
+  box-shadow: 0 2px 8px rgba(245,197,24,0.4);
+  transition: all var(--t-fast) var(--ease-default);
 }
+#end-turn-btn:active { transform: scale(0.96); }
+#end-turn-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Toggle button */
 #perma-toggle-btn {
   background: transparent;
-  border: 1px solid var(--gray-dim);
+  border: 1px solid var(--border);
   color: var(--gray);
-  font-size: 10px;
-  padding: 3px 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-weight: 700;
+  font-size: var(--fs-xs);
+  padding: 5px 10px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  border-radius: var(--r-md);
   clip-path: none;
+  transition: all var(--t-fast) var(--ease-default);
 }
 /* perma-toggle-btn hover at line 1682 inside @media (hover: hover) */
 
@@ -660,11 +688,23 @@ h2.lose::before { display: none; }
     opacity var(--t-fast) var(--ease-default);
   box-shadow: var(--sh-sm), var(--sh-inner);
 }
-.card:hover:not(.disabled):not(.epic-spent):not(.chant-spent) {
-  transform: translateY(-8px);
-  box-shadow: var(--sh-md), 0 0 16px rgba(245,197,24,0.25);
-  border-color: var(--gold);
-  z-index: 5;
+/* hover 只对真鼠标设备生效（避免移动端触摸后 sticky hover 残留到下张卡） */
+@media (hover: hover) and (pointer: fine) {
+  .card:hover:not(.disabled):not(.epic-spent):not(.chant-spent) {
+    transform: translateY(-8px);
+    box-shadow: var(--sh-md), 0 0 16px rgba(245,197,24,0.25);
+    border-color: var(--gold);
+    z-index: 5;
+  }
+}
+/* 出牌瞬间强制禁用 hover（消除 sticky hover 残留到下一张卡） */
+#active.no-hover-burst .card {
+  pointer-events: none;
+}
+#active.no-hover-burst .card:hover {
+  transform: none !important;
+  border-color: var(--border) !important;
+  box-shadow: var(--sh-sm), var(--sh-inner) !important;
 }
 .card.disabled { opacity: 0.4; cursor: not-allowed; }
 /* 出牌飞行动画（main.ts 在出牌时给卡加 .is-playing 类） */
@@ -708,6 +748,20 @@ h2.lose::before { display: none; }
   margin: 4px auto 6px;
   flex-shrink: 0;
   filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
+}
+/* 手牌中的卡：icon 略小（节省垂直空间） */
+.hand-card .card-icon {
+  width: 32px;
+  height: 32px;
+  margin: 2px auto 3px;
+}
+.hand-card .card-name {
+  font-size: var(--fs-xs);
+  margin-bottom: 2px;
+}
+.hand-card .card-desc {
+  font-size: 9px;
+  line-height: 1.3;
 }
 .card-icon svg {
   width: 100%;
@@ -805,10 +859,22 @@ h2.lose::before { display: none; }
 /* 选牌页面：卡牌大尺寸 + 入场动画 */
 .choice-grid .card {
   width: 100%;
-  min-height: 200px;
-  padding: 10px 8px 28px;
+  min-height: 160px;
+  padding: 8px 6px 22px;
   animation: choice-enter var(--t-slow) var(--ease-bounce) both;
   transform-origin: bottom center;
+}
+.choice-grid .card .card-icon {
+  width: 40px;
+  height: 40px;
+  margin: 2px auto 4px;
+}
+.choice-grid .card .card-name {
+  font-size: var(--fs-sm);
+  margin-bottom: 3px;
+}
+.choice-grid .card .card-desc {
+  font-size: 10px;
 }
 /* 入场延迟（前 9 张依次出现） */
 .choice-grid .card:nth-child(1) { animation-delay: 0ms; }
@@ -824,21 +890,12 @@ h2.lose::before { display: none; }
 .choice-grid.cols-3:has(.card:nth-child(3):last-child) .card:nth-child(1) { transform: rotate(-3deg); }
 .choice-grid.cols-3:has(.card:nth-child(3):last-child) .card:nth-child(2) { transform: rotate(0deg); }
 .choice-grid.cols-3:has(.card:nth-child(3):last-child) .card:nth-child(3) { transform: rotate(3deg); }
-.choice-grid .card:hover {
-  transform: translateY(-14px) rotate(0deg) scale(1.06) !important;
-  z-index: 10;
-  box-shadow: var(--sh-lg), 0 0 28px rgba(245,197,24,0.4);
-}
-.choice-grid .card .card-icon {
-  width: 56px;
-  height: 56px;
-}
-.choice-grid .card .card-name {
-  font-size: var(--fs-base);
-  margin-bottom: 6px;
-}
-.choice-grid .card .card-desc {
-  font-size: 11px;
+@media (hover: hover) and (pointer: fine) {
+  .choice-grid .card:hover {
+    transform: translateY(-14px) rotate(0deg) scale(1.06) !important;
+    z-index: 10;
+    box-shadow: var(--sh-lg), 0 0 28px rgba(245,197,24,0.4);
+  }
 }
 
 @keyframes choice-enter {
@@ -957,8 +1014,8 @@ h2.lose::before { display: none; }
   background: linear-gradient(180deg, #1a1a24 0%, #14141c 100%);
   border: 1.5px solid var(--red);
   border-radius: var(--r-md);
-  padding: 12px 10px 10px;
-  min-width: 105px;
+  padding: 8px 8px 6px;
+  min-width: 100px;
   max-width: 200px;
   flex: 1;
   cursor: pointer;
@@ -995,10 +1052,10 @@ h2.lose::before { display: none; }
 }
 
 .enemy-emoji {
-  font-size: 52px;
+  font-size: 42px;
   line-height: 1;
   text-align: center;
-  margin: 4px 0 6px;
+  margin: 2px 0 4px;
   display: block;
   filter: drop-shadow(0 2px 6px rgba(0,0,0,0.7));
   transition: filter var(--t-base) var(--ease-default);
@@ -1014,16 +1071,16 @@ h2.lose::before { display: none; }
   font-family: var(--font-display);
   font-size: var(--fs-sm);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  margin-bottom: 4px;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
 }
 
 .enemy-hp-text {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--rose);
-  letter-spacing: 0.5px;
-  margin: 3px 0;
+  letter-spacing: 0.4px;
+  margin: 1px 0;
   font-weight: 700;
 }
 
@@ -1043,39 +1100,6 @@ h2.lose::before { display: none; }
 .hp-seg.empty  {
   background: #2a2a35;
   box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
-}
-
-/* 敌人下次行动 intent 徽章 */
-.enemy-intent {
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: var(--fs-xs);
-  font-family: var(--font-mono);
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: var(--r-pill);
-  white-space: nowrap;
-  z-index: 3;
-  border: 1px solid;
-  letter-spacing: 0.05em;
-  box-shadow: var(--sh-sm);
-}
-.enemy-intent.intent-attack {
-  background: linear-gradient(180deg, #2a1010, #1a0a0a);
-  border-color: var(--red);
-  color: #ffb4b4;
-}
-.enemy-intent.intent-debuff {
-  background: linear-gradient(180deg, #2a1a2a, #1a0f1a);
-  border-color: var(--purple);
-  color: #d4b8ff;
-}
-.enemy-intent.intent-buff {
-  background: linear-gradient(180deg, #1a2a2a, #0f1a1a);
-  border-color: var(--blue);
-  color: #b8d4ff;
 }
 
 /* 敌人卡：大花色水印底纹（仿手牌花色背景） */
@@ -1235,8 +1259,8 @@ h2.lose::before { display: none; }
   border: 1px solid var(--border);
   border-top: 2px solid var(--gold);
   border-radius: var(--r-md);
-  padding: 10px 12px;
-  margin: 8px 0 4px;
+  padding: 6px 10px 8px;
+  margin: 6px 0 4px;
   position: relative;
   overflow: hidden;
   box-shadow: var(--sh-sm), var(--sh-inner);
@@ -1251,16 +1275,16 @@ h2.lose::before { display: none; }
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  margin-bottom: var(--sp-2);
+  margin-bottom: var(--sp-1);
 }
 
 .pcard-hp-val {
   font-family: var(--font-mono);
-  font-size: var(--fs-xl);
+  font-size: var(--fs-lg);
   font-weight: 700;
   color: var(--gold);
   white-space: nowrap;
-  min-width: 110px;
+  min-width: 88px;
   letter-spacing: 0.5px;
   text-shadow: 0 0 8px rgba(245,197,24,0.3);
   transition: color var(--t-fast);
@@ -1273,7 +1297,7 @@ h2.lose::before { display: none; }
 
 .pcard-hp-bar {
   flex: 1;
-  height: 12px;
+  height: 9px;
   background: #1a1a22;
   border: 1px solid var(--border);
   border-radius: var(--r-pill);
@@ -1296,17 +1320,17 @@ h2.lose::before { display: none; }
 .pcard-equip-row {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-2);
-  padding-bottom: var(--sp-2);
+  gap: var(--sp-1);
+  padding-bottom: var(--sp-1);
   border-bottom: 1px solid var(--border-soft);
-  margin-bottom: var(--sp-2);
+  margin-bottom: var(--sp-1);
 }
 
 .pcard-statuses {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-1);
-  min-height: 22px;
+  min-height: 18px;
   align-items: center;
 }
 
@@ -1373,7 +1397,7 @@ h2.lose::before { display: none; }
   color: var(--text-dim);
   background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
   border: 1px solid var(--border);
-  padding: 5px 10px;
+  padding: 3px 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2872,11 +2896,14 @@ body.is-touch button:hover:not(:disabled) {
 /* 弃牌按钮（活动 header） */
 #discard-hand-btn {
   background: transparent;
-  border: 1px solid var(--gray-dim);
+  border: 1px solid var(--border);
   color: var(--gray);
-  font-size: 11px;
-  padding: 4px 9px;
-  clip-path: none; text-transform: none; letter-spacing: 0; font-weight: 400;
+  font-size: var(--fs-xs);
+  padding: 5px 10px;
+  border-radius: var(--r-md);
+  font-weight: 600;
+  clip-path: none; text-transform: none; letter-spacing: 0;
+  transition: all var(--t-fast) var(--ease-default);
 }
 #discard-hand-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -3169,7 +3196,7 @@ body.is-touch button:hover:not(:disabled) {
 .pcard-suit-row {
   display: flex;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 4px;
   flex-wrap: wrap;
   align-items: center;
 }
