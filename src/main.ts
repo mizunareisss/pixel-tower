@@ -211,6 +211,147 @@ function render() {
 // 玩家状态芯片点击详情
 // ─────────────────────────────────────────────────────────
 
+// 统一详情入口：装备 / 防具 / 附魔 / 特性 / BUFF / debuff 一站式展示
+function showCharacterDetail(): void {
+  document.getElementById("char-detail-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "char-detail-overlay";
+  overlay.className = "ic-overlay";
+
+  // 武器
+  const wep = state.player.weapons[0];
+  const wepBlock = (() => {
+    if (!wep) return `<div class="cd-item cd-empty">⚔ 武器：徒手（基础攻击）</div>`;
+    const def = CARD_DB[wep.defId];
+    const cnt = state.player.weapons.length;
+    const eff = def.equipEffects?.[Math.min(cnt, 4) - 1];
+    const sym = def.equipSuit ? SUIT_SYMBOLS[def.equipSuit] : "";
+    const isRed = def.equipSuit ? isRedSuit(def.equipSuit) : false;
+    const enchant = state.player.weaponEnchant;
+    return `
+      <div class="cd-item">
+        <div class="cd-item-head">
+          <span class="cd-item-name">⚔ ${escapeHTML(def.name)} ×${cnt}</span>
+          <span class="cd-suit${isRed ? " red" : ""}">${sym}</span>
+        </div>
+        <div class="cd-item-desc">${escapeHTML(eff?.stat ?? eff?.desc ?? def.desc)}</div>
+        ${enchant ? `
+          <div class="cd-item-sub">
+            <span class="cd-sub-label">⚒ 附魔</span>
+            <b>${escapeHTML(ENCHANT_NAMES[enchant])}</b>
+            <div class="cd-item-desc">${escapeHTML(ENCHANT_DESCS[enchant])}</div>
+          </div>
+        ` : ""}
+      </div>
+    `;
+  })();
+
+  // 防具
+  const arm = state.player.armors[0];
+  const armBlock = (() => {
+    if (!arm) return `<div class="cd-item cd-empty">🛡 防具：无</div>`;
+    const def = CARD_DB[arm.defId];
+    const cnt = state.player.armors.length;
+    const eff = def.equipEffects?.[Math.min(cnt, 4) - 1];
+    const sym = def.equipSuit ? SUIT_SYMBOLS[def.equipSuit] : "";
+    const isRed = def.equipSuit ? isRedSuit(def.equipSuit) : false;
+    return `
+      <div class="cd-item">
+        <div class="cd-item-head">
+          <span class="cd-item-name">🛡 ${escapeHTML(def.name)} ×${cnt}</span>
+          <span class="cd-suit${isRed ? " red" : ""}">${sym}</span>
+        </div>
+        <div class="cd-item-desc">${escapeHTML(eff?.stat ?? eff?.desc ?? def.desc)}</div>
+      </div>
+    `;
+  })();
+
+  // 特性（聚合）
+  const perkGroups = new Map<string, number>();
+  for (const p of state.player.perks) perkGroups.set(p.defId, (perkGroups.get(p.defId) ?? 0) + 1);
+  const perkBlock = perkGroups.size === 0
+    ? `<div class="cd-item cd-empty">✦ 特性：无</div>`
+    : Array.from(perkGroups.entries()).map(([id, cnt]) => {
+        const def = CARD_DB[id];
+        const eff = def.perkEffect;
+        const summary = eff?.summary?.(cnt) ?? eff?.unitDesc ?? def.desc;
+        const sym = def.defaultSuit ? SUIT_SYMBOLS[def.defaultSuit] : "";
+        const isRed = def.defaultSuit ? isRedSuit(def.defaultSuit) : false;
+        return `
+          <div class="cd-item cd-perk">
+            <div class="cd-item-head">
+              <span class="cd-item-name">✦ ${escapeHTML(def.name)} ×${cnt}</span>
+              <span class="cd-suit${isRed ? " red" : ""}">${sym}</span>
+            </div>
+            <div class="cd-item-desc">${escapeHTML(summary)}</div>
+          </div>
+        `;
+      }).join("");
+
+  // 状态（buff / debuff / neutral 分组）
+  const buffs: typeof state.player.statuses = [];
+  const debuffs: typeof state.player.statuses = [];
+  const neutral: typeof state.player.statuses = [];
+  for (const s of state.player.statuses) {
+    const meta = STATUS_META[s.id];
+    if (meta?.kind === "buff") buffs.push(s);
+    else if (meta?.kind === "debuff") debuffs.push(s);
+    else neutral.push(s);
+  }
+  const renderStatusBlock = (arr: typeof buffs, label: string, kind: string) => {
+    if (arr.length === 0) return "";
+    const items = arr.map(s => {
+      const meta = STATUS_META[s.id];
+      const name = meta?.name ?? s.name;
+      const desc = meta?.desc ?? "";
+      const stacks = s.stacks > 1 ? ` ×${s.stacks}` : "";
+      const dur = s.duration > 0 ? ` (${s.duration} 回)` : "";
+      return `
+        <div class="cd-item cd-status k-${kind}">
+          <div class="cd-item-head">
+            <span class="cd-item-name">${escapeHTML(name)}${stacks}${dur}</span>
+          </div>
+          <div class="cd-item-desc">${escapeHTML(desc)}</div>
+        </div>
+      `;
+    }).join("");
+    return `<div class="cd-section-label cd-${kind}-label">${label}（${arr.length}）</div>${items}`;
+  };
+  const statusBlock = `
+    ${renderStatusBlock(buffs, "✨ 增益", "buff")}
+    ${renderStatusBlock(debuffs, "💀 减益", "debuff")}
+    ${renderStatusBlock(neutral, "· 中性", "neutral")}
+    ${state.player.statuses.length === 0 ? `<div class="cd-item cd-empty">暂无状态</div>` : ""}
+  `;
+
+  overlay.innerHTML = `
+    <div class="ic-modal char-detail-modal">
+      <div class="ic-title">📋 角色详情</div>
+      <div class="cd-grid">
+        <div class="cd-section">
+          <div class="cd-section-label">装备</div>
+          ${wepBlock}
+          ${armBlock}
+        </div>
+        <div class="cd-section">
+          <div class="cd-section-label">特性 (${state.player.perks.length})</div>
+          ${perkBlock}
+        </div>
+        <div class="cd-section">
+          <div class="cd-section-label">状态</div>
+          ${statusBlock}
+        </div>
+      </div>
+      <div class="ic-actions"><button class="ic-confirm">关闭</button></div>
+    </div>
+  `;
+  overlay.querySelector(".ic-confirm")!.addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+// legacy chip detail（替换为 showCharacterDetail，但保留以备其它入口需要）
+// @ts-expect-error 暂未引用
 function showChipDetail(type: "weapon" | "armor" | "perk") {
   if (document.getElementById("status-info-overlay")) return;
   const overlay = document.createElement("div");
@@ -451,22 +592,24 @@ function renderBattle() {
   const hpPct = Math.round(state.player.vita / state.player.vitaMax * 100);
   const dodgePct = getCurrentDodgeChance(state.player);
   const dodgeChip = dodgePct > 0
-    ? `<span class="pcard-dodge-chip" title="完全闪避概率：每次受击有 ${dodgePct}% 概率跳过整次伤害">🎯 闪避 ${dodgePct}%</span>`
+    ? `<span class="pcard-dodge-chip" title="闪避概率 ${dodgePct}%">🎯${dodgePct}%</span>`
     : "";
-  // 单芯片：仅显示当前最高亲和度的花色（点击展开 4 花色面板）
-  const affinityChip = renderSuitAffinityChip();
   const hpLow = hpPct <= 30;
+  // 专精方块（替代旧的 .pcard-suit-row 长芯片）
+  const suitBlock = renderSuitBlock();
   stageEl.innerHTML = `
     <div id="enemies-row"></div>
     <div id="player-card" class="${hpLow ? "hp-low" : ""}">
-      <div class="pcard-hp-row">
-        <span class="pcard-hp-val">${state.player.vita} / ${state.player.vitaMax}</span>
-        <div class="pcard-hp-bar"><div class="pcard-hp-fill" style="width:${hpPct}%"></div></div>
-        ${dodgeChip}
+      <div class="pcard-left">
+        <div class="pcard-hp-row">
+          <span class="pcard-hp-val">${state.player.vita} / ${state.player.vitaMax}</span>
+          <div class="pcard-hp-bar"><div class="pcard-hp-fill" style="width:${hpPct}%"></div></div>
+          ${dodgeChip}
+        </div>
+        <button class="pcard-summary-btn" id="pcard-summary-btn"></button>
+        <div class="pcard-statuses" id="pcard-statuses"></div>
       </div>
-      <div class="pcard-equip-row" id="pcard-equip"></div>
-      <div class="pcard-statuses" id="pcard-statuses"></div>
-      <div class="pcard-suit-row" id="pcard-suit-row">${affinityChip}</div>
+      <div class="pcard-right">${suitBlock}</div>
     </div>
   `;
 
@@ -480,8 +623,8 @@ function renderBattle() {
     row.appendChild(renderEnemy(battle.enemies[i], i));
   }
 
-  // 大招按钮绑定 + 二次确认
-  stageEl.querySelectorAll<HTMLButtonElement>(".suit-ult-btn").forEach(btn => {
+  // 大招按钮绑定（含 v3 悬浮版 + legacy）
+  stageEl.querySelectorAll<HTMLButtonElement>(".suit-ult-btn, .suit-ult-floating").forEach(btn => {
     const suit = btn.dataset.suit as Suit;
     btn.addEventListener("click", e => {
       e.stopPropagation();
@@ -499,31 +642,29 @@ function renderBattle() {
     });
   });
 
-  // Player card — equip row
-  const equipRow = $("pcard-equip");
-  const wep = state.player.weapons[0];
-  const wepSuit = wep ? SUIT_SYMBOLS[CARD_DB[wep.defId].equipSuit!] ?? "" : "";
-  const wepLabel = wep
-    ? `⚔ ${CARD_DB[wep.defId].name}×${state.player.weapons.length} ${wepSuit}${state.player.weaponEnchant ? " ⚒" + ENCHANT_NAMES[state.player.weaponEnchant] : ""}`
-    : "⚔ 徒手";
-  const arm = state.player.armors[0];
-  const armSuit = arm ? SUIT_SYMBOLS[CARD_DB[arm.defId].equipSuit!] ?? "" : "";
-  const armLabel = arm ? `🛡 ${CARD_DB[arm.defId].name}×${state.player.armors.length} ${armSuit}` : "🛡 无防具";
-  const perkGroups = new Map<string, number>();
-  for (const p of state.player.perks) perkGroups.set(p.defId, (perkGroups.get(p.defId) ?? 0) + 1);
-  const perkLabel = Array.from(perkGroups.entries()).map(([id, n]) => `${CARD_DB[id].name}×${n}`).join(" · ");
-  equipRow.innerHTML =
-    `<span class="bstat-chip" data-chip-type="weapon">${escapeHTML(wepLabel)}</span>` +
-    `<span class="bstat-chip" data-chip-type="armor">${escapeHTML(armLabel)}</span>` +
-    (perkLabel ? `<span class="bstat-chip" data-chip-type="perk">✦ ${escapeHTML(perkLabel)}</span>` : "");
-
-  // Chip click handlers
-  equipRow.querySelectorAll<HTMLElement>("[data-chip-type]").forEach(chip => {
-    chip.addEventListener("click", () => {
-      const type = chip.getAttribute("data-chip-type") as "weapon" | "armor" | "perk";
-      showChipDetail(type);
-    });
-  });
+  // Player card — 统一详情按钮（替代原 3 个 chip）
+  const summaryBtn = document.getElementById("pcard-summary-btn") as HTMLButtonElement | null;
+  if (summaryBtn) {
+    const wep = state.player.weapons[0];
+    const wepSuit = wep ? SUIT_SYMBOLS[CARD_DB[wep.defId].equipSuit!] ?? "" : "";
+    const wepText = wep
+      ? `⚔ ${CARD_DB[wep.defId].name}×${state.player.weapons.length}${wepSuit}${state.player.weaponEnchant ? " ⚒" : ""}`
+      : "⚔ 徒手";
+    const arm = state.player.armors[0];
+    const armSuit = arm ? SUIT_SYMBOLS[CARD_DB[arm.defId].equipSuit!] ?? "" : "";
+    const armText = arm ? `🛡 ${CARD_DB[arm.defId].name}×${state.player.armors.length}${armSuit}` : "🛡 无";
+    const perkCount = state.player.perks.length;
+    summaryBtn.innerHTML = `
+      <span class="pcard-sum-icon">📋</span>
+      <span class="pcard-sum-wep">${escapeHTML(wepText)}</span>
+      <span class="pcard-sum-sep">·</span>
+      <span class="pcard-sum-arm">${escapeHTML(armText)}</span>
+      <span class="pcard-sum-sep">·</span>
+      <span class="pcard-sum-perks">✦ ${perkCount}</span>
+      <span class="pcard-sum-arrow">›</span>
+    `;
+    summaryBtn.addEventListener("click", () => showCharacterDetail());
+  }
 
   // Player card — status row
   const ps = $("pcard-statuses");
@@ -585,14 +726,10 @@ function openLogOverlay() {
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
 }
 
-// 花色专精芯片 v2：只显示当前最高亲和度的花色（单芯片 + 进度填充 + 大招按钮）
-// 进度填充规则：
-//   - aff < 5  → 填充 0%，灰显（未点亮）
-//   - 5 ≤ aff < 10 → 点亮但只显示档位名（Tier 1）
-//   - 10 ≤ aff < 15 → 进度条 50%，档位名（Tier 2）
-//   - aff ≥ 15 → 进度条 100%，档位名（Tier 3）+ 大招按钮
-// 点击芯片 → 打开"花色专精面板"（4 个花色横向对比 + 切换按钮）
-function renderSuitAffinityChip(): string {
+// 专精方块 v3：方形花色 icon，中间显示当前亲和度数字，下到上填充进度（0-15）
+//  - 点击 → 显示 4 花色对比面板
+//  - T3（≥15）时上方悬浮"释放大招"按钮
+function renderSuitBlock(): string {
   if (!state.battle) return "";
   const suit = getDisplayedSpecialty(state.battle);
   const aff = getSuitAffinity(state.battle, suit);
@@ -602,39 +739,35 @@ function renderSuitAffinityChip(): string {
   const theme = SUIT_THEMES[suit];
   const names = SUIT_TIER_NAMES[suit];
   const isRed = suit === "heart" || suit === "diamond";
-  // 填充百分比：T1=lit-no-fill, T2=50%, T3=100%
-  let fillPct = 0;
-  let tierLabel = "未点亮";
-  if (tier >= 3) { fillPct = 100; tierLabel = names.tier3; }
-  else if (tier >= 2) { fillPct = 50; tierLabel = names.tier2; }
-  else if (tier >= 1) { fillPct = 0; tierLabel = names.tier1; }
-  // tier >= 1 但 fill 0% 用 class "lit"（亮但未填）
-  const litClass = tier >= 1 ? " lit" : "";
+  // 填充进度（0-15 内线性映射；满 15 = 100%）
+  const fillPct = Math.min(100, (aff / 15) * 100);
   const tier3Class = tier >= 3 ? " tier-3" : "";
   const inactiveClass = !isActive && tier >= 1 ? " is-tied-inactive" : "";
 
-  // 大招按钮（T3 时显示）
+  // T3 大招按钮（悬浮在方块上方）
   const ultBtn = (tier >= 3 && isActive)
-    ? `<button class="suit-ult-btn" data-suit="${suit}" title="释放 ${theme.name} 大招（消耗 10 亲和）">⚡ ${names.ult}</button>`
+    ? `<button class="suit-ult-floating" data-suit="${suit}" title="释放 ${theme.name} 大招（消耗 10 亲和）">⚡ ${escapeHTML(names.ult)}</button>`
     : "";
 
-  // 并列指示器（如果有多个花色并列最高，显示"⇄"提示玩家可切换）
+  // 并列指示器
   const tied = getTiedSpecialties(state.battle);
-  const tiedHint = tied.length > 1 ? `<span class="saff-tied-hint">⇄ 并列 ${tied.length}</span>` : "";
+  const tiedHint = tied.length > 1 ? `<span class="suit-block-tied">⇄</span>` : "";
 
   return `
-    <div class="suit-aff-chip-v2${isRed ? " red" : ""}${litClass}${tier3Class}${inactiveClass}"
-         data-aff-chip="1" data-suit="${suit}"
-         title="${theme.name}：亲和度 ${aff.toFixed(1)} / Tier ${tier}（点击查看 4 花色面板）">
-      <div class="saff-fill" style="width:${fillPct}%"></div>
-      <div class="saff-content">
-        <span class="saff-sym">${sym}</span>
-        <span class="saff-name">${tierLabel}</span>
-        <span class="saff-val">${aff.toFixed(1)}</span>
+    <div class="suit-block-wrap">
+      ${ultBtn}
+      <div class="suit-block${isRed ? " red" : ""}${tier3Class}${inactiveClass}"
+           data-aff-chip="1" data-suit="${suit}"
+           title="${theme.name}：亲和度 ${aff.toFixed(1)} / Tier ${tier}（点击查看 4 花色面板）">
+        <div class="suit-block-fill" style="height:${fillPct}%"></div>
+        <div class="suit-block-content">
+          <span class="suit-block-sym">${sym}</span>
+          <span class="suit-block-num">${aff.toFixed(1)}</span>
+          ${tier > 0 ? `<span class="suit-block-tier">T${tier}</span>` : ""}
+        </div>
         ${tiedHint}
       </div>
     </div>
-    ${ultBtn}
   `;
 }
 
