@@ -58,12 +58,15 @@
         <section id="active-panel">
           <div id="active-header">
             <span class="panel-label">手牌</span>
-            <span class="slot-count" id="active-count">0 张</span>
-            <button id="discard-hand-btn" style="display:none">弃牌</button>
-            <button id="end-turn-btn" style="display:none">结束回合</button>
-            <button id="perma-toggle-btn">装备▾</button>
+            <span class="slot-count" id="active-count">0/10</span>
+            <span class="hand-scroll-hint" id="hand-scroll-hint">← 滑 →</span>
+            <button id="perma-toggle-btn">⚔ 装备</button>
           </div>
           <div id="active"></div>
+          <div id="active-actions">
+            <button id="discard-hand-btn" style="display:none">弃牌</button>
+            <button id="end-turn-btn" style="display:none">结束回合</button>
+          </div>
         </section>
 
         <!-- Action bar — hidden, items in hamburger menu -->

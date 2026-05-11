@@ -2164,7 +2164,10 @@ function renderHand() {
       handEl.appendChild(renderHandCard(inst));
     }
   }
-  $("active-count").textContent = `${state.player.hand.length}/10 张`;
+  $("active-count").textContent = `${state.player.hand.length}/10`;
+  // 手牌 >4 时显示滑动提示（一屏大概 4-5 张，超过就需要滑）
+  const hint = document.getElementById("hand-scroll-hint");
+  if (hint) hint.classList.toggle("show", state.player.hand.length > 4);
 }
 
 // 弃手牌弹窗：可勾选多张，确认后一并弃到弃牌堆

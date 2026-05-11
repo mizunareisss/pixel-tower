@@ -408,84 +408,145 @@ section {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: 0 var(--sp-3) 4px;
+  padding: 4px var(--sp-3);
   border-bottom: 1px solid var(--border-soft);
   margin-bottom: var(--sp-1);
 }
 
 .panel-label {
   font-family: var(--font-display);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: 900;
-  letter-spacing: 0.20em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--gold);
 }
 
+/* 手牌数量：mono + 鲜明胶囊 */
 .slot-count {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--gray);
-  letter-spacing: 0.4px;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.5px;
+  background: rgba(245,197,24,0.10);
+  border: 1px solid rgba(245,197,24,0.35);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
 }
 
-/* 手牌：横向滑动单排（手机一屏不需要垂直滚） */
+/* 滑动提示（仅在手牌数 >5 时显示，JS 动态切换） */
+.hand-scroll-hint {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--gold-bright);
+  letter-spacing: 0.3em;
+  animation: scroll-hint-pulse 1.6s ease-in-out infinite;
+  margin-left: var(--sp-2);
+  display: none;
+}
+.hand-scroll-hint.show { display: inline; }
+@keyframes scroll-hint-pulse {
+  0%, 100% { opacity: 0.55; transform: translateX(0); }
+  50%      { opacity: 1;    transform: translateX(3px); }
+}
+
+/* 手牌：横向滑动单排 + 鲜明常亮滚动条 */
 #active {
   display: flex;
   flex-direction: row;
   gap: var(--sp-2);
-  padding: 4px var(--sp-3) 4px;
+  padding: 6px var(--sp-3) 12px;  /* 底部留位置给滚动条 */
   overflow-x: auto;
   overflow-y: hidden;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--gold) rgba(245,197,24,0.10);  /* 金色 thumb，鲜明 */
 }
-#active::-webkit-scrollbar { height: 4px; }
-#active::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-#active::-webkit-scrollbar-track { background: transparent; }
+#active::-webkit-scrollbar { height: 8px; }
+#active::-webkit-scrollbar-track {
+  background: linear-gradient(180deg, rgba(245,197,24,0.04), rgba(245,197,24,0.08));
+  border-radius: 4px;
+  margin: 0 12px;
+}
+#active::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  border-radius: 4px;
+  box-shadow: 0 0 6px rgba(245,197,24,0.6);
+}
+#active::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #ffd960, var(--gold-bright));
+}
 #active .hand-card {
   scroll-snap-align: start;
-  flex: 0 0 96px;       /* 单卡固定宽度，能横向滚 */
+  flex: 0 0 96px;
   width: 96px;
   height: 142px;
   padding: 6px 5px 16px;
 }
-#active.is-processing { pointer-events: none; opacity: 0.55; }
 
-/* End-turn button — primary action（拇指 thumb zone） */
-#end-turn-btn {
-  margin-left: auto;
+/* 底部大按钮 action bar */
+#active-actions {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3) 0;
+  margin-top: var(--sp-1);
+}
+#active-actions button {
+  flex: 1;
   font-family: var(--font-display);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-base);
   font-weight: 700;
-  letter-spacing: 0.10em;
-  padding: 6px 16px;
-  background: linear-gradient(180deg, #fbbf24 0%, #d4940a 100%);
-  border: 1px solid var(--gold);
-  color: #1a1408;
+  letter-spacing: 0.12em;
+  padding: 12px var(--sp-3);
   border-radius: var(--r-md);
   cursor: pointer;
   clip-path: none;
-  box-shadow: 0 2px 8px rgba(245,197,24,0.4);
   transition: all var(--t-fast) var(--ease-default);
+  min-height: 44px;  /* 拇指点击友好 */
 }
-#end-turn-btn:active { transform: scale(0.96); }
-#end-turn-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+#active-actions button:active { transform: scale(0.96); }
+#active-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+#active.is-processing { pointer-events: none; opacity: 0.55; }
 
-/* Toggle button */
-#perma-toggle-btn {
-  background: transparent;
+/* End-turn 主按钮：底部大按钮，金色 filled */
+#end-turn-btn {
+  background: linear-gradient(180deg, #fbbf24 0%, #d4940a 100%);
+  border: 1px solid var(--gold-bright);
+  color: #1a1408;
+  box-shadow: 0 2px 12px rgba(245,197,24,0.45), inset 0 1px 0 rgba(255,255,255,0.3);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+}
+#end-turn-btn:hover { box-shadow: 0 4px 18px rgba(245,197,24,0.6); }
+
+/* 弃牌按钮：底部 outline 次按钮 */
+#discard-hand-btn {
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
   border: 1px solid var(--border);
-  color: var(--gray);
+  color: var(--text-dim);
+}
+#discard-hand-btn:hover { border-color: var(--gold); color: var(--white); }
+
+/* 装备 toggle：header 右侧的鲜明小按钮 */
+#perma-toggle-btn {
+  margin-left: auto;
+  background: linear-gradient(180deg, rgba(245,197,24,0.12), rgba(245,197,24,0.04));
+  border: 1px solid rgba(245,197,24,0.45);
+  color: var(--gold-bright);
+  font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  padding: 5px 10px;
+  padding: 5px 12px;
   letter-spacing: 0.06em;
-  font-weight: 600;
+  font-weight: 700;
   border-radius: var(--r-md);
   clip-path: none;
   transition: all var(--t-fast) var(--ease-default);
+}
+#perma-toggle-btn:hover {
+  background: linear-gradient(180deg, rgba(245,197,24,0.20), rgba(245,197,24,0.08));
+  border-color: var(--gold);
+  color: var(--white);
 }
 /* perma-toggle-btn hover at line 1682 inside @media (hover: hover) */
 
@@ -2893,19 +2954,7 @@ body.is-touch button:hover:not(:disabled) {
 .hd-card-name { font-weight: 700; margin-bottom: 2px; }
 .hd-card-cat { color: var(--gray-dim); font-size: 9px; }
 
-/* 弃牌按钮（活动 header） */
-#discard-hand-btn {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--gray);
-  font-size: var(--fs-xs);
-  padding: 5px 10px;
-  border-radius: var(--r-md);
-  font-weight: 600;
-  clip-path: none; text-transform: none; letter-spacing: 0;
-  transition: all var(--t-fast) var(--ease-default);
-}
-#discard-hand-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* 弃牌按钮：旧 header 引用已废弃，样式合并到 #active-actions button */
 
 /* ═══════════════════════════════════════
    楼层地图 v1
