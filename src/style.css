@@ -210,7 +210,7 @@ h1 {
   font-size: var(--fs-xs);
   border-radius: var(--r-sm);
   cursor: pointer;
-  transition: all var(--t-fast) var(--ease-default);
+  transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
 }
 #log-btn:hover, #hamburger-btn:hover {
   border-color: var(--gold);
@@ -451,38 +451,18 @@ section {
   50%      { opacity: 1;    transform: translateX(3px); }
 }
 
-/* 手牌：横向滑动单排 + 鲜明常亮滚动条 */
+/* 手牌：5×2 grid 全平铺 */
 #active {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(2, 145px);  /* 固定行高，让卡稍微大点 */
   gap: var(--sp-2);
-  padding: 6px var(--sp-3) 12px;  /* 底部留位置给滚动条 */
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: var(--gold) rgba(245,197,24,0.10);  /* 金色 thumb，鲜明 */
-}
-#active::-webkit-scrollbar { height: 8px; }
-#active::-webkit-scrollbar-track {
-  background: linear-gradient(180deg, rgba(245,197,24,0.04), rgba(245,197,24,0.08));
-  border-radius: 4px;
-  margin: 0 12px;
-}
-#active::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
-  border-radius: 4px;
-  box-shadow: 0 0 6px rgba(245,197,24,0.6);
-}
-#active::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #ffd960, var(--gold-bright));
+  padding: 6px var(--sp-3);
+  overflow: hidden;
 }
 #active .hand-card {
-  scroll-snap-align: start;
-  flex: 0 0 96px;
-  width: 96px;
-  height: 142px;
+  width: 100%;
+  height: 100%;
   padding: 6px 5px 16px;
 }
 
@@ -503,7 +483,7 @@ section {
   border-radius: var(--r-md);
   cursor: pointer;
   clip-path: none;
-  transition: all var(--t-fast) var(--ease-default);
+  transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
   min-height: 44px;  /* 拇指点击友好 */
 }
 #active-actions button:active { transform: scale(0.96); }
@@ -541,7 +521,7 @@ section {
   font-weight: 700;
   border-radius: var(--r-md);
   clip-path: none;
-  transition: all var(--t-fast) var(--ease-default);
+  transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
 }
 #perma-toggle-btn:hover {
   background: linear-gradient(180deg, rgba(245,197,24,0.20), rgba(245,197,24,0.08));
@@ -732,11 +712,11 @@ h2.lose::before { display: none; }
 ═══════════════════════════════════════ */
 
 .card {
-  background: linear-gradient(180deg, #20202a 0%, #15151c 100%);
+  background: #1a1a23;  /* 纯色背景，比 gradient 便宜很多 */
   border: 1.5px solid var(--border);
   border-radius: var(--r-md);
   padding: 8px 8px 26px;
-  width: 132px;  /* +20% 尺寸 */
+  width: 132px;
   flex-shrink: 0;
   cursor: pointer;
   position: relative;
@@ -744,16 +724,13 @@ h2.lose::before { display: none; }
   overflow: hidden;
   transition:
     transform var(--t-fast) var(--ease-default),
-    border-color var(--t-fast) var(--ease-default),
-    box-shadow var(--t-fast) var(--ease-default),
-    opacity var(--t-fast) var(--ease-default);
-  box-shadow: var(--sh-sm), var(--sh-inner);
+    border-color var(--t-fast) var(--ease-default);
+  box-shadow: var(--sh-sm);
 }
 /* hover 只对真鼠标设备生效（避免移动端触摸后 sticky hover 残留到下张卡） */
 @media (hover: hover) and (pointer: fine) {
   .card:hover:not(.disabled):not(.epic-spent):not(.chant-spent) {
-    transform: translateY(-8px);
-    box-shadow: var(--sh-md), 0 0 16px rgba(245,197,24,0.25);
+    transform: translateY(-4px);
     border-color: var(--gold);
     z-index: 5;
   }
@@ -810,19 +787,29 @@ h2.lose::before { display: none; }
   flex-shrink: 0;
   filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
 }
-/* 手牌中的卡：icon 略小（节省垂直空间） */
+/* 手牌中的卡：紧凑但可读 */
 .hand-card .card-icon {
   width: 32px;
   height: 32px;
   margin: 2px auto 3px;
 }
 .hand-card .card-name {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   margin-bottom: 2px;
+  letter-spacing: 0;
 }
 .hand-card .card-desc {
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hand-card .cat-tag {
+  font-size: 9px;
+  padding: 1px 5px;
 }
 .card-icon svg {
   width: 100%;
@@ -917,13 +904,13 @@ h2.lose::before { display: none; }
 }
 .choice-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 
-/* 选牌页面：卡牌大尺寸 + 入场动画 */
+/* 选牌页面：轻量入场（opacity + 微 translateY），无 scale/rotate；无 fan-out（之前 rotate + hover 重置抖卡） */
 .choice-grid .card {
   width: 100%;
   min-height: 160px;
   padding: 8px 6px 22px;
-  animation: choice-enter var(--t-slow) var(--ease-bounce) both;
-  transform-origin: bottom center;
+  animation: choice-enter 200ms var(--ease-out) both;
+  will-change: opacity;
 }
 .choice-grid .card .card-icon {
   width: 40px;
@@ -937,49 +924,43 @@ h2.lose::before { display: none; }
 .choice-grid .card .card-desc {
   font-size: 10px;
 }
-/* 入场延迟（前 9 张依次出现） */
+/* 入场延迟（小间隔；9 张最多 240ms 全部 ready） */
 .choice-grid .card:nth-child(1) { animation-delay: 0ms; }
-.choice-grid .card:nth-child(2) { animation-delay: 60ms; }
-.choice-grid .card:nth-child(3) { animation-delay: 120ms; }
-.choice-grid .card:nth-child(4) { animation-delay: 180ms; }
-.choice-grid .card:nth-child(5) { animation-delay: 240ms; }
-.choice-grid .card:nth-child(6) { animation-delay: 300ms; }
-.choice-grid .card:nth-child(7) { animation-delay: 360ms; }
-.choice-grid .card:nth-child(8) { animation-delay: 420ms; }
-.choice-grid .card:nth-child(9) { animation-delay: 480ms; }
-/* 仅 3 张的情况下做 fan-out 微旋转（reward / 大招选牌） */
-.choice-grid.cols-3:has(.card:nth-child(3):last-child) .card:nth-child(1) { transform: rotate(-3deg); }
-.choice-grid.cols-3:has(.card:nth-child(3):last-child) .card:nth-child(2) { transform: rotate(0deg); }
-.choice-grid.cols-3:has(.card:nth-child(3):last-child) .card:nth-child(3) { transform: rotate(3deg); }
+.choice-grid .card:nth-child(2) { animation-delay: 30ms; }
+.choice-grid .card:nth-child(3) { animation-delay: 60ms; }
+.choice-grid .card:nth-child(4) { animation-delay: 90ms; }
+.choice-grid .card:nth-child(5) { animation-delay: 120ms; }
+.choice-grid .card:nth-child(6) { animation-delay: 150ms; }
+.choice-grid .card:nth-child(7) { animation-delay: 180ms; }
+.choice-grid .card:nth-child(8) { animation-delay: 210ms; }
+.choice-grid .card:nth-child(9) { animation-delay: 240ms; }
 @media (hover: hover) and (pointer: fine) {
   .choice-grid .card:hover {
-    transform: translateY(-14px) rotate(0deg) scale(1.06) !important;
+    transform: translateY(-6px);
+    border-color: var(--gold);
     z-index: 10;
-    box-shadow: var(--sh-lg), 0 0 28px rgba(245,197,24,0.4);
   }
 }
 
 @keyframes choice-enter {
-  from { opacity: 0; transform: translateY(30px) scale(0.85) rotate(0deg); }
-  to   { opacity: 1; }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* 选牌后飞出动画（main.ts 在点击时给容器加 .is-picked） */
+/* 选牌后飞出动画（main.ts 在点击时给容器加 .is-picked）— 简化 */
 .choice-grid.is-picked .card { pointer-events: none; }
 .choice-grid.is-picked .card.picked-card {
-  animation: choice-picked var(--t-slow) var(--ease-bounce) forwards;
+  animation: choice-picked 280ms var(--ease-out) forwards;
 }
 .choice-grid.is-picked .card:not(.picked-card) {
-  animation: choice-discard var(--t-base) var(--ease-default) forwards;
+  animation: choice-discard 180ms var(--ease-default) forwards;
 }
 @keyframes choice-picked {
-  0%   { transform: scale(1.06) translateY(-14px); opacity: 1; }
-  50%  { transform: scale(1.25) translateY(-30px); opacity: 1;
-         box-shadow: 0 0 40px 8px rgba(245,197,24,0.7); }
-  100% { transform: scale(0.5) translateY(-200px); opacity: 0; }
+  0%   { transform: translateY(-6px); opacity: 1; }
+  100% { transform: translateY(-80px); opacity: 0; }
 }
 @keyframes choice-discard {
-  to { transform: translateY(60px) scale(0.7); opacity: 0; }
+  to { transform: translateY(20px); opacity: 0; }
 }
 
 .stack-future {
@@ -1090,11 +1071,7 @@ h2.lose::before { display: none; }
 .enemy-card.selected {
   border-color: var(--gold);
   box-shadow: 0 0 20px 2px rgba(245,197,24,0.55), var(--sh-inner);
-  animation: enemy-selected-pulse 1.5s ease-in-out infinite;
-}
-@keyframes enemy-selected-pulse {
-  0%, 100% { box-shadow: 0 0 20px 2px rgba(245,197,24,0.55), var(--sh-inner); }
-  50%      { box-shadow: 0 0 28px 4px rgba(245,197,24,0.85), var(--sh-inner); }
+  /* 去掉持续 pulse 动画：静态金边已经够明显，无限 box-shadow 动画对低端设备 paint 太重 */
 }
 .enemy-card.dead {
   opacity: 0.25;
@@ -1189,21 +1166,11 @@ h2.lose::before { display: none; }
   box-shadow: 0 0 14px rgba(255,140,40,0.45);
 }
 .enemy-card.tier-boss {
-  border: 2px solid transparent;
-  background:
-    linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
-    linear-gradient(135deg, #ff5e5e, #ff2d2d, #ff5e5e, #ffaa00, #ff5e5e) border-box;
-  background-size: 100% 100%, 300% 300%;
-  animation: bossShimmer 3s linear infinite, bossGlow 1.6s ease-in-out infinite;
+  border: 2px solid #ff5e5e;
+  background: linear-gradient(180deg, #2a0e12 0%, #1a0608 100%);
+  box-shadow: 0 0 24px rgba(255,80,40,0.6), inset 0 0 18px rgba(255,80,40,0.20);
   min-width: 110px;
-}
-@keyframes bossShimmer {
-  0%   { background-position: 0% 0%, 0% 50%; }
-  100% { background-position: 0% 0%, 300% 50%; }
-}
-@keyframes bossGlow {
-  0%, 100% { box-shadow: 0 0 18px rgba(255,80,40,0.55), inset 0 0 16px rgba(255,80,40,0.2); }
-  50%      { box-shadow: 0 0 32px rgba(255,140,40,1), 0 0 48px rgba(255,80,40,0.6), inset 0 0 22px rgba(255,140,40,0.45); }
+  /* 去掉 bossShimmer / bossGlow 双重 infinite 动画：persistent paint 太重 */
 }
 .enemy-card.tier-elite::after,
 .enemy-card.tier-boss::after { content: ""; }
@@ -1320,11 +1287,26 @@ h2.lose::before { display: none; }
   border: 1px solid var(--border);
   border-top: 2px solid var(--gold);
   border-radius: var(--r-md);
-  padding: 6px 10px 8px;
+  padding: 6px 8px 8px;
   margin: 6px 0 4px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;  /* T3 大招按钮可以悬浮出来 */
   box-shadow: var(--sh-sm), var(--sh-inner);
+  display: flex;
+  gap: var(--sp-2);
+  align-items: stretch;
+}
+#player-card .pcard-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+#player-card .pcard-right {
+  width: 60px;
+  flex-shrink: 0;
+  position: relative;
 }
 #player-card.player-hit { animation: player-hit-pulse 0.3s var(--ease-default); }
 @keyframes player-hit-pulse {
@@ -1378,20 +1360,48 @@ h2.lose::before { display: none; }
   box-shadow: 0 0 12px rgba(239,68,68,0.6);
 }
 
-.pcard-equip-row {
+/* 统一详情按钮：一个 chip，点开后 modal 看完整 */
+.pcard-summary-btn {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1);
-  padding-bottom: var(--sp-1);
-  border-bottom: 1px solid var(--border-soft);
-  margin-bottom: var(--sp-1);
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-transform: none;
+  letter-spacing: 0;
+  clip-path: none;
+  transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
+}
+.pcard-summary-btn:hover, .pcard-summary-btn:active {
+  border-color: var(--gold);
+  color: var(--white);
+  background: linear-gradient(180deg, rgba(245,197,24,0.10), rgba(245,197,24,0.03));
+}
+.pcard-sum-icon { font-size: 13px; }
+.pcard-sum-sep { color: var(--gray-dim); opacity: 0.5; }
+.pcard-sum-perks { color: var(--purple); font-weight: 700; }
+.pcard-sum-arrow { margin-left: auto; color: var(--gray-dim); font-size: 14px; line-height: 1; }
+.pcard-sum-wep, .pcard-sum-arm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .pcard-statuses {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-1);
-  min-height: 18px;
+  gap: 3px;
+  min-height: 22px;
   align-items: center;
 }
 
@@ -1402,19 +1412,31 @@ h2.lose::before { display: none; }
 
 .status-empty { color: var(--gray-dim); font-size: var(--fs-xs); font-style: italic; }
 
+/* 状态 chip：icon-only + 可选 stacks 角标，紧凑 */
 .status-tag {
-  display: inline-block;
-  padding: 3px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
   font-size: var(--fs-xs);
   border: 1px solid var(--border);
   background: rgba(0,0,0,0.35);
   color: var(--gray);
   cursor: pointer;
   transition: transform var(--t-micro), box-shadow var(--t-fast);
-  letter-spacing: 0.04em;
-  font-weight: 600;
+  font-weight: 700;
   border-radius: var(--r-pill);
   user-select: none;
+  min-width: 26px;
+  height: 22px;
+  justify-content: center;
+}
+.status-tag .status-icon { font-size: 13px; line-height: 1; }
+.status-tag .status-stacks {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 .status-tag.k-buff {
   background: linear-gradient(180deg, rgba(74,222,128,0.18), rgba(74,222,128,0.08));
@@ -1466,7 +1488,7 @@ h2.lose::before { display: none; }
   cursor: pointer;
   user-select: none;
   border-radius: var(--r-md);
-  transition: all var(--t-fast) var(--ease-default);
+  transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
   font-weight: 500;
 }
 .bstat-chip:hover, .bstat-chip:active {
@@ -1634,6 +1656,23 @@ h2.lose::before { display: none; }
   margin: 8px 0;
 }
 #forge-current b { color: var(--yellow); }
+
+/* 铁匠铺 5 折特惠 banner */
+#forge-discount-banner {
+  font-family: var(--font-display);
+  font-size: var(--fs-base);
+  font-weight: 900;
+  color: #1a1408;
+  background: linear-gradient(90deg, #ffd460 0%, #fbbf24 50%, #ffd460 100%);
+  border: 1px solid var(--gold);
+  padding: 8px 14px;
+  margin: 8px 0;
+  letter-spacing: 0.05em;
+  text-align: center;
+  border-radius: var(--r-md);
+  box-shadow: 0 0 20px rgba(245,197,24,0.6), inset 0 1px 0 rgba(255,255,255,0.3);
+  /* 静态金色 banner（去掉 infinite pulse，已经足够醒目） */
+}
 
 #forge-list {
   display: grid;
@@ -3095,24 +3134,22 @@ body.is-touch button:hover:not(:disabled) {
 .map-node.is-current {
   opacity: 1;
   transform: translate(-50%, -50%) rotate(45deg) scale(1.25);
-  box-shadow: 0 0 18px currentColor, inset 0 0 8px currentColor;
-  animation: nodePulseCurrent 1.6s ease-in-out infinite;
+  box-shadow: 0 0 22px currentColor, inset 0 0 10px currentColor;
   z-index: 5;
-}
-@keyframes nodePulseCurrent {
-  0%, 100% { box-shadow: 0 0 14px currentColor, inset 0 0 6px currentColor; }
-  50%      { box-shadow: 0 0 24px currentColor, inset 0 0 12px currentColor; }
+  /* 当前节点静态高亮（去掉 infinite pulse） */
 }
 
 .map-node.is-reachable {
   opacity: 1;
   cursor: pointer;
-  box-shadow: 0 0 12px currentColor;
-  animation: nodePulseReachable 2.2s ease-in-out infinite;
+  box-shadow: 0 0 14px currentColor;
+  /* 可达节点静态光晕（去掉 infinite pulse + scale 来回弹跳） */
 }
-@keyframes nodePulseReachable {
-  0%, 100% { box-shadow: 0 0 8px currentColor; }
-  50%      { box-shadow: 0 0 16px currentColor, 0 0 28px currentColor; transform: translate(-50%, -50%) rotate(45deg) scale(1.10); }
+@media (hover: hover) and (pointer: fine) {
+  .map-node.is-reachable:hover {
+    box-shadow: 0 0 20px currentColor, 0 0 32px currentColor;
+    transform: translate(-50%, -50%) rotate(45deg) scale(1.10);
+  }
 }
 
 .map-node.is-completed {
@@ -3250,6 +3287,124 @@ body.is-touch button:hover:not(:disabled) {
   align-items: center;
 }
 
+/* ── 专精方块 v3：方形花色 icon + 中数字 + 下起填充 + T3 悬浮大招 ── */
+.suit-block-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 70px;
+}
+.suit-block {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 70px;
+  background: linear-gradient(180deg, #14141c 0%, #0e0e14 100%);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.suit-block:hover { border-color: var(--gold); }
+.suit-block.tier-3 {
+  border-color: #ff5e5e;
+  box-shadow: 0 0 14px rgba(255,94,94,0.5);
+  /* tier3Pulse 静态光晕已够，无限动画移除 */
+}
+.suit-block.is-tied-inactive { opacity: 0.65; border-style: dashed; }
+.suit-block-fill {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  background: linear-gradient(0deg, rgba(245,197,24,0.55) 0%, rgba(245,197,24,0.18) 100%);
+  transition: height 0.3s ease-out;
+  z-index: 0;
+}
+.suit-block.tier-3 .suit-block-fill {
+  background: linear-gradient(0deg, rgba(255,94,94,0.6) 0%, rgba(255,212,96,0.35) 100%);
+}
+.suit-block-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  gap: 1px;
+  padding: 4px 2px;
+}
+.suit-block-sym {
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--white);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+.suit-block.red .suit-block-sym { color: var(--rose); }
+.suit-block-num {
+  font-family: var(--font-mono);
+  font-size: var(--fs-base);
+  font-weight: 700;
+  color: var(--gold);
+  line-height: 1;
+}
+.suit-block-tier {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--gold-bright);
+  background: rgba(0,0,0,0.40);
+  padding: 1px 5px;
+  border-radius: 6px;
+  letter-spacing: 0.3px;
+}
+.suit-block-tied {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 10px;
+  color: var(--gold);
+  z-index: 2;
+}
+
+/* T3 大招悬浮按钮（在方块顶部上方） */
+.suit-ult-floating {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%) translateY(-4px);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  padding: 6px 12px;
+  white-space: nowrap;
+  background: linear-gradient(180deg, #ffd460, #ff5e5e);
+  border: 1.5px solid #ffd460;
+  color: #1a0808;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  clip-path: none !important;
+  text-transform: none;
+  z-index: 10;
+  box-shadow: 0 0 18px rgba(255,140,40,0.8);
+  /* 大招按钮静态金色（去掉 infinite pulse；改成 hover/active 时反馈） */
+}
+.suit-ult-floating::after {
+  /* 小三角指向方块 */
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #ff5e5e;
+  pointer-events: none;
+}
+.suit-ult-floating:hover { box-shadow: 0 0 24px rgba(255,180,40,1); }
+.suit-ult-floating:active { transform: translateX(-50%) translateY(-2px) scale(0.96); }
+
 /* 单芯片 v2：进度填充背景 + 内容覆盖层 */
 .suit-aff-chip-v2 {
   position: relative;
@@ -3279,7 +3434,7 @@ body.is-touch button:hover:not(:disabled) {
 }
 .suit-aff-chip-v2.tier-3 {
   border-color: #ff5e5e;
-  animation: tier3Pulse 1.2s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(255,140,40,0.6);
 }
 .saff-fill {
   position: absolute;
@@ -3828,29 +3983,114 @@ body.is-touch button:hover:not(:disabled) {
    地图 · 当前配置按钮 + Modal
 ═══════════════════════════════════════ */
 
+/* 「当前配置」按钮：地图底部居中 */
+.floor-map-bottom {
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-3) 0 var(--sp-2);
+}
 .map-loadout-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: rgba(0,0,0,0.55);
-  border: 1px solid var(--border);
-  color: var(--white);
-  font-size: 11px;
+  background: linear-gradient(180deg, rgba(245,197,24,0.12), rgba(245,197,24,0.04));
+  border: 1px solid rgba(245,197,24,0.45);
+  color: var(--gold-bright);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
   font-weight: 700;
-  padding: 6px 12px !important;
+  padding: 8px 22px !important;
   cursor: pointer;
   clip-path: none !important;
   text-transform: none !important;
-  letter-spacing: 0 !important;
-  z-index: 5;
-  transition: border-color 0.12s, background 0.12s;
+  letter-spacing: 0.05em !important;
+  border-radius: var(--r-md);
+  transition: background var(--t-fast) var(--ease-default), border-color var(--t-fast) var(--ease-default), color var(--t-fast) var(--ease-default), transform var(--t-fast) var(--ease-default);
 }
 .map-loadout-btn:hover {
-  border-color: var(--yellow);
-  background: rgba(245,197,24,0.10);
+  background: linear-gradient(180deg, rgba(245,197,24,0.20), rgba(245,197,24,0.08));
+  border-color: var(--gold);
+  color: var(--white);
 }
-.floor-map-header {
-  position: relative;
+
+/* 统一角色详情 modal — 战斗中显示装备/特性/状态全部信息 */
+.char-detail-modal {
+  width: min(560px, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+.cd-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: var(--sp-2) 0;
+}
+.cd-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cd-section-label {
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 900;
+  color: var(--gold);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-top: var(--sp-1);
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 3px;
+}
+.cd-buff-label    { color: var(--green); }
+.cd-debuff-label  { color: var(--rose); }
+.cd-neutral-label { color: var(--gray); }
+.cd-item {
+  background: rgba(255,255,255,0.03);
+  border-left: 3px solid var(--border);
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+}
+.cd-item.cd-empty {
+  color: var(--gray-dim);
+  font-style: italic;
+  border-left-color: transparent;
+}
+.cd-item.cd-status.k-buff    { border-left-color: var(--green); background: rgba(74,222,128,0.05); }
+.cd-item.cd-status.k-debuff  { border-left-color: var(--red);   background: rgba(239,68,68,0.05); }
+.cd-item.cd-perk             { border-left-color: var(--purple); }
+.cd-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-bottom: 2px;
+}
+.cd-item-name {
+  font-size: var(--fs-sm);
+  font-weight: 900;
+  color: var(--white);
+}
+.cd-item-desc {
+  font-size: 11px;
+  color: var(--gray);
+  line-height: 1.45;
+}
+.cd-suit {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--white);
+  flex-shrink: 0;
+}
+.cd-suit.red { color: var(--rose); }
+.cd-item-sub {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255,255,255,0.10);
+  font-size: var(--fs-xs);
+  color: var(--gold-bright);
+}
+.cd-sub-label {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  margin-right: 4px;
 }
 
 .loadout-modal {
@@ -4051,41 +4291,53 @@ body.is-touch button:hover:not(:disabled) {
   letter-spacing: 0.5px;
 }
 
-/* 卖卡 modal */
+/* 卖卡 modal — 卡牌 grid 风格（仿手牌） */
 .sell-modal {
-  width: min(560px, 100%);
-  max-height: 88vh;
+  width: min(640px, 100%);
+  max-height: 90vh;
   overflow-y: auto;
+}
+.sell-count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--gold);
+  background: rgba(245,197,24,0.10);
+  border: 1px solid rgba(245,197,24,0.40);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  margin-left: var(--sp-2);
 }
 .sell-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 6px;
-  margin: 8px 0;
-  max-height: 60vh;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0;
+  max-height: 62vh;
   overflow-y: auto;
+  padding: 4px;
 }
-.sell-card-item {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  padding: 8px;
-  text-align: left;
+.sell-cards-grid .card.sell-card {
+  width: 100%;
+  height: auto;
+  min-height: 150px;
+  padding: 6px 5px 18px;
   cursor: pointer;
-  color: var(--white);
-  clip-path: none !important;
-  text-transform: none !important;
-  letter-spacing: 0 !important;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  position: relative;
 }
-.sell-card-item:hover { border-color: var(--yellow); }
-.sell-card-item.rarity-rare       { border-left: 3px solid #6bb3ff; }
-.sell-card-item.rarity-super_rare { border-left: 3px solid #d460ff; }
-.sell-card-item.rarity-epic       { border-left: 3px solid #ffd460; }
-.sell-card-name { font-size: 12px; font-weight: 900; }
-.sell-card-meta { font-size: 10px; color: var(--gray); }
-.sell-card-price { font-size: 11px; color: var(--yellow); margin-top: 2px; }
+.sell-card-price-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  background: linear-gradient(180deg, #fbbf24, #d4940a);
+  color: #1a1408;
+  padding: 2px 6px;
+  border-radius: var(--r-pill);
+  z-index: 3;
+  box-shadow: 0 0 6px rgba(245,197,24,0.5);
+}
 
 /* 图鉴 · 附魔分组 */
 .codex-enchant-branch {

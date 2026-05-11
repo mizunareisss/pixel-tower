@@ -606,7 +606,7 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
   }
   // 方块 Tier 2：25% 概率额外 +1 hit（仅激活的方块专精生效）
   let diamondBonus = 0;
-  if (getActiveSpecialty(state) === "diamond" && suitTier(state, "diamond") >= 2 && Math.random() < 0.25) {
+  if (getActiveSpecialty(state) === "diamond" && suitTier(state, "diamond") >= 2 && Math.random() < 0.35) {
     diamondBonus = 1;
     log("方块·灵巧：额外触发 +1 hit。", "player");
   }

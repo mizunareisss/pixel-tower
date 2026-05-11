@@ -270,7 +270,7 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
   // HP
   let hp = baseHpForFloor(opts.floor) * RACE_HP_MULT[race];
   if (tier === "elite") hp *= 1.40;  // 之前 ×1.6
-  if (tier === "boss")  hp *= 2.60;  // 之前 ×3.2
+  if (tier === "boss")  hp *= 2.20;  // 之前 ×2.60；模拟器显示 F3 死亡率 62%，再砍 15%
   if (opts.groupSize && opts.groupSize > 1) {
     hp = hp / (1 + (opts.groupSize - 1) * 0.5);
   }

@@ -426,6 +426,9 @@ export interface PlayerState {
 
   // 装备保底：连续未在 reward_card 拿到装备的场次，达 3 次下场必出装备
   battlesSinceEquipReward?: number;
+
+  // 花色专精大招的整局使用次数（跨战斗保留；目前仅 ♥ 生命洪流限 3 次）
+  ultsUsed?: Record<Suit, number>;
 }
 
 // ── 敌人 ──────────────────────────────────────────────────
@@ -556,6 +559,12 @@ export interface GameState {
 
   // 铁匠铺访问内是否已用过染色服务（每次访问只允许 1 次）
   forgeRecolorUsed?: boolean;
+
+  // 铁匠铺本次访问的「5 折特惠」（25% 概率出现；附魔配方碎片消耗减半，向上取整）
+  forgeDiscountThisVisit?: boolean;
+
+  // 商店本次访问已卖的卡数（每次访问最多卖 2 张）
+  merchantSellsThisVisit?: number;
 
   // 事件结果对话框（事件完成后展示，玩家点确认才回地图）
   eventResult?: {

@@ -95,6 +95,7 @@ export function newGame(): GameState {
     fragments: { beast: 0, humanoid: 0, undead: 0, giant: 0, dark: 0 },
     revivesUsed: 0,
     suitPlayedTotal: { spade: 0, diamond: 0, heart: 0, club: 0 },
+    ultsUsed: { spade: 0, diamond: 0, heart: 0, club: 0 },
     battlesSinceEquipReward: 0,
   };
   // 起始装备：1 把短剑放在常驻区
@@ -198,6 +199,7 @@ function startNodeEvent(state: GameState, node: MapNode) {
   state.phase = "floor_event";
   if (eventId === "merchant") {
     state.merchantStock = generateMerchantStock(state.floor);
+    state.merchantSellsThisVisit = 0;
   }
   if (eventId === "wizard") {
     state.choices = generateWizardChoices(state.floor);
@@ -209,7 +211,13 @@ function startNodeEvent(state: GameState, node: MapNode) {
 function startNodeForge(state: GameState) {
   state.phase = "forge";
   state.forgeRecolorUsed = false;  // 每次进入铁匠铺重置染色服务
-  pushLog(state, `⚒ 铁匠铺：使用灵魂碎片为武器附魔，或跳过。`, "system");
+  // 25% 概率出现「5 折特惠」事件：本次访问所有附魔碎片消耗减半（向上取整）
+  state.forgeDiscountThisVisit = Math.random() < 0.25;
+  if (state.forgeDiscountThisVisit) {
+    pushLog(state, `⚒ 铁匠铺·5 折特惠！本次附魔配方碎片消耗减半（向上取整）。`, "win");
+  } else {
+    pushLog(state, `⚒ 铁匠铺：使用灵魂碎片为武器附魔，或跳过。`, "system");
+  }
 }
 
 function startNodeShop(state: GameState) {
@@ -217,6 +225,7 @@ function startNodeShop(state: GameState) {
   state.activeEventId = "merchant";
   state.phase = "floor_event";
   state.merchantStock = generateMerchantStock(state.floor);
+  state.merchantSellsThisVisit = 0;
   pushLog(state, `🛒 商店：流浪商人在等你。`, "system");
 }
 
@@ -527,24 +536,31 @@ export function applyEnchant(state: GameState, enchantId: EnchantId): boolean {
   if (state.phase !== "forge") return false;
   const recipe = ENCHANT_RECIPES[enchantId];
   if (!recipe) return false;
-  // 校验所有配方所需碎片库存
+  // 5 折特惠：所有配方碎片消耗减半（向上取整）
+  const discount = state.forgeDiscountThisVisit === true;
+  const actualCost: Partial<Record<EnemyRace, number>> = {};
   for (const r in recipe.cost) {
-    const need = recipe.cost[r as EnemyRace] ?? 0;
+    const orig = recipe.cost[r as EnemyRace] ?? 0;
+    actualCost[r as EnemyRace] = discount ? Math.ceil(orig / 2) : orig;
+  }
+  // 校验所有配方所需碎片库存
+  for (const r in actualCost) {
+    const need = actualCost[r as EnemyRace] ?? 0;
     if ((state.player.fragments[r as EnemyRace] ?? 0) < need) {
-      const races = Object.entries(recipe.cost)
+      const races = Object.entries(actualCost)
         .map(([rc, n]) => `${rc} × ${n}`).join(" + ");
       pushLog(state, `${ENCHANT_NAMES[enchantId]} 需要 ${races}，库存不足。`, "system");
       return false;
     }
   }
   // 扣碎片
-  for (const r in recipe.cost) {
-    const need = recipe.cost[r as EnemyRace] ?? 0;
+  for (const r in actualCost) {
+    const need = actualCost[r as EnemyRace] ?? 0;
     state.player.fragments[r as EnemyRace] -= need;
   }
   state.player.weaponEnchant = enchantId;
-  const costStr = Object.entries(recipe.cost).map(([r, n]) => `${n} ${r}`).join(" + ");
-  pushLog(state, `武器附魔：${ENCHANT_NAMES[enchantId]}（消耗 ${costStr} 碎片）。`, "win");
+  const costStr = Object.entries(actualCost).map(([r, n]) => `${n} ${r}`).join(" + ");
+  pushLog(state, `武器附魔：${ENCHANT_NAMES[enchantId]}（消耗 ${costStr} 碎片${discount ? " · 5 折" : ""}）。`, "win");
   // 铁匠铺是 map 节点，完成后回地图
   if (state.floorMap) {
     const cur = getNode(state.floorMap, state.floorMap.currentNodeId);
@@ -616,14 +632,21 @@ export function merchantTradeFragmentsMixed(
 }
 
 // 商人卖卡
+export const MERCHANT_SELLS_PER_VISIT = 2;
 export function merchantSellCard(state: GameState, cardUid: string, gainRace: EnemyRace): boolean {
   if (state.phase !== "floor_event" || state.activeEventId !== "merchant") return false;
+  const sold = state.merchantSellsThisVisit ?? 0;
+  if (sold >= MERCHANT_SELLS_PER_VISIT) {
+    pushLog(state, `本次拜访已卖 ${MERCHANT_SELLS_PER_VISIT} 张，无法继续。`, "system");
+    return false;
+  }
   const result = trySellCard(state, cardUid, gainRace);
   if (!result.ok) {
     pushLog(state, `卖卡失败：${result.reason}`, "system");
     return false;
   }
-  pushLog(state, `卖出卡牌 → ${gainRace} 碎片 +${result.gained}`, "player");
+  state.merchantSellsThisVisit = sold + 1;
+  pushLog(state, `卖出卡牌 → ${gainRace} 碎片 +${result.gained}（${state.merchantSellsThisVisit}/${MERCHANT_SELLS_PER_VISIT}）`, "player");
   return true;
 }
 
@@ -751,16 +774,25 @@ export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
       if (target.hp <= 0) { target.alive = false; log(`★ 击败 ${target.name}！`, "win"); }
     }
   } else if (suit === "diamond") {
-    // 影舞步：本回合敌人攻击全闪避（dodge_full_round）+ 下次攻击 hits ×3
+    // 影舞步：本回合敌人攻击全闪避 + 下次攻击三连击 + 敌人下回合停顿（不行动）
     player.statuses.push({ id: "dodge_full_round", name: "影舞步·闪避", stacks: 99, duration: 1 });
     player.statuses.push({ id: "triple_strike",   name: "影舞步·三连", stacks: 1,  duration: -1 });
-    log(`★♦ 影舞步！本回合 100% 闪避，下次攻击三连击。`, "win");
+    player.statuses.push({ id: "time_stop",       name: "时停",       stacks: 1,  duration: 1 });
+    log(`★♦ 影舞步！本回合 100% 闪避，下次攻击三连击，敌人下回合停顿。`, "win");
   } else if (suit === "heart") {
-    // 生命洪流：HP 回满 + 永久 maxHP +5
+    // 生命洪流：HP +50% maxHP + maxHP +3，整局限 3 次（强力但有上限）
+    const used = state.player.ultsUsed?.heart ?? 0;
+    if (used >= 3) {
+      log(`★♥ 生命洪流：整局限 3 次，已用完。`, "system");
+      return false;
+    }
+    const heal = Math.ceil(player.vitaMax * 0.5);
     const before = player.vita;
-    player.vitaMax += 5;
-    player.vita = player.vitaMax;
-    log(`★♥ 生命洪流！HP ${before} → ${player.vita}（maxHP +5）。`, "win");
+    player.vitaMax += 3;
+    player.vita = Math.min(player.vitaMax, player.vita + heal);
+    if (!state.player.ultsUsed) state.player.ultsUsed = { spade: 0, diamond: 0, heart: 0, club: 0 };
+    state.player.ultsUsed.heart++;
+    log(`★♥ 生命洪流！HP ${before} → ${player.vita}（+${heal}），maxHP +3。剩余 ${3 - state.player.ultsUsed.heart} 次。`, "win");
   } else if (suit === "club") {
     // 群体禁咒：全敌 +3 沉默 / +3 易伤 / +3 中毒
     for (const e of enemies) {
