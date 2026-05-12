@@ -1248,14 +1248,21 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   }
   // ♣ T1 魔法庇护：受击 -3（T2 已改为反应装甲，不再叠 -3）
   if (activeSuitD === "club" && suitTier(state, "club") >= 1) {
+    const before = dmg;
     dmg = Math.max(0, dmg - 3);
+    if (before > dmg) log(`♣ 魔法庇护：${before}→${dmg}。`, "player");
   }
 
   // 防具 onTakeDamage
   if (state.player.armors.length > 0) {
     const aDef = CARD_DB[state.player.armors[0].defId];
     const aEff = aDef.equipEffects![Math.min(state.player.armors.length, 4) - 1];
-    if (aEff.onTakeDamage) dmg = aEff.onTakeDamage(ctx, dmg);
+    if (aEff.onTakeDamage) {
+      const before = dmg;
+      dmg = aEff.onTakeDamage(ctx, dmg);
+      // 防具自己 log 的（如生命之冠 / 反伤甲）就不再覆盖；纯 -N 静默防具补 log
+      if (before > dmg) log(`${aDef.name}：受击 ${before}→${dmg}。`, "player");
+    }
   }
 
   // 特性 onTakeDamage（单一 effect，按 stacks 缩放）
@@ -1266,7 +1273,11 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     const pDef = CARD_DB[inst.defId];
     const cnt = state.player.perks.filter(p => p.defId === inst.defId).length;
     const eff = pDef.perkEffect;
-    if (eff?.onTakeDamage) dmg = eff.onTakeDamage(ctx, dmg, cnt);
+    if (eff?.onTakeDamage) {
+      const before = dmg;
+      dmg = eff.onTakeDamage(ctx, dmg, cnt);
+      if (before > dmg) log(`特性 ${pDef.name}：受击 ${before}→${dmg}。`, "player");
+    }
   }
 
   // 闪避姿态：伤害 ×0.7（原 ×0.5 = 减半 → 现 -30%）
