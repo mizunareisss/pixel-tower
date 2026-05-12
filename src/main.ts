@@ -1720,11 +1720,15 @@ function renderNotifBar() {
   const newEntries = state.log.slice(_logRenderedLen);
   _logRenderedLen = state.log.length;
   if (newEntries.length === 0) return;
+  // 取第一条 significant entry — 通常是动作横幅（"蝙蝠 连咬（2×3）"/"▶ 攻击 → 敌 -10"），比末尾的 outcome 详情（"你受到 3 伤"）更有信息量
+  // 但跳过纯描述性的 follow-up（"你受到 X 伤"/"护盾吸收 X"）这类伤害飘字已经表达过的内容
+  const FOLLOW_UP_PREFIXES = ["你受到", "护盾吸收"];
+  const isFollowUp = (msg: string) => FOLLOW_UP_PREFIXES.some(p => msg.startsWith(p));
   const significant = newEntries.filter(e => e.kind !== "system");
-  const entry = significant.length > 0
-    ? significant[significant.length - 1]
-    : newEntries[newEntries.length - 1];
-  showBattleToast(entry.msg, entry.kind);
+  const headline = significant.find(e => !isFollowUp(e.msg))
+    ?? significant[0]
+    ?? newEntries[newEntries.length - 1];
+  showBattleToast(headline.msg, headline.kind);
 }
 
 function showFloatDamage(enemyIdx: number, delta: number) {
