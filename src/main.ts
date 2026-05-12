@@ -101,6 +101,7 @@ let _isProcessingTurn = false;
 // 战斗 phase 转换追踪 — 用于触发入场/出场动画
 let _prevPhase: import("./types.ts").GamePhase | "" = "";
 let _battleExitInFlight = false;     // 出场动画播放中，render() 被锁，直到动画结束
+let _prevHandUids: Set<string> = new Set();  // 上一帧手牌 UID — 用于检测新增牌，加发牌动画
 
 // Touch detection: add .is-touch to body on first touchstart
 if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
@@ -273,12 +274,11 @@ function render() {
     showPhaseFlash("战斗开始");
   }
 
-  // 战斗入场动画：进入 battle phase 的那一帧给敌人卡 / 手牌 / 玩家卡加 enter class
+  // 战斗入场动画：进入 battle phase 的那一帧给敌人卡 / 玩家卡加 enter class
+  // 手牌 is-dealing 不在这里加 — renderHand 自动检测 UID 新增（_prevHandUids 对比）会给所有起手牌加发牌动画
   if (justEnteredBattle) {
     document.querySelectorAll<HTMLElement>("#enemies-row .enemy-card")
       .forEach(el => el.classList.add("is-entering"));
-    document.querySelectorAll<HTMLElement>("#active .hand-card")
-      .forEach(el => el.classList.add("is-dealing"));
     document.getElementById("player-card")?.classList.add("is-entering");
 
     // 战斗开始骰子先手动画：roll 1d6，单数玩家先手 / 双数敌人先手
@@ -3044,9 +3044,18 @@ function renderHand() {
   if (state.player.hand.length === 0) {
     handEl.innerHTML = '<p class="empty">手牌为空</p>';
   } else {
+    // 检测"新摸到"的牌（UID 在上一帧不存在）→ 加 is-dealing 类播发牌动画
+    // 战斗入场时所有手牌都视为新（_prevHandUids 还空着），同样触发动画
+    const currentUids = new Set<string>();
     for (const inst of state.player.hand) {
-      handEl.appendChild(renderHandCard(inst));
+      currentUids.add(inst.uid);
+      const el = renderHandCard(inst);
+      if (!_prevHandUids.has(inst.uid)) {
+        el.classList.add("is-dealing");
+      }
+      handEl.appendChild(el);
     }
+    _prevHandUids = currentUids;
   }
   $("active-count").textContent = `${state.player.hand.length}/10`;
   // 手牌 >4 时显示滑动提示（一屏大概 4-5 张，超过就需要滑）
@@ -3208,12 +3217,14 @@ function playEquipCard(def: import("./types.ts").CardDef, inst: CardInstance): v
   // 出牌前：克隆手牌卡到 body 层做飞行动画，使 render 可立即执行而动画照常播放
   const handCardEl = document.querySelector<HTMLElement>(`.hand-card[data-uid="${inst.uid}"]`);
   if (handCardEl) {
+    // ★ 重要：先把原卡上可能在跑的 is-dealing/is-entering 等"位置偏移"动画类清掉，
+    //   否则 getBoundingClientRect 会拿到带 transform 的偏移位置（is-dealing 用 backwards
+    //   fill 在 delay 期间 translateY(120px) opacity:0），导致克隆出现在屏幕外或不可见处，
+    //   玩家感觉"出牌不向上飞，原地消失"
+    handCardEl.classList.remove("is-dealing", "is-entering");
     const rect = handCardEl.getBoundingClientRect();
     const clone = handCardEl.cloneNode(true) as HTMLElement;
-    // 关键修复：cloneNode(true) 会复制 class list，如果用户在战斗入场动画进行中（is-dealing 类还在）
-    // 出牌，克隆会同时带 is-dealing 和 is-playing。CSS 后定义的 .hand-card.is-dealing 会覆盖
-    // .card.is-playing 的 animation，导致克隆播 battle-enter-hand（translateY 120→0，从下方升起），
-    // 视觉上变成"向下打出"。这里清掉所有入场/出场动画相关类，只保留 is-playing。
+    // 同样清掉 clone 的入场/出场动画类，只保留 is-playing
     clone.classList.remove("is-dealing", "is-collecting", "is-entering", "picked-card", "is-exiting");
     clone.style.position = "fixed";
     clone.style.left = `${rect.left}px`;
@@ -3735,7 +3746,7 @@ function escapeHTML(s: string) {
 // Keep hidden restart-btn listener for legacy compat
 $("restart-btn").addEventListener("click", () => {
   state = newGame();
-  _logRenderedLen = 0; _prevVita = -1; _prevEnemyHps = []; _prevTurn = -1; _isProcessingTurn = false;
+  _logRenderedLen = 0; _prevVita = -1; _prevEnemyHps = []; _prevTurn = -1; _isProcessingTurn = false; _prevHandUids = new Set();
   render();
 });
 
@@ -3781,7 +3792,7 @@ function openHamburger() {
       confirmLabel: "重开",
       onConfirm: () => {
         state = newGame();
-        _logRenderedLen = 0; _prevVita = -1; _prevEnemyHps = []; _prevTurn = -1; _isProcessingTurn = false;
+        _logRenderedLen = 0; _prevVita = -1; _prevEnemyHps = []; _prevTurn = -1; _isProcessingTurn = false; _prevHandUids = new Set();
         render();
       },
     });
