@@ -1770,6 +1770,12 @@ h2.lose::before { display: none; }
 .pcard-sum-sep { color: var(--gray-dim); opacity: 0.5; }
 .pcard-sum-perks { color: var(--purple); font-weight: 700; }
 .pcard-sum-arrow { margin-left: auto; color: var(--gray-dim); font-size: 14px; line-height: 1; }
+/* 武器 / 防具数值高亮 */
+.pcard-sum-stat {
+  color: var(--gold);
+  font-weight: 900;
+  margin: 0 2px;
+}
 .pcard-sum-wep, .pcard-sum-arm {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2478,6 +2484,23 @@ h2.lose::before { display: none; }
 
 .status-info-body { padding: 14px; }
 .status-info-desc { color: var(--white); font-size: 13px; line-height: 1.6; margin-bottom: 10px; }
+/* 当前生效数值高亮（点开 status 弹窗里）*/
+.status-info-effective {
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: rgba(245, 197, 24, 0.10);
+  border-left: 3px solid var(--yellow);
+  color: #f0d878;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+/* desc 里 stacks 替换后高亮 */
+.status-val {
+  color: var(--yellow);
+  font-weight: 900;
+  padding: 0 2px;
+}
 .status-info-stats {
   display: flex; gap: 16px; font-size: 12px; color: var(--gray);
   border-top: 1px solid var(--border); padding-top: 8px;
@@ -4471,6 +4494,10 @@ body.is-touch button:hover:not(:disabled) {
   gap: 8px;
   padding: 10px;
   background: rgba(20, 20, 26, 0.4);
+}
+/* 折叠状态：必须用 !important 压住上面的 display: grid（[hidden] 属性的默认 display: none 被覆盖了）*/
+.forge-suit-body[hidden] {
+  display: none !important;
 }
 
 /* Lv 徽章 — 当前附魔旁边 + 卡片头部 */
