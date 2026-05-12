@@ -333,6 +333,6 @@ export const NODE_TYPE_META: Record<MapNodeType, { icon: string; label: string; 
   boss:   { icon: "👑", label: "BOSS",     color: "#ffd460" },
   event:  { icon: "🎲", label: "随机事件", color: "#9b59b6" },
   forge:  { icon: "⚒",  label: "铁匠铺",   color: "#f5c518" },
-  shop:   { icon: "💎", label: "商店",     color: "#4db84d" },
+  shop:   { icon: "🛒", label: "商店",     color: "#4db84d" },
 };
 

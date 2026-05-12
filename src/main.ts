@@ -3359,8 +3359,14 @@ function showEventResultModal(): void {
     const def = CARD_DB[er.cardId];
     if (def) {
       const rarity = def.rarity ?? "common";
+      // 花色角标：跟手牌 / 战利品 modal 一致 — attack→attackSuit, equipment→equipSuit, perk→defaultSuit
+      const suit = def.attackSuit ?? def.equipSuit ?? def.defaultSuit;
+      const suitTag = suit
+        ? `<span class="card-suit-corner${isRedSuit(suit) ? " red" : ""}">${SUIT_SYMBOLS[suit]}</span>`
+        : "";
       cardHtml = `
-        <div class="er-card-preview cat-${def.category} rarity-${rarity}">
+        <div class="er-card-preview cat-${def.category} rarity-${rarity}"${suit ? ` data-suit="${SUIT_SYMBOLS[suit]}"` : ""}>
+          ${suitTag}
           <div class="er-card-action">${er.cardChange === "gained" ? "+ 加入牌库" : "- 失去"}</div>
           <div class="er-card-name">${escapeHTML(def.name)}</div>
           <div class="er-card-cat">${categoryLabel(def.category)} · ${rarityLabel(rarity)}</div>
