@@ -344,6 +344,10 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
     // F9 / F12 boss 由 buildFixedBoss 单独覆写
   }
 
+  // 暴击 / 闪避（按 tier × floor 线性，F12 达 cap）
+  const critChance = enemyBaseCritChance(tier, opts.floor);
+  const dodgeChance = enemyBaseDodgeChance(tier, opts.floor);
+
   return {
     id: newEnemyId(name),
     name,
@@ -360,7 +364,22 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
     tier,
     eliteAbility,
     ai,
+    critChance: critChance > 0 ? critChance : undefined,
+    dodgeChance: dodgeChance > 0 ? dodgeChance : undefined,
   };
+}
+
+// 敌人基础暴击率（百分点）：精英 cap 15 / boss cap 25，按 floor 线性
+function enemyBaseCritChance(tier: "normal" | "elite" | "boss", floor: number): number {
+  if (tier === "normal") return 0;
+  const cap = tier === "boss" ? 25 : 15;
+  return Math.min(cap, Math.round(floor / 12 * cap));
+}
+// 敌人基础闪避率（百分点）：精英 cap 9 / boss cap 15
+function enemyBaseDodgeChance(tier: "normal" | "elite" | "boss", floor: number): number {
+  if (tier === "normal") return 0;
+  const cap = tier === "boss" ? 15 : 9;
+  return Math.min(cap, Math.round(floor / 12 * cap));
 }
 
 // ─────────────────────────────────────────────────────────

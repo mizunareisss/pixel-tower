@@ -554,6 +554,10 @@ export interface EnemyState {
   weaponMult?: number;     // 武器倍率（第 4 关起显示）
   tier?: "normal" | "elite" | "boss";  // 战斗强度档：精英/Boss 在 UI 上特殊呈现
   eliteAbility?: string;    // 精英特能名称（显示用）
+  // 暴击 / 闪避（buildRandomEnemy 时按 tier × floor 计算，存基础值；
+  //   实战通过 getEnemyCritChance / getEnemyDodgeChance 减去 poison / bleed penalty）
+  critChance?: number;     // 基础暴击率（百分点），精英 cap 15 / boss cap 25
+  dodgeChance?: number;    // 基础闪避率（百分点），精英 cap 9 / boss cap 15
   // 共鸣咒：保存原始花色，4 回合后回归
   originalSuit?: Suit;
   // Boss AI 行为流派（精英 + boss 装备），普通敌人不带；详见 bossAI.ts

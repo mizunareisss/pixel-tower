@@ -43,7 +43,7 @@ import {
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
 import { ABILITY_DESCS } from "./enemies.ts";
-import { getCurrentDodgeChance, getSuitAffinity, suitTier, getActiveSpecialty, getDisplayedSpecialty, getTiedSpecialties } from "./battle.ts";
+import { getCurrentDodgeChance, getSuitAffinity, suitTier, getActiveSpecialty, getDisplayedSpecialty, getTiedSpecialties, getEnemyCritChance, getEnemyDodgeChance } from "./battle.ts";
 import {
   EVENT_META, MERCHANT_PRICES, MERCHANT_SELL_PRICES, GAMBLER_OPTIONS, SHRINE_OPTIONS, CHEST_TRAP_DESCS,
 } from "./events.ts";
@@ -1125,6 +1125,17 @@ function renderEnemy(e: EnemyState, idx: number): HTMLElement {
     ? `<span class="ec-equip" title="持有武器（攻击倍率 ×${e.weaponMult!.toFixed(1)}）">⚔×${e.weaponMult!.toFixed(1)}</span>` : "";
   const armorBadge = (e.armor ?? 0) > 0
     ? `<span class="ec-equip armor" title="护甲 ${e.armor}">🛡${e.armor}</span>` : "";
+  // 暴击 / 闪避徽章（当前值 = base - DOT 削减；0 不显示）
+  const critNow = getEnemyCritChance(e);
+  const critBase = e.critChance ?? 0;
+  const critBadge = critNow > 0
+    ? `<span class="ec-equip crit" title="暴击率 ${critNow}%（基础 ${critBase}% − 中毒削减 ${critBase - critNow}%）暴击伤害 ×1.5">★${critNow}%</span>`
+    : "";
+  const dodgeNow = getEnemyDodgeChance(e);
+  const dodgeBase = e.dodgeChance ?? 0;
+  const dodgeBadge = dodgeNow > 0
+    ? `<span class="ec-equip dodge" title="闪避率 ${dodgeNow}%（基础 ${dodgeBase}% − 出血削减 ${dodgeBase - dodgeNow}%）每 hit 单独 roll">🎯${dodgeNow}%</span>`
+    : "";
 
   // tier 缩写（左上角标右下角）— 像扑克牌左上 + 右下对角花色
   const tierMark = tier === "boss" ? "B" : tier === "elite" ? "E" : "";
@@ -1163,6 +1174,8 @@ function renderEnemy(e: EnemyState, idx: number): HTMLElement {
       <span class="ec-race" title="${RACE_NAMES[e.race]} · 击败掉 ${FRAGMENT_NAMES[e.race]} 1 枚">${FRAGMENT_ICONS[e.race]}${RACE_NAMES[e.race]}</span>
       ${weaponBadge}
       ${armorBadge}
+      ${critBadge}
+      ${dodgeBadge}
       ${e.eliteAbility ? `<span class="ec-ability" title="${escapeHTML(ABILITY_DESCS[e.eliteAbility] ?? "")}">★${escapeHTML(e.eliteAbility)}</span>` : ""}
     </div>
     ${hpBar}

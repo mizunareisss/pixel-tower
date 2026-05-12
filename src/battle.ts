@@ -730,6 +730,13 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
   const weaponId = state.player.weapons[0]?.defId;
   for (let i = 0; i < hits; i++) {
     if (!target.alive) break;
+    // 敌人闪避（per-hit）：精英 cap 9% / boss cap 15%；出血 -5%/层 cap -50%
+    // 闪避不消耗玩家 buff（calcAttackDamage 不调用，sharpened / charge 留给下一 hit）
+    const enemyDodge = getEnemyDodgeChance(target);
+    if (enemyDodge > 0 && Math.random() * 100 < enemyDodge) {
+      log(`✗ ${target.name} 闪避（${enemyDodge}%）！`, "enemy");
+      continue;
+    }
     const dmg = calcAttackDamage(state, baseSuit, log);
     log(`▶ 攻击 ${SUIT_SYMBOLS[def.attackSuit!]} → ${target.name} -${dmg}。`, "player");
     target.hp = Math.max(0, target.hp - dmg);
@@ -1088,15 +1095,32 @@ export function getCurrentDodgeChance(player: PlayerState, state?: BattleState):
 // ─────────────────────────────────────────────────────────
 // DOT 副作用：中毒削暴击 / 出血削闪避（百分点）
 // ─────────────────────────────────────────────────────────
-// 玩家中毒：暴击率 -stacks × 3%（cap -30 百分点）
+// 玩家中毒：暴击率 -stacks × 5%（cap -50 百分点）— 调整：3% → 5% / 30 → 50（双向通用）
 export function getPoisonCritPenalty(player: PlayerState): number {
   const p = player.statuses.find(s => s.id === "poison");
-  return p ? Math.min(30, p.stacks * 3) : 0;
+  return p ? Math.min(50, p.stacks * 5) : 0;
 }
 // 玩家出血：闪避率 -stacks × 5%（cap -50 百分点）
 export function getBleedDodgePenalty(player: PlayerState): number {
   const b = player.statuses.find(s => s.id === "bleed");
   return b ? Math.min(50, b.stacks * 5) : 0;
+}
+
+// 敌人当前暴击率（百分点）：基础 - 中毒 5%/层（cap -50）
+export function getEnemyCritChance(enemy: EnemyState): number {
+  const base = enemy.critChance ?? 0;
+  if (base <= 0) return 0;
+  const p = enemy.statuses.find(s => s.id === "poison");
+  const penalty = p ? Math.min(50, p.stacks * 5) : 0;
+  return Math.max(0, base - penalty);
+}
+// 敌人当前闪避率（百分点）：基础 - 出血 5%/层（cap -50）
+export function getEnemyDodgeChance(enemy: EnemyState): number {
+  const base = enemy.dodgeChance ?? 0;
+  if (base <= 0) return 0;
+  const b = enemy.statuses.find(s => s.id === "bleed");
+  const penalty = b ? Math.min(50, b.stacks * 5) : 0;
+  return Math.max(0, base - penalty);
 }
 
 // 完全闪避后的统一处理：附魔触发 + 风行步连锁
@@ -1454,15 +1478,20 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
         value = Math.round(value * 1.3);
         log(`${enemy.name} 嗜血发动：${orig} → ${value}。`, "enemy");
       }
-      // 特能修饰：致命一击（30% 暴击 ×1.5）
-      if (enemy.eliteAbility === "致命一击" && Math.random() < 0.3) {
-        const orig = value;
-        value = Math.round(value * 1.5);
-        log(`${enemy.name} 致命一击！${orig} → ${value}。`, "enemy");
-      }
+      // 暴击率合并：基础 + 致命一击 +30%（cap 50）
+      const baseCrit = getEnemyCritChance(enemy);
+      const fatalBonus = enemy.eliteAbility === "致命一击" ? 30 : 0;
+      const critChance = Math.min(50, baseCrit + fatalBonus);
       const hits = intent.hits ?? 1;
       for (let i = 0; i < hits; i++) {
-        damagePlayer(state, value, log, enemy);
+        let hitValue = value;
+        // Per-hit 暴击 roll
+        if (critChance > 0 && Math.random() * 100 < critChance) {
+          const orig = hitValue;
+          hitValue = Math.round(hitValue * 1.5);
+          log(`★ ${enemy.name} 暴击！${orig} → ${hitValue}（${critChance}%）`, "enemy");
+        }
+        damagePlayer(state, hitValue, log, enemy);
         if (state.player.vita <= 0) break;
       }
     } else if (intent.type === "buff") {
@@ -1621,7 +1650,7 @@ export function endPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) 
   if (playerPoison && playerPoison.stacks > 0) {
     const dmg = Math.max(1, Math.ceil(state.player.vitaMax * 0.01 * playerPoison.stacks));
     state.player.vita = Math.max(0, state.player.vita - dmg);
-    log(`你中毒 -${dmg} HP（${playerPoison.stacks}× 1% maxHP；暴击 -${Math.min(30, playerPoison.stacks * 3)}%）。`, "enemy");
+    log(`你中毒 -${dmg} HP（${playerPoison.stacks}× 1% maxHP；暴击 -${Math.min(50, playerPoison.stacks * 5)}%）。`, "enemy");
     playerPoison.stacks--;
     if (playerPoison.stacks <= 0) state.player.statuses = state.player.statuses.filter(s => s.id !== "poison");
   }

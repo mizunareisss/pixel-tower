@@ -1506,6 +1506,18 @@ h2.lose::before { display: none; }
   background: rgba(74,144,217,0.12);
   border-color: rgba(74,144,217,0.3);
 }
+/* 暴击徽章 — 橙红，警示玩家这一击可能暴击 */
+.ec-equip.crit {
+  color: #ff8060;
+  background: rgba(255, 100, 70, 0.14);
+  border-color: rgba(255, 120, 80, 0.45);
+}
+/* 闪避徽章 — 青绿，玩家攻击有概率打空 */
+.ec-equip.dodge {
+  color: #6fd8b0;
+  background: rgba(100, 200, 160, 0.12);
+  border-color: rgba(120, 210, 170, 0.4);
+}
 .ec-ability {
   color: #ffb060;
   background: rgba(255,140,40,0.12);
