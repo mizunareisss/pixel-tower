@@ -9,8 +9,8 @@ import {
   pickStarterPerk,
   gamePlayCard,
   gameSelectTarget,
-  gameEndTurn,
-  gameEnemyFirstStrike,
+  gameEndTurnAnimated,
+  gameEnemyFirstStrikeAnimated,
   gameDiscardWeapons,
   gameDiscardArmors,
   pickRewardCard,
@@ -39,6 +39,7 @@ import {
   wizardPick,
   chestOpen,
   discardHandCards,
+  confirmForceDiscard,
   enterMapNode,
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
@@ -236,6 +237,13 @@ function render() {
     document.getElementById("epic-replace-overlay")?.remove();
   }
 
+  // 强制弃牌 modal：drawCards 溢出时 pendingDraws 非空 → 玩家从手牌选 K 张弃牌让位
+  if (state.phase === "battle" && state.battle && (state.player.pendingDraws?.length ?? 0) > 0) {
+    if (!document.getElementById("force-discard-overlay")) showForceDiscardModal();
+  } else {
+    document.getElementById("force-discard-overlay")?.remove();
+  }
+
   // Player took damage → vita float + 受击动效
   if (_prevVita >= 0 && snapVita < _prevVita) {
     showFloatDamagePlayer(_prevVita - snapVita);
@@ -330,12 +338,16 @@ function showDiceRoll(finalRoll: number): void {
           if (r) r.style.display = "flex";
         }, 200);
         // 750ms 淡出 + 触发敌人先手（如果是双数）
-        setTimeout(() => {
+        setTimeout(async () => {
           overlay.classList.add("fade-out");
           handle.dispose();
           setTimeout(() => overlay.remove(), 240);
           if (enemyFirst) {
-            gameEnemyFirstStrike(state);
+            // 骰子双数敌人先手 — 用动画版本，让多动 boss 一击一击演给玩家看
+            await gameEnemyFirstStrikeAnimated(state, async () => {
+              render();
+              await sleep(900);
+            });
             render();
           }
         }, 750);
@@ -854,19 +866,28 @@ function renderBattle() {
   const summaryBtn = document.getElementById("pcard-summary-btn") as HTMLButtonElement | null;
   if (summaryBtn) {
     const wep = state.player.weapons[0];
-    const wepSuit = wep ? SUIT_SYMBOLS[CARD_DB[wep.defId].equipSuit!] ?? "" : "";
+    const wepDef = wep ? CARD_DB[wep.defId] : null;
+    const wepStack = state.player.weapons.length;
+    const wepSuit = wepDef ? SUIT_SYMBOLS[wepDef.equipSuit!] ?? "" : "";
+    // 当前 stack 档的 stat（含"X 伤 / X 伤 破N / X 伤 hits×2"等）
+    const wepStat = wepDef?.equipEffects?.[Math.min(wepStack, 4) - 1]?.stat ?? "";
     const wepText = wep
-      ? `⚔ ${CARD_DB[wep.defId].name}×${state.player.weapons.length}${wepSuit}${state.player.weaponEnchant ? " ⚒" : ""}`
+      ? `⚔ <b class="pcard-sum-stat">${escapeHTML(wepStat)}</b> ${escapeHTML(wepDef!.name)}×${wepStack}${wepSuit}${state.player.weaponEnchant ? " ⚒" : ""}`
       : "⚔ 徒手";
     const arm = state.player.armors[0];
-    const armSuit = arm ? SUIT_SYMBOLS[CARD_DB[arm.defId].equipSuit!] ?? "" : "";
-    const armText = arm ? `🛡 ${CARD_DB[arm.defId].name}×${state.player.armors.length}${armSuit}` : "🛡 无";
+    const armDef = arm ? CARD_DB[arm.defId] : null;
+    const armStack = state.player.armors.length;
+    const armSuit = armDef ? SUIT_SYMBOLS[armDef.equipSuit!] ?? "" : "";
+    const armStat = armDef?.equipEffects?.[Math.min(armStack, 4) - 1]?.stat ?? "";
+    const armText = arm
+      ? `🛡 <b class="pcard-sum-stat">${escapeHTML(armStat)}</b> ${escapeHTML(armDef!.name)}×${armStack}${armSuit}`
+      : "🛡 无";
     const perkCount = state.player.perks.length;
     summaryBtn.innerHTML = `
       <span class="pcard-sum-icon">📋</span>
-      <span class="pcard-sum-wep">${escapeHTML(wepText)}</span>
+      <span class="pcard-sum-wep">${wepText}</span>
       <span class="pcard-sum-sep">·</span>
-      <span class="pcard-sum-arm">${escapeHTML(armText)}</span>
+      <span class="pcard-sum-arm">${armText}</span>
       <span class="pcard-sum-sep">·</span>
       <span class="pcard-sum-perks">✦ ${perkCount}</span>
       <span class="pcard-sum-arrow">›</span>
@@ -932,12 +953,16 @@ async function handleEndTurn() {
   await sleep(600);
   banner.remove();
 
-  // Apply actions; render triggers damage float animations
-  gameEndTurn(state);
+  // 应用敌人回合 — 多动 / DoT 之间间隔 900ms，让玩家看清每一击
+  // onStep 在每个敌人 step（DoT 段 / 每次行动）之后调用
+  await gameEndTurnAnimated(state, async () => {
+    render();
+    await sleep(900);
+  });
   render();
 
-  // Hold 900 ms so damage floats complete before "你的回合" flash
-  await sleep(900);
+  // Hold 700 ms so damage floats complete before "你的回合" flash
+  await sleep(700);
 
   handEl.classList.remove("is-processing");
   if (state.phase === "battle") {
@@ -1283,7 +1308,7 @@ const STATUS_ICONS: Record<string, string> = {
   weapon_buff: "💪", shield_block: "🛡", shadow_double: "👥", heavy_strike: "💥",
   counter_stance: "🪞", frenzy: "💢", charged: "⚡", no_attack: "🚫",
   // 新加装备触发
-  knight_charge: "⚡", scepter_clubs: "🔮",
+  knight_charge: "⚡",
   combat_rhythm: "🥁", time_stop: "⏸",
   smoke_dodge: "💨", guaranteed_dodge: "🌟", pierce_next: "🎯",
   phantom_charge: "👤", echo: "🔁",
@@ -1327,7 +1352,7 @@ const DEFENSIVE_CHIPS: DefChipDef[] = [
     tooltip: () => `闪避姿态：本回合受到的伤害减半（点击详情）` },
   { id: "dodge_full_round", icon: "✨", variant: "dodge",
     label: () => "100%",
-    tooltip: () => `影舞步：本回合敌人攻击全闪避（点击详情）` },
+    tooltip: () => `影子杀手：本回合敌人攻击全闪避（点击详情）` },
   { id: "guaranteed_dodge", icon: "🌟", variant: "dodge",
     label: () => "",
     tooltip: () => `必闪：下次受击 100% 闪避（一次性）` },
@@ -1382,6 +1407,68 @@ function renderStatusTag(s: StatusEffect): string {
   return `<span class="status-tag k-${kind}" data-status-id="${escapeHTML(s.id)}" data-status-stacks="${s.stacks}" data-status-duration="${s.duration}" title="${escapeHTML(name)}：${escapeHTML(tooltip)}（点击查看详情）"><span class="status-icon">${icon}</span>${stacksTxt ? `<span class="status-stacks">${stacksTxt}</span>` : ""}</span>`;
 }
 
+// 根据 status id + stacks 计算"当前生效"具体数值（针对玩家身上的 status）
+function computeStatusEffectiveText(id: string, stacks: number): string | null {
+  const p = state.player;
+  switch (id) {
+    case "poison": {
+      const dmg = Math.max(1, Math.ceil(p.vitaMax * 0.01 * stacks));
+      const crit = Math.min(50, stacks * 5);
+      return `每回合扣 ${dmg} HP（${stacks}% maxHP），暴击率 -${crit}%`;
+    }
+    case "burn": {
+      const dmg = Math.max(1, Math.ceil(p.vitaMax * 0.02 * stacks));
+      return `每回合扣 ${dmg} HP（${stacks * 2}% maxHP）`;
+    }
+    case "bleed": {
+      const dmg = Math.max(1, Math.floor(p.vita * 0.05 * stacks));
+      const dodge = Math.min(50, stacks * 5);
+      return `每回合扣 ${dmg} HP（${stacks * 5}% 当前 HP），闪避率 -${dodge}%`;
+    }
+    case "weak":            return "攻击伤害 ×0.7（-30% 固定）";
+    case "vulnerable":      return "受到伤害 ×1.3（+30% 固定）";
+    case "frozen":          return "攻击 ×0.8（-20%）+ 多动时仅 1 动";
+    case "fear":            return "攻击 ×0.5（-50%）+ 多动时仅 1 动";
+    case "battle_cry":      return "本回合所有攻击 +3 伤";
+    case "sharpened":       return "下次攻击 ×1.5";
+    case "shield_block":    return `下次受击 -${stacks} 伤害（吸收上限）`;
+    case "phalanx_dr":      return `本回合每次受击 -${stacks} 伤害`;
+    case "shadow_double":   return "下次攻击多打 1 hit";
+    case "triple_strike":   return "下次攻击 hits ×3";
+    case "evasive":         return "本回合受伤 ×0.7（-30%）";
+    case "smoke_dodge":
+    case "swift_dodge_temp": return `闪避率 +${stacks}%`;
+    case "guaranteed_dodge": return "下次受击 100% 闪避";
+    case "dodge_full_round": return "本回合敌人攻击全部闪避";
+    case "counter_stance":   return "本回合受击反弹 50% 给攻击者";
+    case "weapon_buff":      return `本场战斗武器 +${stacks} 伤`;
+    case "blood_pact":       return "本回合攻击吸血 +20%";
+    case "arcane_burst":     return "本回合每张非攻击牌使下张攻击 +3";
+    case "brew_regen":       return `每回合开始 +${stacks} HP`;
+    case "frenzy":           return `下次攻击 +${stacks * 2} 直伤（攻击 +1 层）`;
+    case "knight_charge":    return `下次攻击 +${stacks * 3}~${stacks * 6} 直伤（按骑士铠 stack）`;
+    case "warblood_perm_atk": return `永久攻击 +${stacks}`;
+    case "blood_pact_charge": return `下次攻击 +${stacks} 直伤`;
+    case "calc_charge":      return `下次攻击 +${stacks} × N（按法师杖 / 算计 / 凝神 / 奥术爆裂）`;
+    case "pierce_bonus":     return `下次攻击 +${stacks} pierce`;
+    case "pierce_perm":      return `武器 +${stacks} pierce（剩余持续时间）`;
+    case "next_atk_apply_poison": return `下次攻击命中给目标 +${stacks} 中毒`;
+    case "next_atk_apply_bleed":  return `下次攻击命中给目标 +${stacks} 出血（2 回合）`;
+    case "time_stop":        return "敌人下回合无法行动";
+    case "combat_rhythm":    return "本回合每张牌后 +1 摸";
+    case "phantom_charge":   return "下次攻击 ×N（幻影附魔 Lv 决定）";
+    case "echo":             return "本回合每张非攻击牌复制一份";
+    case "enc_runic_immune": return "下次首次受击：免疫或 -50%（按 Lv）";
+    case "enc_dot_immune":   return "中毒 / 燃烧 / 出血对你无效";
+    // 敌人 buff intent 触发
+    case "temp_armor":       return `本回合敌人护甲 +${stacks}`;
+    case "enemy_atk_buff":   return `敌人下次攻击 +${stacks} 伤害`;
+    case "enemy_next_hits":  return `敌人下次攻击 +${stacks} hits`;
+    case "enemy_sacrifice":  return `敌人下次攻击 +${stacks}% 伤害`;
+  }
+  return null;
+}
+
 // 状态详情弹窗
 function showStatusInfo(id: string, stacks: number, duration: number) {
   if (document.getElementById("status-info-overlay")) return;
@@ -1393,6 +1480,13 @@ function showStatusInfo(id: string, stacks: number, duration: number) {
     duration === -1 ? "永久（手动消耗或战斗结束清除）" :
     duration > 0   ? `${duration} 回合后到期` :
                      "立即结算";
+  // desc 内的 "stacks" 字面替换成实际数值（高亮）
+  const renderedDesc = escapeHTML(meta.desc)
+    .replace(/\n/g, "<br>")
+    .replace(/\bstacks\b/g, `<b class="status-val">${stacks}</b>`);
+  // 实际生效数值（针对玩家身上的 status，按当前玩家 maxHP / HP 计算）
+  const effective = computeStatusEffectiveText(id, stacks);
+
   overlay.innerHTML = `
     <div id="status-info-modal" class="k-${meta.kind}">
       <div class="status-info-header">
@@ -1400,7 +1494,8 @@ function showStatusInfo(id: string, stacks: number, duration: number) {
         <button id="status-info-close">✕</button>
       </div>
       <div class="status-info-body">
-        <p class="status-info-desc">${escapeHTML(meta.desc)}</p>
+        <p class="status-info-desc">${renderedDesc}</p>
+        ${effective ? `<div class="status-info-effective">★ 当前生效：${effective}</div>` : ""}
         <div class="status-info-stats">
           <span><b>当前层数：</b>×${stacks}</span>
           <span><b>持续：</b>${durationText}</span>
@@ -1630,11 +1725,13 @@ function renderBattleVictory() {
 // ─────────────────────────────────────────────────────────
 
 function renderRewardCard() {
+  const isBossBonus = state.choices.length >= 4;
   stageEl.innerHTML = `
-    <p class="hint">选中的牌会进入你的牌库（不是手牌）。</p>
+    <p class="hint">${isBossBonus ? "★ Boss 战利品：额外掉落一张史诗，4 选 1。" : "选中的牌会进入你的牌库（不是手牌）。"}</p>
   `;
   const grid = document.createElement("div");
-  grid.className = "choice-grid cols-3";
+  // 4 张时改 2×2 网格，避免 cols-3 的 3+1 错位
+  grid.className = isBossBonus ? "choice-grid cols-2" : "choice-grid cols-3";
   for (const inst of state.choices) {
     grid.appendChild(renderChoiceCardEl(inst, () => {
       animateChoicePick(grid, inst.uid, () => { pickRewardCard(state, inst.uid); render(); });
@@ -1948,22 +2045,11 @@ function pickRecolorTargetSuit(cardUid: string, currentSuit: Suit): void {
     btn.textContent = sym;
     btn.addEventListener("click", () => {
       overlay.remove();
-      // 自动从库存最多的种族扣 3 个
-      const races: import("./types.ts").EnemyRace[] = ["beast", "humanoid", "undead", "giant", "dark"];
-      const sorted = [...races].sort((a, b) => (state.player.fragments[b] ?? 0) - (state.player.fragments[a] ?? 0));
-      const paySpend: Partial<Record<import("./types.ts").EnemyRace, number>> = {};
-      let need = 3;
-      for (const r of sorted) {
-        if (need <= 0) break;
-        const have = state.player.fragments[r] ?? 0;
-        const take = Math.min(have, need);
-        if (take > 0) {
-          paySpend[r] = take;
-          need -= take;
-        }
-      }
-      if (need > 0) return;
-      if (applyForgeRecolor(state, cardUid, suit as Suit, paySpend)) render();
+      // 第 3 步：玩家手选碎片支付（复用 showMixedPaymentModal）
+      const cardName = `${def?.name ?? "攻击牌"} ${SUIT_SYMBOLS[currentSuit]} → ${SUIT_SYMBOLS[suit as Suit]}`;
+      showMixedPaymentModal(3, `染色：${cardName}`, paySpend => {
+        if (applyForgeRecolor(state, cardUid, suit as Suit, paySpend)) render();
+      });
     });
     grid.appendChild(btn);
   }
@@ -3102,6 +3188,97 @@ function showEpicReplacementModal(): void {
   document.body.appendChild(overlay);
 }
 
+// 强制弃牌 modal：drawCards / 复读机克隆 溢出时弹出
+// 显示 pendingDraws（新摸到的牌，必须接收）+ hand（玩家手选 K 张弃掉）
+function showForceDiscardModal(): void {
+  const pending = state.player.pendingDraws ?? [];
+  if (pending.length === 0) return;
+  const K = pending.length;
+
+  const overlay = document.createElement("div");
+  overlay.id = "force-discard-overlay";
+  overlay.className = "ic-overlay";
+
+  // 渲染新摸到的牌（只读、可悬停看 desc）
+  const pendingHtml = pending.map(inst => {
+    const def = CARD_DB[inst.defId];
+    const rarity = def.rarity ?? "common";
+    const suit = def.attackSuit ?? def.equipSuit ?? def.defaultSuit;
+    const suitTag = suit ? `<span class="card-suit-corner${isRedSuit(suit) ? " red" : ""}">${SUIT_SYMBOLS[suit]}</span>` : "";
+    return `
+      <div class="fd-card cat-${def.category} rarity-${rarity}">
+        ${suitTag}
+        <div class="card-name">${escapeHTML(def.name)}</div>
+        <div class="card-desc">${escapeHTML(def.desc)}</div>
+      </div>
+    `;
+  }).join("");
+
+  // 渲染手牌（可点选）
+  const handHtml = state.player.hand.map(inst => {
+    const def = CARD_DB[inst.defId];
+    const rarity = def.rarity ?? "common";
+    const suit = def.attackSuit ?? def.equipSuit ?? def.defaultSuit;
+    const suitTag = suit ? `<span class="card-suit-corner${isRedSuit(suit) ? " red" : ""}">${SUIT_SYMBOLS[suit]}</span>` : "";
+    return `
+      <button class="fd-card cat-${def.category} rarity-${rarity}" data-pick-uid="${inst.uid}">
+        ${suitTag}
+        <div class="card-name">${escapeHTML(def.name)}</div>
+        <div class="card-desc">${escapeHTML(def.desc)}</div>
+      </button>
+    `;
+  }).join("");
+
+  overlay.innerHTML = `
+    <div class="ic-modal force-discard-modal">
+      <div class="ic-title">⚠ 手牌已满 · 强制弃牌</div>
+      <div class="fd-tip">手牌已达 ${state.player.hand.length} / 10，新摸到 ${K} 张需要让位。请从手牌中选 <b>${K}</b> 张弃掉。</div>
+      <div class="fd-section-title">新摸到的牌（${K}）</div>
+      <div class="fd-grid fd-pending">${pendingHtml}</div>
+      <div class="fd-section-title fd-hand-title">从手牌选 <span class="fd-count">0</span> / ${K} 张弃掉</div>
+      <div class="fd-grid fd-hand">${handHtml}</div>
+      <div class="ic-actions">
+        <button class="ic-confirm" disabled>确认弃牌（0 / ${K}）</button>
+      </div>
+    </div>
+  `;
+
+  const selected = new Set<string>();
+  const countEl = overlay.querySelector(".fd-count")!;
+  const confirmBtn = overlay.querySelector<HTMLButtonElement>(".ic-confirm")!;
+
+  function refresh() {
+    countEl.textContent = String(selected.size);
+    confirmBtn.textContent = `确认弃牌（${selected.size} / ${K}）`;
+    confirmBtn.disabled = selected.size !== K;
+  }
+
+  overlay.querySelectorAll<HTMLButtonElement>("[data-pick-uid]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.pickUid!;
+      if (selected.has(uid)) {
+        selected.delete(uid);
+        btn.classList.remove("fd-selected");
+      } else {
+        if (selected.size >= K) return;  // 已选满
+        selected.add(uid);
+        btn.classList.add("fd-selected");
+      }
+      refresh();
+    });
+  });
+
+  confirmBtn.addEventListener("click", () => {
+    if (selected.size !== K) return;
+    if (confirmForceDiscard(state, Array.from(selected))) {
+      overlay.remove();
+      render();
+    }
+  });
+
+  document.body.appendChild(overlay);
+}
+
 // 出牌动效路由：根据卡的 category/target/id 决定播什么动效
 function triggerCardAnimation(def: import("./types.ts").CardDef, targetIdx: number): void {
   // 用 setTimeout 而非 rAF — 后者在隐藏标签页里不触发
@@ -3313,7 +3490,7 @@ function renderChoiceCardEl(inst: CardInstance, onClick: () => void): HTMLElemen
 }
 
 function rarityLabel(r: string): string {
-  return ({ common: "普通", rare: "稀有", super_rare: "超稀有", epic: "史诗" } as Record<string,string>)[r] ?? r;
+  return ({ common: "普通", rare: "稀有", rare_plus: "稀有+", super_rare: "超稀有", epic: "史诗" } as Record<string,string>)[r] ?? r;
 }
 
 // ─────────────────────────────────────────────────────────

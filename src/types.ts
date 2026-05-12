@@ -12,39 +12,39 @@ export function isRedSuit(s: Suit): boolean {
   return s === "diamond" || s === "heart";
 }
 
-// 花色专精档位名 + 大招名（4 字短语）
+// 花色专精档位名 + 大招名（XLSX 新版）
 export const SUIT_TIER_NAMES: Record<Suit, { tier1: string; tier2: string; tier3: string; ult: string }> = {
-  spade:   { tier1: "锋锐怒涛", tier2: "破甲狂攻", tier3: "斩魂蓄势", ult: "狂战之击" },
-  diamond: { tier1: "灵动闪步", tier2: "灵巧连击", tier3: "幻影成形", ult: "影舞步" },
-  heart:   { tier1: "生机涌动", tier2: "绝境吸血", tier3: "生命之泉", ult: "生命洪流" },
-  club:    { tier1: "魔法庇护", tier2: "护体真言", tier3: "禁咒蓄能", ult: "群体禁咒" },
+  spade:   { tier1: "锋锐怒涛", tier2: "破甲黑刃", tier3: "斩魂蓄势", ult: "狂战之击" },
+  diamond: { tier1: "疾风闪步", tier2: "灵巧连击", tier3: "幻影成形", ult: "影子杀手" },
+  heart:   { tier1: "生机涌动", tier2: "绝境攻防", tier3: "生命之泉", ult: "生命洪流" },
+  club:    { tier1: "魔法庇护", tier2: "反应装甲", tier3: "禁咒蓄能", ult: "群体禁咒" },
 };
 
-// 各档与大招的具体效果描述（v3 强化版 — 花色构筑 fantasy 才能立稳）
+// 各档与大招的具体效果描述（XLSX 新版 — 技能/道具已无花色，keyword 全部改为攻击命中触发）
 export const SUIT_TIER_DESCS: Record<Suit, { tier1: string; tier2: string; tier3: string; ult: string }> = {
   spade: {
-    tier1: "攻击 +10%；额外 5% 概率暴击 ×2；激活『锐利』keyword — 所有 ♠ 攻击 +1 pierce。",
-    tier2: "破甲 +⌈楼层/3⌉（F3=1 / F12=4）；真伤 +3。",
+    tier1: "攻击 ×1.15；激活『锐利』keyword — ♠ 攻击命中 45% 概率施加 1 层出血。",
+    tier2: "所有攻击 pierce +1；♠ 攻击额外 +⌈楼层/4⌉ pierce（最少 +1）。",
     tier3: "可释放大招（消耗 8 亲和）。",
     ult: "对当前目标造成其当前 HP 50% 的真实伤害（无视护甲）。",
   },
   diamond: {
-    tier1: "闪避 +8%；受击反弹 +3 伤害；激活『迅捷』keyword — 所有 ♦ 攻击 25% 概率额外 +1 hit（与 T2 叠加）。",
-    tier2: "攻击 40% 概率额外 +1 hit（叠加 ♦ 迅捷）；+3 破甲。",
+    tier1: "闪避 +8%；激活『灵敏』keyword — ♦ 攻击命中 25% 概率额外 +1 hit + 10% 概率暴击 ×2。",
+    tier2: "攻击 30% 概率额外 +1 hit（与 T1 灵敏独立 roll，可叠加）。",
     tier3: "可释放大招（消耗 8 亲和）。",
-    ult: "本回合敌人攻击全部闪避，下次攻击 hits ×3。",
+    ult: "本回合 100% 闪避，下次攻击额外三连击（与连击叠加）。",
   },
   heart: {
-    tier1: "每回合开始 +2 HP；攻击吸血 8%；激活『贪婪』keyword — 所有 ♥ 攻击 + ♥ 装备 吸血 +5%。",
-    tier2: "HP <50% 受击 -35%；HP <25% 攻击 +30%。",
+    tier1: "每回合开始 +5 HP；激活『贪婪』keyword — ♥ 攻击命中 +10% 吸血。",
+    tier2: "HP <50% 受击 ×0.7；HP <25% 攻击 +30%。",
     tier3: "可释放大招（消耗 8 亲和）。",
-    ult: "HP 回满，永久 maxHP +5。",
+    ult: "HP 补满，永久 maxHP +5。",
   },
   club: {
-    tier1: "受击 -2；激活『守序』keyword — 每出 1 张 ♣ 牌本回合 +1 临时护盾。",
-    tier2: "受击再 -3（共 -5）。",
+    tier1: "受击 -3；激活『镇守』keyword — ♣ 攻击命中 +1 临时护盾，每回合 -1 自动衰减。",
+    tier2: "反应装甲：最后一层临时护盾被打破时 25% 概率给攻击者 +1 易伤（3 回合）。",
     tier3: "可释放大招（消耗 8 亲和）。",
-    ult: "对全体敌人 +3 沉默 +3 易伤 +3 中毒。",
+    ult: "全体敌人 +沉默 3 回 / +3 易伤 3 回 / +3 中毒。",
   },
 };
 
@@ -103,90 +103,97 @@ export interface StatusMeta {
 }
 
 export const STATUS_META: Record<string, StatusMeta> = {
-  // 玩家 buff
-  battle_cry:     { name: "战吼", desc: "本回合所有攻击 +3 伤。", kind: "buff" },
-  double_strike:  { name: "倍击", desc: "下一张攻击伤害 ×2。", kind: "buff" },
-  evasive:        { name: "屏息", desc: "本回合受到伤害减半（与闪避概率是不同机制：屏息不会跳过伤害，而是减半）。", kind: "buff" },
-  sharpened:      { name: "磨刀", desc: "下一张攻击伤害 ×1.5。", kind: "buff" },
-  weapon_buff:    { name: "强化药", desc: "本场战斗武器伤害 +stacks。", kind: "buff" },
-  shield_block:   { name: "护盾", desc: "吸收下次受到的 stacks 点伤害。", kind: "buff" },
-  shadow_double:  { name: "影袭", desc: "下一张攻击连击 2 次。", kind: "buff" },
-  heavy_strike:   { name: "猛击就绪", desc: "下一张攻击伤害 +10。", kind: "buff" },
-  counter_stance: { name: "反击姿态", desc: "本回合受击反弹 50% 伤害给攻击者。", kind: "buff" },
-  busi_triggered: { name: "已豁免", desc: "本场战斗已触发不死意志。", kind: "neutral" },
+  // ── 玩家 buff ──────────────────────────────────────────────
+  battle_cry:     { name: "战吼", desc: "本回合所有攻击 +3 伤。\n来源：技能 sk_battle_cry「战吼」。", kind: "buff" },
+  evasive:        { name: "屏息", desc: "本回合受到伤害 ×0.7（-30%）；与闪避概率独立。\n来源：技能 sk_evasive「屏息」。", kind: "buff" },
+  sharpened:      { name: "磨刀", desc: "下一张攻击伤害 ×1.5。\n来源：道具 it_whetstone「磨刀石」。", kind: "buff" },
+  weapon_buff:    { name: "强化药", desc: "本场战斗武器伤害 +stacks。\n来源：道具 it_elixir「强化药」。", kind: "buff" },
+  shield_block:   { name: "护盾", desc: "吸收下次受到的 stacks 点伤害。\n来源：技能 sk_aegis「铁壁」/ ♣ T1「镇守」keyword（♣ 攻击命中触发，每回合 -1 衰减）/ ♣ T2「反应装甲」/ 装备「木盾杖」「重铠」反震 / 附魔「重甲列阵」未受伤奖励 / ♦ 大招「影子杀手」三连之后。", kind: "buff" },
+  shadow_double:  { name: "影袭", desc: "下一张攻击 +1 hit（连击 2 次）。\n来源：技能 sk_shadow_strike「影袭」/ 装备「风刃」闪避后 / 装备「不朽战甲」受击后。", kind: "buff" },
+  counter_stance: { name: "反击姿态", desc: "本回合受击反弹 50% 伤害给攻击者。\n来源：技能 sk_counter_stance「反击姿态」。", kind: "buff" },
+  busi_triggered: { name: "已豁免", desc: "本场战斗已触发不死意志（复活机制只触发 1 次的标记）。\n来源：装备「不灭之心」(undying_heart) 触发后挂上。", kind: "neutral" },
+  double_strike:  { name: "倍击（已废弃）", desc: "（旧版状态，当前无任何卡牌产生）。", kind: "neutral" },
+  heavy_strike:   { name: "猛击就绪（已废弃）", desc: "（旧版状态，当前无任何卡牌产生）。", kind: "neutral" },
+  charged:        { name: "蓄力（已废弃）", desc: "（旧版状态，sk_charge v5 删除后无来源）。", kind: "neutral" },
 
-  // 玩家 debuff
-  poison:     { name: "中毒", desc: "每回合开始受 stacks 点伤害，stacks 减 1。副作用：暴击率 -stacks × 3%（cap -30%）。", kind: "debuff" },
-  weak:       { name: "虚弱", desc: "攻击造成的伤害 -stacks。", kind: "debuff" },
-  vulnerable: { name: "易伤", desc: "受到的伤害 +50%。", kind: "debuff" },
+  // ── 玩家 debuff ────────────────────────────────────────────
+  poison:     { name: "中毒", desc: "每回合扣 maxHP × 1% × stacks，每回合 stacks -1。副作用：暴击率 -stacks × 5%（cap -50%）。\n来源：敌人 debuff intent / 技能毒刃 / 毒血 / 道具箭毒蛙 / 诅咒漩涡 等。", kind: "debuff" },
+  weak:       { name: "虚弱", desc: "攻击伤害 ×0.7（-30% 固定，stacks 只决定 duration）。\n来源：敌人 debuff intent / 技能虚弱箭 / 群体虚弱 / 恐惧术。", kind: "debuff" },
+  vulnerable: { name: "易伤", desc: "受到伤害 ×1.3（+30% 固定，stacks 只决定 duration）。\n来源：敌人 debuff intent / 技能双重打击 / 恐惧术 / 诅咒漩涡 / ♣ T2「反应装甲」/ ♣ 大招群体禁咒。", kind: "debuff" },
+  burn:       { name: "燃烧", desc: "每回合扣 maxHP × 2% × stacks，持续 duration 回合（无副作用）。\n来源：技能 sk_fire_wall「火墙」。", kind: "debuff" },
+  bleed:      { name: "出血", desc: "每回合扣当前 HP × 5% × stacks。施加在玩家身上时副作用：闪避率 -stacks × 5%（cap -50%）。\n来源：技能流血咒 / 利刃 / 神锋无影 / 道具抗凝血 / ♠ T1「锐利」keyword（♠ 攻击 45% 概率）。", kind: "debuff" },
+  rend:       { name: "撕裂（已废弃）", desc: "（旧版状态，现在撕裂技能直接扣 armor，不再走 status）。", kind: "debuff" },
+  frozen:     { name: "冰冻", desc: "下回合攻击伤害 ×0.8（-20%）+ 多动时仅 1 动。\n来源：技能 sk_freeze「冰冻」/ 群体诅咒。", kind: "debuff" },
+  silenced:   { name: "沉默", desc: "下回合 buff intent 跳过（攻击 / debuff 仍出）。\n来源：技能 sk_silence「沉默」/ ♣ 大招群体禁咒。", kind: "debuff" },
+  attuned:    { name: "已共鸣", desc: "花色被共鸣咒改变，剩余 duration 回合后回归原色。\n来源：技能 sk_attune「共鸣咒」。", kind: "neutral" },
+  fear:       { name: "恐惧", desc: "本回合攻击伤害 ×0.5（-50%）+ 多动时仅 1 动。\n来源：技能 sk_fear「恐惧术」（同时附加易伤）。", kind: "debuff" },
 
-  // 染色 buff（4 个花色独立 status，本回合攻击牌强制视为该花色）
-  dyed_spade:   { name: "染色♠", desc: "本回合攻击牌视为黑桃。", kind: "buff" },
-  dyed_diamond: { name: "染色♦", desc: "本回合攻击牌视为方块。", kind: "buff" },
-  dyed_heart:   { name: "染色♥", desc: "本回合攻击牌视为红心。", kind: "buff" },
-  dyed_club:    { name: "染色♣", desc: "本回合攻击牌视为梅花。", kind: "buff" },
+  // ── 染色 buff（4 个花色独立 status）────────────────────────
+  dyed_spade:   { name: "染色♠", desc: "本回合攻击牌视为黑桃。\n来源：技能 sk_dye「染色术」。", kind: "buff" },
+  dyed_diamond: { name: "染色♦", desc: "本回合攻击牌视为方块。\n来源：技能 sk_dye「染色术」。", kind: "buff" },
+  dyed_heart:   { name: "染色♥", desc: "本回合攻击牌视为红心。\n来源：技能 sk_dye「染色术」。", kind: "buff" },
+  dyed_club:    { name: "染色♣", desc: "本回合攻击牌视为梅花。\n来源：技能 sk_dye「染色术」。", kind: "buff" },
 
-  // 持咒 buff（整场战斗持续，攻击牌永久视为该花色）
-  chanted_spade:   { name: "持咒♠", desc: "本场战斗内攻击牌视为黑桃。", kind: "buff" },
-  chanted_diamond: { name: "持咒♦", desc: "本场战斗内攻击牌视为方块。", kind: "buff" },
-  chanted_heart:   { name: "持咒♥", desc: "本场战斗内攻击牌视为红心。", kind: "buff" },
-  chanted_club:    { name: "持咒♣", desc: "本场战斗内攻击牌视为梅花。", kind: "buff" },
-  chanted_used:    { name: "本场已持咒", desc: "本场战斗内已经触发过持咒，所有持咒副本灰显不可用，下场战斗自动恢复。", kind: "neutral" },
+  // ── 持咒 buff（整场战斗持续）────────────────────────────────
+  chanted_spade:   { name: "持咒♠", desc: "本场战斗内攻击牌视为黑桃。\n来源：技能 sk_chant「持咒」。", kind: "buff" },
+  chanted_diamond: { name: "持咒♦", desc: "本场战斗内攻击牌视为方块。\n来源：技能 sk_chant「持咒」。", kind: "buff" },
+  chanted_heart:   { name: "持咒♥", desc: "本场战斗内攻击牌视为红心。\n来源：技能 sk_chant「持咒」。", kind: "buff" },
+  chanted_club:    { name: "持咒♣", desc: "本场战斗内攻击牌视为梅花。\n来源：技能 sk_chant「持咒」。", kind: "buff" },
+  chanted_used:    { name: "本场已持咒", desc: "本场战斗内已经触发过持咒（标记，副本灰显，下场恢复）。\n来源：技能 sk_chant「持咒」触发后挂上。", kind: "neutral" },
 
-  // 花色专精大招触发的临时 buff
-  dodge_full_round: { name: "影舞步", desc: "本回合敌人攻击全部闪避。", kind: "buff" },
-  triple_strike:    { name: "三连击", desc: "下次攻击 hits ×3。", kind: "buff" },
+  // ── ♦ T3 大招效果 ─────────────────────────────────────────
+  dodge_full_round: { name: "影子杀手·闪避", desc: "本回合敌人攻击全部闪避。\n来源：♦ 方块 T3 大招「影子杀手」。", kind: "buff" },
+  triple_strike:    { name: "影子杀手·三连", desc: "下次攻击 hits ×3。\n来源：♦ 方块 T3 大招「影子杀手」。", kind: "buff" },
 
-  // 敌人 debuff（玩家身上也可能有）
-  burn:       { name: "燃烧", desc: "每回合 -stacks HP，持续 duration 回合（纯扣血）。", kind: "debuff" },
-  rend:       { name: "撕裂", desc: "（已废弃）现在撕裂直接扣 armor。", kind: "debuff" },
-  frozen:     { name: "冰冻", desc: "下回合行动伤害减半。", kind: "debuff" },
-  silenced:   { name: "沉默", desc: "下回合无法 buff。", kind: "debuff" },
-  bleed:      { name: "出血", desc: "每回合扣当前 HP × stacks × 5%。施加在玩家身上时副作用：闪避率 -stacks × 5%（cap -50%）。", kind: "debuff" },
-  attuned:    { name: "已共鸣", desc: "花色被共鸣咒改变，剩余 duration 回合后回归原色。", kind: "neutral" },
-  fear:       { name: "恐惧", desc: "本回合攻击伤害 -50%。", kind: "debuff" },
+  // ── 技能 / 道具 buff ───────────────────────────────────────
+  blood_pact:    { name: "血契", desc: "本回合内所有攻击吸血 +20%。\n来源：技能 sk_blood_pact「血契」。", kind: "buff" },
+  arcane_burst:  { name: "奥术爆裂", desc: "本回合每张非攻击牌使下张攻击 +3。\n来源：技能 sk_arcane_burst「奥术爆裂」。", kind: "buff" },
+  brew_regen:    { name: "药剂", desc: "本场战斗内每回合开始 +stacks HP。\n来源：道具 it_brew「药剂」。", kind: "buff" },
+  no_skill:      { name: "技能锁", desc: "本回合不能再出技能牌。\n来源：道具 it_quick_draw「速摸」副作用。", kind: "neutral" },
+  no_attack:     { name: "蓄力中", desc: "本回合（或两回合）无法出攻击牌。\n来源：技能 sk_drain_strike「汲血斩」后摇 2 回合 / 旧 sk_charge（已删）。", kind: "neutral" },
+  pierce_bonus:  { name: "穿甲斩", desc: "下张攻击额外 +stacks pierce（用一次清除）。\n来源：技能 sk_pierce_strike「穿甲斩」。", kind: "buff" },
+  pierce_perm:   { name: "穿甲油", desc: "持续 duration 回合内武器 +stacks pierce。\n来源：道具 it_pierce_oil「穿甲油」（3 回合 +3 pierce）。", kind: "buff" },
+  frenzy:        { name: "激奋", desc: "每打出 1 张攻击牌后 stacks +1，下次攻击 +stacks × 2 伤；3 回合后失效。\n来源：技能 sk_frenzy「激奋」。", kind: "buff" },
+  combat_rhythm: { name: "战斗节奏", desc: "本回合内每打 1 张牌额外摸 1 张。\n来源：技能 sk_rhythm「战斗节奏」。", kind: "buff" },
+  time_stop:     { name: "时停", desc: "敌人下一回合无法行动（DoT 仍结算）。\n来源：技能 sk_time_stop「时停」。", kind: "buff" },
 
-  // 新增技能/道具 buff
-  blood_pact:    { name: "血契", desc: "本回合内所有攻击吸血 +20%。", kind: "buff" },
-  arcane_burst:  { name: "奥术爆裂", desc: "本回合每张非攻击牌使下张攻击 +3。", kind: "buff" },
-  brew_regen:    { name: "药剂", desc: "本场战斗内每回合开始 +stacks HP。", kind: "buff" },
-  no_skill:      { name: "技能锁", desc: "本回合不能再出技能牌（速摸副作用）。", kind: "neutral" },
-  pierce_bonus:  { name: "穿甲斩", desc: "下张攻击额外 +stacks pierce（用一次清除）。", kind: "buff" },
-  pierce_perm:   { name: "穿甲油", desc: "本场战斗内武器永久 +stacks pierce。", kind: "buff" },
+  // ── 闪避 / 穿甲系统 ───────────────────────────────────────
+  smoke_dodge:      { name: "烟雾", desc: "闪避概率 +stacks%，剩余 duration 回合。\n来源：道具 it_smoke「烟雾弹」/ 技能 sk_evasion_burst「灵巧爆发」（复用此 status）。", kind: "buff" },
+  guaranteed_dodge: { name: "风步", desc: "下一次受击必定闪避（一次性）。\n来源：技能 sk_step「风步」。", kind: "buff" },
+  pierce_next:      { name: "穿甲蓄势", desc: "下一次攻击无视目标全部护甲（一次性）。\n来源：技能 sk_pierce_shot「穿甲射」。", kind: "buff" },
+  phantom_charge:   { name: "幻影残像", desc: "下一次攻击伤害 ×N + 给目标 +M 易伤（按附魔 Lv），一次性。\n来源：附魔 e_phantom「幻影」闪避后触发。", kind: "buff" },
+  echo:             { name: "复读", desc: "本回合内每出 1 张非攻击牌后复制一份回手牌；回合结束失效。\n来源：道具 it_echo「复读机」。", kind: "buff" },
 
-  // 持续/延时类玩家 buff
-  frenzy:        { name: "激奋", desc: "每打出 1 张攻击牌后 stacks +1，下次攻击 +stacks × 5 伤。", kind: "buff" },
-  charged:       { name: "蓄力", desc: "下次攻击伤害 ×3（用一次清除）。", kind: "buff" },
-  no_attack:     { name: "蓄力中", desc: "本回合无法出攻击牌。", kind: "neutral" },
-  combat_rhythm: { name: "战斗节奏", desc: "本回合内每打 1 张牌额外摸 1 张。", kind: "buff" },
-  time_stop:     { name: "时停", desc: "敌人下一回合无法行动（DoT 仍结算）。", kind: "buff" },
+  // ── 附魔触发的 status ─────────────────────────────────────
+  phalanx_dr:        { name: "重甲列阵", desc: "本回合每张攻击牌使受击 -stacks（cap 按 Lv）。\n来源：附魔 ec_phalanx「重甲列阵」。", kind: "buff" },
+  swift_dodge_temp:  { name: "风行余势", desc: "本回合内闪避概率 +stacks%（cap 按 Lv）。\n来源：附魔 ec_swift「风行步」闪避后触发。", kind: "buff" },
+  enc_runic_immune:  { name: "符文护盾", desc: "本场战斗第 1 次受击免疫（Lv1-2 -50%，Lv3+ 完全免疫）。\n来源：附魔 ec_runic「符文护盾」（newBattle 时挂上）。", kind: "buff" },
+  enc_dot_immune:    { name: "圣化", desc: "中毒 / 燃烧 / 出血对你无效。\n来源：附魔 ec_runic「符文护盾」（newBattle 时挂上）。", kind: "buff" },
+  warblood_perm_atk: { name: "血誓积累 / 斩魂蓄势", desc: "永久攻击 +stacks（cap 按附魔 Lv 或装备 stack）。\n来源：附魔 ec_warblood「战狂血誓」每损 10% maxHP 触发 / 装备 soulreaver_plate「斩魂铠」受击触发。", kind: "buff" },
 
-  // 闪避 / 穿甲系统
-  smoke_dodge:      { name: "烟雾", desc: "闪避概率 +stacks%，剩余 duration 回合。", kind: "buff" },
-  guaranteed_dodge: { name: "风步", desc: "下一次受击必定闪避（一次性）。", kind: "buff" },
-  pierce_next:      { name: "穿甲蓄势", desc: "下一次攻击无视目标全部护甲（一次性）。", kind: "buff" },
-  phantom_charge:   { name: "幻影残像", desc: "下一次攻击伤害 ×2（一次性，由幻影附魔触发）。", kind: "buff" },
-  echo:             { name: "复读", desc: "本场战斗：每出 1 张非攻击牌后复制一份回手牌。", kind: "buff" },
+  // ── 装备触发的 status ─────────────────────────────────────
+  knight_charge:     { name: "骑士充能", desc: "下次攻击 +N 直伤（N 由骑士铠 stack 决定，cap 3）。\n来源：装备 knight_plate「骑士铠」受击触发。", kind: "buff" },
+  took_damage_turn:  { name: "本回合受伤", desc: "（内部 marker）本回合受到过伤害，用于 ec_phalanx 末段判断。玩家无需关注。", kind: "neutral" },
+  calc_charge:       { name: "法术蓄能", desc: "本回合已出非攻击牌数。下次攻击 +stacks × N（N 由触发源决定）。\n来源：装备 wizard_staff「法师杖」（+3）/ 附魔 e_strategist「算计」+ ec_focus「凝神」/ 技能 sk_arcane_burst「奥术爆裂」。", kind: "buff" },
 
-  // 附魔机制相关 status（v2 附魔系统）
-  phalanx_dr:        { name: "重甲列阵", desc: "本回合每张攻击牌使受击 -1（cap -3，由附魔触发）。", kind: "buff" },
-  swift_dodge_temp:  { name: "风行余势", desc: "本回合内闪避概率 +stacks%，由风行步附魔触发。", kind: "buff" },
-  enc_runic_immune:  { name: "符文护盾", desc: "本场战斗第 1 次受击免疫（由符文护盾附魔提供）。", kind: "buff" },
-  enc_dot_immune:    { name: "圣化", desc: "中毒 / 燃烧 / 出血对你无效（由符文护盾附魔提供）。", kind: "buff" },
-  warblood_perm_atk: { name: "血誓积累", desc: "本场战斗：每损 10% maxHP，攻击 +1（cap +5，由战狂血誓附魔触发）。", kind: "buff" },
-  // 新加装备触发的 status（v2 流派资源补全）
-  knight_charge:     { name: "骑士充能", desc: "受击充能：下次攻击 +N 直伤（N 由骑士铠 stack 决定，骑士铠 cap 5 stack）。", kind: "buff" },
-  scepter_clubs:     { name: "禁忌权杖蓄势", desc: "本回合已出 ♣ 牌数（攻击/技能/道具/装备均计入）。本回合内攻击伤害 += stacks × (N 由禁忌权杖 stack 决定，1/2/2/3)。", kind: "buff" },
-  took_damage_turn:  { name: "本回合受伤", desc: "（内部状态，玩家无需关注）本回合受到过伤害，用于附魔机制末段判断。", kind: "neutral" },
-  calc_charge:       { name: "法术蓄能", desc: "本回合已出非攻击牌数。配合法师杖 / 算计附魔 / 凝神附魔 / 奥术爆裂 → 下次攻击 +X 直伤。", kind: "buff" },
-  // ── 玩家"下次攻击命中时附加 debuff"标记（箭毒蛙 / 抗凝血触发）──
-  next_atk_apply_poison: { name: "箭毒预备", desc: "下次攻击命中时给目标 +stacks 中毒。", kind: "buff" },
-  next_atk_apply_bleed:  { name: "抗凝血预备", desc: "下次攻击命中时给目标 +stacks 出血（持续 2 回合）。", kind: "buff" },
-  // ── 敌人 buff intent 相关（v6）──
-  temp_armor:        { name: "临时护甲", desc: "本回合敌人护甲临时 +stacks（自身或全队 buff 触发）。", kind: "buff" },
-  enemy_atk_buff:    { name: "强化", desc: "下次攻击 +stacks 伤害（敌人 buff intent 蓄势）。", kind: "buff" },
-  enemy_next_hits:   { name: "多段蓄势", desc: "下次攻击 +stacks hits（巨怪狂奔等触发）。", kind: "buff" },
-  enemy_sacrifice:   { name: "血祭蓄势", desc: "下次攻击 +stacks% 伤害（暗影血祭，已扣除 3% maxHP）。", kind: "buff" },
+  // ── 特性 / 附魔触发的 charge buff ──
+  blood_pact_charge:   { name: "血誓蓄势", desc: "下次攻击 +stacks 直伤（一次性，攻击后清零）。\n来源：特性 p_blood_pact「血誓」（受伤的 5% 转化，cap +6 / 张）。", kind: "buff" },
+  e_reaper_buff:       { name: "收割之刃", desc: "下次攻击 ×N（N 按附魔 Lv：1.20 / 1.40 / 1.65 等），一次性。\n来源：附魔 e_reaper「收割」击杀敌人后触发。", kind: "buff" },
+  arcane_draws:        { name: "秘法摸牌计数", desc: "（内部）本回合已通过秘法回响摸的额外牌数，cap 3 张/回合。\n来源：附魔 ec_arcane「秘法回响」每出非攻击牌触发。", kind: "neutral" },
+  arcane_first_used:   { name: "秘法已触发", desc: "（内部）本场战斗秘法回响「首攻 +N%」已用过的标记。\n来源：附魔 ec_arcane「秘法回响」触发后挂上。", kind: "neutral" },
+  swift_first_used:    { name: "疾风已触发", desc: "（内部）本场战斗第 1 回合首攻已被加成过的标记。\n来源：特性 p_swift_strike「疾风斩」触发后挂上。", kind: "neutral" },
+
+  // ── 玩家「下次攻击命中附加 debuff」标记 ────────────────────
+  next_atk_apply_poison: { name: "箭毒预备", desc: "下次攻击命中时给目标 +stacks 中毒。\n来源：道具 it_poison_dart「箭毒蛙」。", kind: "buff" },
+  next_atk_apply_bleed:  { name: "抗凝血预备", desc: "下次攻击命中时给目标 +stacks 出血（持续 2 回合）。\n来源：道具 it_anticoag「抗凝血」。", kind: "buff" },
+  // ── 吸血盾 / 反伤甲 ──
+  draining_charge:   { name: "吸血盾蓄势", desc: "已累积 stacks 点延迟回血，下回合开始时全部回给玩家。\n来源：装备「吸血盾」受击触发。", kind: "buff" },
+  thorn_chain:       { name: "反伤连击", desc: "本回合已累计受击 stacks 次（用于反伤甲计算每 hit +10% 反伤）。每回合开始清零。\n来源：装备「反伤甲」受击触发。", kind: "neutral" },
+  // ── 敌人 buff intent 触发的 status（v6 buff dispatch 系统）──
+  temp_armor:        { name: "临时护甲", desc: "本回合敌人护甲临时 +stacks。\n来源：敌人 buff intent self_armor（兽 血怒 / 巨怪 硬化）或 team_armor（人型 结阵）。", kind: "buff" },
+  enemy_atk_buff:    { name: "强化", desc: "下次攻击 +stacks 伤害（一次性）。\n来源：敌人 buff intent next_attack_3（兽 嚎叫 / 人型 战吼 / 暗影 暗影遁）。", kind: "buff" },
+  enemy_next_hits:   { name: "多段蓄势", desc: "下次攻击 +stacks hits。\n来源：敌人 buff intent next_hits（巨怪 狂奔）。", kind: "buff" },
+  enemy_sacrifice:   { name: "血祭蓄势", desc: "下次攻击 +stacks% 伤害（已扣 3% maxHP）。\n来源：敌人 buff intent self_sacrifice（暗影 血祭）。", kind: "buff" },
 };
 
 // ── 敌人种族 ──────────────────────────────────────────────
@@ -374,14 +381,15 @@ export function isRareRace(race: EnemyRace): boolean {
   return race === "giant" || race === "dark";
 }
 
-// 卡牌稀有度 4 档：抽卡先 roll 稀有度，再从该档卡池里抽具体卡
-// common 普通 / rare 稀有 / super_rare 超稀有 / epic 史诗
-export type CardRarity = "common" | "rare" | "super_rare" | "epic";
+// 卡牌稀有度 5 档：common 起始牌库专属，rare+ / rare / SR / epic 进奖励池
+// common 普通 / rare 稀有 / rare_plus 稀有+（≈ 旧版"带钩子的 common"）/ super_rare 超稀有 / epic 史诗
+export type CardRarity = "common" | "rare" | "rare_plus" | "super_rare" | "epic";
 
-// 每档稀有度的中文显示名 + 颜色 token
+// 每档稀有度的中文显示名
 export const RARITY_NAMES: Record<CardRarity, string> = {
   common: "普通",
   rare: "稀有",
+  rare_plus: "稀有+",
   super_rare: "超稀有",
   epic: "史诗",
 };
@@ -508,13 +516,16 @@ export interface PlayerState {
   // 装备保底：连续未在 reward_card 拿到装备的场次，达 3 次下场必出装备
   battlesSinceEquipReward?: number;
 
-  // 花色专精大招本场战斗已释放标记（每场战斗 newBattle 重置；4 花色独立，每色本场限 1 次）
-  ultsThisBattle?: Record<Suit, boolean>;
 
   // EPIC 临时装备机制：装备 EPIC 武器/防具时把当前装备暂存到 backup，
   // EPIC 用尽（3 次）后自动恢复 backup。比"替换 modal"更灵活，玩家不丢原装备
   tempWeaponBackup?: CardInstance[];
   tempArmorBackup?: CardInstance[];
+
+  // 强制弃牌机制：drawCards / 复读机克隆若导致手牌 > HAND_LIMIT，超出部分进 pendingDraws
+  // UI 弹出强制弃牌 modal：玩家从 hand 选 K 张弃掉，K = pendingDraws.length
+  // 选完后 pendingDraws → hand，被弃的牌 → discard
+  pendingDraws?: CardInstance[];
 }
 
 // ── 敌人 ──────────────────────────────────────────────────

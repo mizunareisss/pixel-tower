@@ -223,8 +223,8 @@
     // ============ Scene / Renderer ============
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#1f1828');
-    // 雾拉近：远处模糊，玩家移动时"豁然开朗"
-    scene.fog = new THREE.Fog('#3a2838', 14, 42);
+    // 雾：远处模糊，近处清晰，让塔在雾里若隐若现
+    scene.fog = new THREE.Fog('#3a2838', 18, 60);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -699,22 +699,7 @@
       ground.rotation.x = -Math.PI / 2;
       ground.receiveShadow = true;
       root.add(ground);
-      // 草地块（散布在地面上提供色彩变化，关 depthWrite + 微随机 y 避免共面）
-      for (let i = 0; i < 60; i++) {
-        const w = rand(1.5, 3.5), d = rand(1.5, 3.5);
-        const patch = new THREE.Mesh(
-          new THREE.PlaneGeometry(w, d),
-          new THREE.MeshBasicMaterial({
-            color: rng() > 0.5 ? 0x3a4828 : 0x5a4030,
-            transparent: true, opacity: 0.55,
-            depthWrite: false,
-          }));
-        patch.rotation.x = -Math.PI / 2;
-        patch.position.set(rand(-25, 25), 0.02 + rng() * 0.015, rand(-22, 18));
-        patch.rotation.z = rand(0, Math.PI);
-        patch.renderOrder = 0;
-        root.add(patch);
-      }
+      // 草地块去除（已被山体岩层 + 草丛 + 苔藓替代）
 
       // —— 地形分层 ——
       buildTerrain();
@@ -737,18 +722,147 @@
       const wall = new THREE.Group();
       wall.position.set(0, 0, -22);
 
-      // 主墙体（更巨大）
+      // 主墙体（暗紫深石）
       const W = 46, H = 30, D = 5;
-      const main = block(W, H, D, '#4a3a48');
+      const main = block(W, H, D, '#322438');
       main.position.y = H / 2;
       wall.add(main);
-      // 墙顶金边
-      const topTrim = block(W + 0.8, 0.4, D + 0.8, '#fbbf24');
+      // 墙顶金边（被云雾遮盖，但仍在）
+      const topTrim = block(W + 0.8, 0.4, D + 0.8, '#5a4838');
       topTrim.position.y = H + 0.2;
       wall.add(topTrim);
       // 墙底基座（外扩）
-      const base = block(W + 1.5, 1.5, D + 1.5, '#2a1c28');
+      const base = block(W + 1.5, 1.5, D + 1.5, '#1a0e1c');
       base.position.y = 0.75; wall.add(base);
+
+      // ============ 粗糙石块表面（35 个不同大小的 box 浮雕） ============
+      const wallFrontZ = D / 2 + 0.12;
+      for (let i = 0; i < 40; i++) {
+        const sw = rand(1.0, 3.0);
+        const sh = rand(1.2, 2.5);
+        const sd = rand(0.2, 0.45);
+        const stone = block(sw, sh, sd, ['#3a2c40', '#4a3850', '#2a2030', '#42344a'][Math.floor(rng() * 4)]);
+        const sx = rand(-W/2 + 1, W/2 - 1);
+        const sy = rand(2, H - 1);
+        // 避开大门区域（x≈0, y < 14）
+        if (Math.abs(sx) < 4.5 && sy < 14) { i--; continue; }
+        stone.position.set(sx, sy, wallFrontZ + sd / 2);
+        stone.rotation.z = rand(-0.04, 0.04);
+        wall.add(stone);
+      }
+
+      // ============ 爬山虎植被（绿色 plane 攀附墙面，底密顶疏） ============
+      const ivyColors = ['#1a4828', '#2a5828', '#1a3818', '#345830', '#2a4a20'];
+      for (let i = 0; i < 55; i++) {
+        const iw = rand(0.5, 1.4);
+        const ih = rand(1.5, 4.0);
+        const ivy = new THREE.Mesh(
+          new THREE.PlaneGeometry(iw, ih),
+          new THREE.MeshBasicMaterial({
+            color: ivyColors[Math.floor(rng() * ivyColors.length)],
+            side: THREE.DoubleSide, transparent: true, opacity: 0.92,
+            depthWrite: false,
+          }));
+        const ix = rand(-W/2 + 0.5, W/2 - 0.5);
+        // 底部密集，顶部稀疏（按 y 概率分布）
+        const ySkew = Math.pow(rng(), 1.8);
+        const iy = 1.5 + ySkew * (H - 4);
+        // 避开门
+        if (Math.abs(ix) < 4.5 && iy < 12) { i--; continue; }
+        ivy.position.set(ix, iy + ih * 0.4, wallFrontZ + 0.5);
+        ivy.rotation.z = rand(-0.15, 0.15);
+        ivy.renderOrder = 1;
+        wall.add(ivy);
+      }
+      // 几条长藤蔓（垂直从顶往下垂的）
+      for (let i = 0; i < 8; i++) {
+        const vx = rand(-W/2 + 2, W/2 - 2);
+        if (Math.abs(vx) < 5) { i--; continue; }
+        const vineH = rand(6, 12);
+        const vy0 = H - rand(2, 5);
+        const vine = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.35, vineH),
+          new THREE.MeshBasicMaterial({
+            color: '#2a5828', side: THREE.DoubleSide,
+            transparent: true, opacity: 0.9,
+            depthWrite: false,
+          }));
+        vine.position.set(vx, vy0 - vineH / 2, wallFrontZ + 0.55);
+        vine.rotation.z = rand(-0.08, 0.08);
+        vine.renderOrder = 1;
+        wall.add(vine);
+      }
+
+      // ============ 紫色符文（呼吸发光） ============
+      const runeShapes = [
+        () => { const m = block(rand(0.7, 1.2), rand(0.7, 1.2), 0.1, '#c868ff',
+          { emissive: 0xc868ff, emissiveIntensity: 1.5 }); m.rotation.z = Math.PI / 4; return m; },
+        () => new THREE.Mesh(new THREE.OctahedronGeometry(rand(0.4, 0.7)),
+          toon('#c868ff', 0xc868ff, 1.5)),
+        () => new THREE.Mesh(new THREE.TorusGeometry(rand(0.4, 0.6), 0.08, 6, 12),
+          toon('#c868ff', 0xc868ff, 1.5)),
+      ];
+      const runes = [];
+      for (let i = 0; i < 8; i++) {
+        const rune = runeShapes[Math.floor(rng() * runeShapes.length)]();
+        const rx = rand(-W/2 + 2.5, W/2 - 2.5);
+        const ry = rand(4, H - 2.5);
+        if (Math.abs(rx) < 5.5 && ry < 14) { i--; continue; }
+        rune.position.set(rx, ry, wallFrontZ + 0.6);
+        wall.add(rune);
+        runes.push(rune);
+      }
+      // 呼吸动画
+      updaters.push((t) => {
+        runes.forEach((r, i) => {
+          if (r.material) {
+            r.material.emissiveIntensity = 0.8 + Math.sin(t * 1.4 + i * 0.7) * 1.0;
+          }
+        });
+      });
+
+      // ============ 突出阳台（3 个，错落布局；doorH = 8） ============
+      const balconyPositions = [
+        { x: -10, y: 13 },
+        { x:  12, y: 17 },
+        { x: -13, y: 21 },
+      ];
+      balconyPositions.forEach(bp => {
+        // 底板
+        const balBase = block(2.8, 0.35, 1.6, '#3a2840');
+        balBase.position.set(bp.x, bp.y, wallFrontZ + 0.8);
+        wall.add(balBase);
+        // 底板金边
+        const balTrim = block(2.9, 0.06, 1.7, '#7a5828');
+        balTrim.position.set(bp.x, bp.y + 0.205, wallFrontZ + 0.8);
+        wall.add(balTrim);
+        // 栏杆 4 根
+        for (let j = 0; j < 5; j++) {
+          const rail = cyl(0.055, 0.055, 0.55, '#1a1020');
+          rail.position.set(bp.x - 1.2 + j * 0.6, bp.y + 0.45, wallFrontZ + 1.4);
+          wall.add(rail);
+        }
+        // 栏杆顶横
+        const railTop = block(2.7, 0.08, 0.12, '#5a4838');
+        railTop.position.set(bp.x, bp.y + 0.75, wallFrontZ + 1.4);
+        wall.add(railTop);
+        // 阳台下方三角支撑（左右各一）
+        for (const sx of [-1, 1]) {
+          const support = block(0.18, 0.6, 0.18, '#1a1020');
+          support.position.set(bp.x + sx * 1.1, bp.y - 0.4, wallFrontZ + 0.6);
+          support.rotation.z = sx * 0.35;
+          wall.add(support);
+        }
+        // 阳台顶遮檐
+        const canopy = block(2.6, 0.15, 1.2, '#1a1020');
+        canopy.position.set(bp.x, bp.y + 2.2, wallFrontZ + 0.7);
+        wall.add(canopy);
+        // 阳台门洞（漆黑）
+        const balDoor = block(1.0, 1.8, 0.08, '#0a0410',
+          { emissive: 0xc868ff, emissiveIntensity: 0.6 });
+        balDoor.position.set(bp.x, bp.y + 1.2, wallFrontZ + 0.18);
+        wall.add(balDoor);
+      });
 
       // 大门（中央底部，分层 z 避免共面 Z fight）
       const doorH = 8, doorW = 6.5;
@@ -857,22 +971,86 @@
         win.rotation.y = -angle + Math.PI / 2; wall.add(win);
       }
 
-      // 远端云带（围绕塔顶）
-      for (let i = 0; i < 8; i++) {
-        const ang = (i / 8) * Math.PI * 2;
-        const cloudGroup = new THREE.Group();
-        for (let j = 0; j < 3; j++) {
-          const blob = new THREE.Mesh(new THREE.SphereGeometry(2 + Math.random() * 1.5, 10, 8),
-            new THREE.MeshBasicMaterial({ color: 0x3a2848, transparent: true, opacity: 0.6 }));
-          blob.position.set(j * 1.5 - 1.5, Math.random() * 0.4, Math.random() * 0.4);
-          blob.scale.y = 0.55;
-          cloudGroup.add(blob);
+      // ============ 顶部浓密云雾遮挡（让塔上半部消失在云中） ============
+      // 第一层：低空浓雾带（y ≈ H - 4 ~ H + 4，遮住墙顶）
+      for (let i = 0; i < 25; i++) {
+        const cloud = new THREE.Group();
+        const blobs = 4 + Math.floor(rng() * 3);
+        for (let j = 0; j < blobs; j++) {
+          const blob = new THREE.Mesh(
+            new THREE.SphereGeometry(rand(2.2, 4.0), 12, 8),
+            new THREE.MeshBasicMaterial({
+              color: ['#4a3a58', '#5a4868', '#3a2c48', '#403048'][Math.floor(rng() * 4)],
+              transparent: true, opacity: rand(0.6, 0.82),
+              depthWrite: false,
+            }));
+          blob.position.set(j * rand(1.8, 2.5) - blobs * 1.0, rng() * 0.6, rng() * 0.6);
+          blob.scale.y = 0.45 + rng() * 0.25;
+          cloud.add(blob);
         }
-        cloudGroup.position.set(Math.cos(ang) * 11, H + 18 + Math.sin(i) * 2, Math.sin(ang) * 11);
-        wall.add(cloudGroup);
+        const cx = rand(-W/2 - 5, W/2 + 5);
+        const cy = H - 3 + rng() * 8;
+        const cz = rand(-3, 8);
+        cloud.position.set(cx, cy, cz);
+        cloud.renderOrder = 5;
+        wall.add(cloud);
+        const baseX = cx;
+        const drift = rand(0.05, 0.15);
+        updaters.push((t) => {
+          cloud.position.x = baseX + Math.sin(t * drift) * 2.5;
+        });
+      }
+      // 第二层：更高处的稀疏云层（让塔尖完全消失）
+      for (let i = 0; i < 18; i++) {
+        const cloud = new THREE.Group();
+        for (let j = 0; j < 4; j++) {
+          const blob = new THREE.Mesh(
+            new THREE.SphereGeometry(rand(3.0, 5.5), 12, 8),
+            new THREE.MeshBasicMaterial({
+              color: '#5a4868',
+              transparent: true, opacity: rand(0.55, 0.78),
+              depthWrite: false,
+            }));
+          blob.position.set(j * 2.5 - 5, rng() * 0.8, rng() * 0.8);
+          blob.scale.y = 0.5;
+          cloud.add(blob);
+        }
+        cloud.position.set(
+          rand(-W/2 - 10, W/2 + 10),
+          H + 6 + rng() * 10,
+          rand(-5, 10)
+        );
+        cloud.renderOrder = 4;
+        wall.add(cloud);
       }
 
       root.add(wall);
+
+      // 前景薄雾（飘在场地中部增加纵深）
+      for (let i = 0; i < 8; i++) {
+        const mistG = new THREE.Group();
+        for (let j = 0; j < 3; j++) {
+          const blob = new THREE.Mesh(
+            new THREE.SphereGeometry(rand(1.5, 2.8), 10, 8),
+            new THREE.MeshBasicMaterial({
+              color: '#5a4868', transparent: true, opacity: rand(0.18, 0.32),
+              depthWrite: false,
+            }));
+          blob.position.set(j * 2.0 - 2, 0, rng() * 0.4);
+          blob.scale.y = 0.35;
+          mistG.add(blob);
+        }
+        const mx = rand(-18, 18), mz = rand(-18, -8);
+        const my = 4 + rng() * 5;
+        mistG.position.set(mx, my, mz);
+        mistG.renderOrder = 3;
+        root.add(mistG);
+        const speed = rand(0.04, 0.1);
+        updaters.push((t) => {
+          mistG.position.x = mx + Math.sin(t * speed + i) * 3;
+          mistG.position.y = my + Math.sin(t * 0.3 + i) * 0.4;
+        });
+      }
     }
 
     // === 路径节点布局（竖屏沿 z 轴展开 + 高度爬升）===
@@ -1039,92 +1217,228 @@
     }
 
     // === 地形分层（纪念碑谷式落差） ===
+    // 不规则岩石（用 DodecahedronGeometry 模拟自然岩石轮廓）
+    function makeBigRock(size, color = '#4a4038') {
+      const geo = new THREE.DodecahedronGeometry(size, 0);
+      // 顶点扰动（让岩石看起来粗糙）
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        pos.setXYZ(i, x * (0.85 + rng() * 0.3), y * (0.85 + rng() * 0.3), z * (0.85 + rng() * 0.3));
+      }
+      geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, toon(color));
+      m.castShadow = true; m.receiveShadow = true;
+      // 随机姿态
+      m.rotation.set(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI);
+      return m;
+    }
+    // 苔藓覆盖石头（顶部加绿色小盘，更扁更小）
+    function addMossOnTop(rockMesh, size) {
+      const moss = new THREE.Mesh(
+        new THREE.SphereGeometry(size * 0.42, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.4),
+        toon('#2a5028'));
+      moss.position.copy(rockMesh.position);
+      moss.position.y += size * 0.42;
+      moss.scale.y = 0.25;
+      moss.rotation.y = rng() * Math.PI;
+      root.add(moss);
+    }
+    // 草丛（几根小草）
+    function makeGrassClump() {
+      const g = new THREE.Group();
+      for (let i = 0; i < 4; i++) {
+        const blade = block(0.04, 0.18 + rng() * 0.1, 0.04, ['#3a5a20', '#4a6828', '#2a4818'][Math.floor(rng()*3)]);
+        blade.position.set(rand(-0.08, 0.08), 0.09 + rng() * 0.05, rand(-0.08, 0.08));
+        blade.rotation.z = rand(-0.15, 0.15);
+        g.add(blade);
+      }
+      return g;
+    }
+    // 弯曲的山地树（更"山地"感）
+    function makeMountainTree() {
+      const g = new THREE.Group();
+      const trunk = cyl(0.1, 0.16, 1.0, '#3a2418'); trunk.position.y = 0.5;
+      trunk.rotation.z = rand(-0.15, 0.15); g.add(trunk);
+      const canopy = cone(0.5 + rng() * 0.3, 1.6 + rng() * 0.6, '#1a3818', 8);
+      canopy.position.y = 1.4; g.add(canopy);
+      const canopy2 = cone(0.35, 1.2, '#2a4828', 8);
+      canopy2.position.y = 1.9; g.add(canopy2);
+      return g;
+    }
+    // 死树（无叶秃枝）
+    function makeDeadTree() {
+      const g = new THREE.Group();
+      const trunk = cyl(0.08, 0.14, 1.2, '#2a1c14'); trunk.position.y = 0.6;
+      trunk.rotation.z = rand(-0.1, 0.1); g.add(trunk);
+      // 3-4 个秃枝
+      for (let i = 0; i < 4; i++) {
+        const branch = cyl(0.025, 0.04, 0.5 + rng() * 0.3, '#2a1c14');
+        const a = (i / 4) * Math.PI * 2;
+        branch.position.set(Math.cos(a) * 0.08, 0.9 + rng() * 0.3, Math.sin(a) * 0.08);
+        branch.rotation.z = Math.cos(a) * 1.0;
+        branch.rotation.x = Math.sin(a) * 1.0;
+        g.add(branch);
+      }
+      return g;
+    }
+
     function buildTerrain() {
+      // ============ 场地侧后方的山脉（不遮挡前景）============
+      // 用窄而高的 box 在场景边缘形成"山脊"，让玩家觉得身处一个山谷盆地
+      const ridgeSpecs = [
+        // 左侧山脊（沿 x=-15 一线）
+        { x: -17, z: 8,  h: 4, w: 3 }, { x: -18, z: 0,  h: 5, w: 4 },
+        { x: -19, z: -8, h: 6, w: 4 }, { x: -20, z: -16, h: 7, w: 5 },
+        // 右侧山脊（沿 x=15 一线）
+        { x: 17, z: 8,  h: 4, w: 3 }, { x: 18, z: 0,  h: 5, w: 4 },
+        { x: 19, z: -8, h: 6, w: 4 }, { x: 20, z: -16, h: 7, w: 5 },
+        // 远端山脊（z<-22 后方，作为塔基山顶的过渡）
+        { x: -10, z: -26, h: 6, w: 6 }, { x: 10, z: -26, h: 6, w: 6 },
+        { x: 0, z: -28, h: 5, w: 8 },
+      ];
+      ridgeSpecs.forEach(s => {
+        const ridge = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(Math.max(s.h, s.w) * 0.7, 0),
+          toon('#2a2230'));
+        // 顶点扰动让其更像山
+        const pos = ridge.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          pos.setXYZ(i,
+            pos.getX(i) * (0.8 + rng() * 0.4) * (s.w / s.h),
+            pos.getY(i) * (0.8 + rng() * 0.4),
+            pos.getZ(i) * (0.8 + rng() * 0.4));
+        }
+        ridge.geometry.computeVertexNormals();
+        ridge.scale.set(1, s.h / Math.max(s.h, s.w), 1);
+        ridge.position.set(s.x, s.h * 0.4, s.z);
+        ridge.castShadow = true; ridge.receiveShadow = true;
+        root.add(ridge);
+      });
+
+      // ============ 节点小平台（嵌在山体上）============
       // 起点小台地
       const startTerrace = new THREE.Mesh(
-        new THREE.CylinderGeometry(2.6, 3.0, NODES.START.y + 0.4, 12),
-        toon('#3a2c20'));
-      startTerrace.position.set(NODES.START.x, (NODES.START.y - 0.4) / 2, NODES.START.z);
+        new THREE.CylinderGeometry(2.6, 3.0, 0.6, 10),
+        toon('#4a4038'));
+      startTerrace.position.set(NODES.START.x, NODES.START.y - 0.3, NODES.START.z);
       startTerrace.castShadow = true; startTerrace.receiveShadow = true;
       root.add(startTerrace);
-      // 起点台地金色边沿（突出于台地顶面之上，避免 Z fight）
       const startEdge = new THREE.Mesh(
         new THREE.CylinderGeometry(3.3, 3.3, 0.1, 12),
         toon('#7a5828'));
       startEdge.position.set(NODES.START.x, NODES.START.y + 0.04, NODES.START.z);
       root.add(startEdge);
 
-      // E1 台地（双侧）
       for (const e1 of [NODES.E1L, NODES.E1R]) {
         const t = new THREE.Mesh(
-          new THREE.CylinderGeometry(2.5, 2.7, e1.y + 0.3, 8),
-          toon('#3a3024'));
-        t.position.set(e1.x, (e1.y - 0.3) / 2, e1.z);
+          new THREE.CylinderGeometry(2.4, 2.6, 0.7, 8),
+          toon('#4a4038'));
+        t.position.set(e1.x, e1.y - 0.35, e1.z);
         t.castShadow = true; t.receiveShadow = true; root.add(t);
       }
 
-      // E2 中段台地（左右连通）
       const e2Mid = new THREE.Mesh(
-        new THREE.BoxGeometry(22, NODES.E2L.y + 0.4, 4),
-        toon('#3a322a'));
-      e2Mid.position.set(0, (NODES.E2L.y - 0.4) / 2, NODES.E2L.z);
+        new THREE.BoxGeometry(22, 1.0, 4),
+        toon('#4a3a38'));
+      e2Mid.position.set(0, NODES.E2L.y - 0.5, NODES.E2L.z);
       e2Mid.castShadow = true; e2Mid.receiveShadow = true; root.add(e2Mid);
-      // E2 金色长边（抬高避免共面）
       const e2Edge = new THREE.Mesh(
         new THREE.BoxGeometry(22, 0.1, 4),
         toon('#5a3818'));
       e2Edge.position.set(0, NODES.E2L.y + 0.04, NODES.E2L.z);
       root.add(e2Edge);
 
-      // E3 台地
       for (const e3 of [NODES.E3L, NODES.E3R]) {
         const t = new THREE.Mesh(
-          new THREE.CylinderGeometry(2.8, 3.0, e3.y + 0.3, 8),
-          toon('#3a282c'));
-        t.position.set(e3.x, (e3.y - 0.3) / 2, e3.z);
+          new THREE.CylinderGeometry(2.7, 2.9, 0.8, 8),
+          toon('#3a302e'));
+        t.position.set(e3.x, e3.y - 0.4, e3.z);
         t.castShadow = true; t.receiveShadow = true; root.add(t);
       }
 
-      // BOSS 大圆形高台
       const bossTerrace = new THREE.Mesh(
-        new THREE.CylinderGeometry(4.2, 4.6, NODES.BOSS.y + 0.4, 16),
-        toon('#3a2030'));
-      bossTerrace.position.set(NODES.BOSS.x, (NODES.BOSS.y - 0.4) / 2, NODES.BOSS.z);
+        new THREE.CylinderGeometry(4.2, 4.6, 1.2, 16),
+        toon('#3a2832'));
+      bossTerrace.position.set(NODES.BOSS.x, NODES.BOSS.y - 0.6, NODES.BOSS.z);
       bossTerrace.castShadow = true; bossTerrace.receiveShadow = true;
       root.add(bossTerrace);
-      // BOSS 台金边（抬高）
       const bossEdge = new THREE.Mesh(
         new THREE.CylinderGeometry(4.3, 4.3, 0.15, 16),
         toon('#7a3838'));
       bossEdge.position.set(NODES.BOSS.x, NODES.BOSS.y + 0.06, NODES.BOSS.z);
       root.add(bossEdge);
 
-      // 塔基高台（连接 BOSS 平台到塔门）
-      const towerBase = block(18, TOWER_BASE_Y + 0.4, 9, '#2a1c2a');
-      towerBase.position.set(0, (TOWER_BASE_Y - 0.4) / 2, -22);
+      // 塔基（山顶）
+      const towerBase = block(18, 1.6, 9, '#2a1c2a');
+      towerBase.position.set(0, TOWER_BASE_Y - 0.8, -22);
       towerBase.castShadow = true; towerBase.receiveShadow = true;
       root.add(towerBase);
-      // 塔基金边（抬高）
       const towerBaseEdge = block(18.4, 0.18, 9.4, '#5a2828');
       towerBaseEdge.position.set(0, TOWER_BASE_Y + 0.05, -22);
       root.add(towerBaseEdge);
-      // 塔基前侧大台阶（从 Boss 高度到塔基）
       const stepCount = 5;
       const stepDz = (NODES.BOSS.z - 0.5 - (-22 + 4.5)) / stepCount;
       for (let i = 0; i < stepCount; i++) {
         const stepY = NODES.BOSS.y + (TOWER_BASE_Y - NODES.BOSS.y) * ((i + 1) / stepCount);
-        const step = block(10, 0.25, 0.8, '#3a2030');
-        step.position.set(0, stepY - 0.125, -22 + 4.5 + i * stepDz);
+        const step = block(10, 0.4, 0.8, '#3a2030');
+        step.position.set(0, stepY - 0.2, -22 + 4.5 + i * stepDz);
         step.castShadow = true; step.receiveShadow = true;
         root.add(step);
-        // 台阶金边（抬高避免共面）
         const stepEdge = block(10.1, 0.05, 0.82, '#7a3838');
         stepEdge.position.set(0, stepY + 0.04, -22 + 4.5 + i * stepDz);
         root.add(stepEdge);
       }
 
-      // 连接路：起点 → E1 之间的小斜坡（隐式，路径会自动连接）
-      // 路径系统会用石板沿斜坡铺，所以不需要单独斜坡
+      // ============ 山道两侧的岩石（划定路径感，小型 + 离路径远）============
+      const ROCK_BORDER_SPECS = [
+        // 起点外缘（远离 startTerrace 半径 3.0）
+        { x: 5.5, z: 14, size: 0.7 }, { x: -5.5, z: 14, size: 0.6 },
+        { x: 4.5, z: 17, size: 0.5 }, { x: -4.5, z: 17, size: 0.55 },
+        // 起点→E1 之间
+        { x: 5.5, z: 9, size: 0.6 }, { x: -5.5, z: 9, size: 0.55 },
+        { x: 2.5, z: 10, size: 0.4 }, { x: -2.5, z: 10, size: 0.45 },
+        // E1L 周围（外侧）
+        { x: -10.5, z: 8, size: 0.8 }, { x: -10.5, z: 5, size: 0.65 },
+        { x: -3, z: 7, size: 0.5 },
+        // E1R 周围（外侧）
+        { x: 10.5, z: 8, size: 0.8 }, { x: 10.5, z: 5, size: 0.65 },
+        { x: 3, z: 7, size: 0.5 },
+        // E2 周围（外侧）
+        { x: -13, z: -1, size: 0.9 }, { x: 13, z: -1, size: 0.9 },
+        { x: -13, z: 2, size: 0.7 }, { x: 13, z: 2, size: 0.7 },
+        // E3 周围
+        { x: -11, z: -9, size: 0.8 }, { x: 11, z: -9, size: 0.8 },
+        { x: -10.5, z: -12, size: 0.65 }, { x: 10.5, z: -12, size: 0.7 },
+        // BOSS 周围
+        { x: -6, z: -13, size: 0.75 }, { x: 6, z: -13, size: 0.75 },
+        // 山道远端大岩（仅作背景轮廓，更远）
+        { x: -16, z: 4, size: 1.0 }, { x: 16, z: 4, size: 1.0 },
+        { x: -17, z: -5, size: 1.1 }, { x: 17, z: -5, size: 1.1 },
+        { x: -15, z: -13, size: 0.9 }, { x: 15, z: -13, size: 0.9 },
+      ];
+      ROCK_BORDER_SPECS.forEach(spec => {
+        const rock = makeBigRock(spec.size, ['#4a4038', '#3a3a38', '#42382c'][Math.floor(rng() * 3)]);
+        const y = estimateGroundY(spec.x, spec.z);
+        rock.position.set(spec.x + rand(-0.2, 0.2), y + spec.size * 0.55, spec.z + rand(-0.2, 0.2));
+        rock.scale.y = 0.6 + rng() * 0.2;  // 更扁
+        root.add(rock);
+        // 30% 概率加苔藓
+        if (rng() < 0.3) addMossOnTop(rock, spec.size);
+      });
+
+      // ============ 散布草丛（路径周围和台地表面）============
+      for (let i = 0; i < 60; i++) {
+        let x, z, tries = 0;
+        do {
+          x = rand(-18, 18); z = rand(-20, 16); tries++;
+        } while (tries < 12 && isNearAnyNode(x, z, 1.2));
+        if (tries >= 12) continue;
+        const grass = makeGrassClump();
+        const y = estimateGroundY(x, z);
+        grass.position.set(x, y, z);
+        root.add(grass);
+      }
     }
 
     function buildPath() {
@@ -1843,8 +2157,8 @@
 
     // ============ 启动 ============
     document.getElementById('seedVal').textContent = String(currentSeed).padStart(6, '0');
-    build();
-    placePlayer();
+    try { build(); } catch (e) { window.__bldErr = e.message + ' @ ' + (e.stack || '').split('\n')[1]; console.error(e); }
+    try { placePlayer(); } catch (e) { window.__plErr = e.message; console.error(e); }
 
     const clock = new THREE.Clock();
     function animate() {

@@ -33,11 +33,13 @@ import {
   rollChoices,
   rollRewardChoices,
   makeInstance,
+  damageEnemy,
 } from "./cards.ts";
 import {
   newBattle,
   playCard,
   endPlayerTurn,
+  endPlayerTurnAnimated,
   selectTarget,
   drawCards,
   discardWeapons,
@@ -96,7 +98,6 @@ export function newGame(): GameState {
     revivesUsed: 0,
     suitPlayedTotal: { spade: 0, diamond: 0, heart: 0, club: 0 },
     suitConsumedTotal: { spade: 0, diamond: 0, heart: 0, club: 0 },
-    ultsThisBattle: { spade: false, diamond: false, heart: false, club: false },
     battlesSinceEquipReward: 0,
   };
   // 起始装备：1 把短剑放在常驻区
@@ -151,6 +152,12 @@ function startNextFloor(state: GameState) {
   state.floor += 1;
   state.battleGroups = [];
   state.battleIndex = 0;
+  // 防御性补血：无论奖励流程怎么走，进新关一定 HP 满（修玩家报告 F9→F10 没补满 bug）
+  // 注：F1 初始 startNextFloor 也走这里，vita 已经 = vitaMax 不会出问题
+  if (state.player.vita < state.player.vitaMax) {
+    state.player.vita = state.player.vitaMax;
+    pushLog(state, `进入第 ${state.floor} 关：HP 补满。`, "win");
+  }
   // 生成楼层地图，进入 floor_map 阶段
   state.floorMap = generateFloorMap(state.floor);
   state.phase = "floor_map";
@@ -343,6 +350,17 @@ export function gameEndTurn(state: GameState) {
   }
 }
 
+// 动画版本：每个敌人 step 之间 await onStep（用于 UI 渲染 + 间隔）
+export async function gameEndTurnAnimated(state: GameState, onStep: () => Promise<void>): Promise<void> {
+  if (state.phase !== "battle" || !state.battle) return;
+  await endPlayerTurnAnimated(state.battle, logFn(state), onStep);
+  if (state.battle.phase === "won") onBattleWon(state);
+  else if (state.battle.phase === "lost") {
+    state.phase = "game_over";
+    pushLog(state, `第 ${state.floor} 关倒下。`, "lose");
+  }
+}
+
 // 骰子先手敌人 — 战斗开始骰子翻出双数时调用：敌人先打一击，但不推进 turn 计数
 // 实现：直接走 enemyTurn 但不增 turn / 不进 endPlayerTurn 的"摸牌" 流程
 export function gameEnemyFirstStrike(state: GameState) {
@@ -353,6 +371,19 @@ export function gameEnemyFirstStrike(state: GameState) {
   // turn 会变 2，但 log 里清楚是"敌人先手已结算"
   endPlayerTurn(state.battle, log);
   // 防止 enemyFirst 重复触发
+  state.battle.enemyFirst = false;
+  if (state.battle.phase === "lost") {
+    state.phase = "game_over";
+    pushLog(state, `第 ${state.floor} 关倒下。`, "lose");
+  }
+}
+
+// 骰子先手敌人 — 动画版本（含 step 间隔）
+export async function gameEnemyFirstStrikeAnimated(state: GameState, onStep: () => Promise<void>): Promise<void> {
+  if (state.phase !== "battle" || !state.battle) return;
+  if (!state.battle.enemyFirst) return;
+  const log = logFn(state);
+  await endPlayerTurnAnimated(state.battle, log, onStep);
   state.battle.enemyFirst = false;
   if (state.battle.phase === "lost") {
     state.phase = "game_over";
@@ -378,6 +409,11 @@ export function gameDiscardArmors(state: GameState) {
 
 function onBattleWon(state: GameState) {
   state.battle = null;
+  // 战斗结束时若还有未消化的强制弃牌候选，统一塞回弃牌堆（下一场 newBattle 会洗回牌库）
+  if (state.player.pendingDraws && state.player.pendingDraws.length > 0) {
+    state.player.discard.push(...state.player.pendingDraws);
+    state.player.pendingDraws = [];
+  }
   // 关卡末节点（boss 或非 boss 关末的 elite）= 关卡完成
   if (state.floorMap) {
     const cur = getNode(state.floorMap, state.floorMap.currentNodeId);
@@ -412,6 +448,7 @@ function enterRewardCard(state: GameState) {
   state.choices = rollRewardChoices(pool, REWARD_CHOICE_COUNT, state.floor, owned, forceEquip);
 
   // Boss 战胜利 epic 保底：仅第 6 关及以后的 Boss 触发
+  // 机制：额外追加一张随机 Epic 到候选末位，三选一变四选一（不挤掉原候选）
   if (state.pendingFloorClear && state.floor >= 6) {
     const lastEnemies = state.battleGroups[state.battleGroups.length - 1];
     const wasBoss = lastEnemies?.some(e => e.tier === "boss");
@@ -420,13 +457,13 @@ function enterRewardCard(state: GameState) {
       const epicPool = pool.filter(id => CARD_DB[id]?.rarity === "epic" && !state.choices.some(c => c.defId === id));
       if (epicPool.length > 0) {
         const pickedId = epicPool[Math.floor(Math.random() * epicPool.length)];
-        state.choices[0] = makeInstance(pickedId, undefined, state.floor);
-        pushLog(state, `★ Boss 战利品：保底抽到史诗卡。`, "win");
+        state.choices.push(makeInstance(pickedId, undefined, state.floor));
+        pushLog(state, `★ Boss 战利品：额外掉落一张史诗卡，候选 +1。`, "win");
       }
     }
   }
 
-  pushLog(state, `战利品：从 ${REWARD_CHOICE_COUNT} 张牌中选 1 张加入牌库。`, "system");
+  pushLog(state, `战利品：从 ${state.choices.length} 张牌中选 1 张加入牌库。`, "system");
 }
 
 // 兼容旧入口（保留 export 防 main.ts 直接调用，但 onBattleWon 已不再走它）
@@ -800,6 +837,37 @@ export function discardHandCards(state: GameState, uids: string[]): boolean {
   return before > state.player.hand.length;
 }
 
+// 强制弃牌（手牌满 + drawCards 溢出时触发）
+// 玩家从 hand 选 K 张丢弃 → 移到 discard；pendingDraws 全部入 hand → 清空
+// uids.length 必须 === pendingDraws.length（UI 已校验，这里再防御一次）
+export function confirmForceDiscard(state: GameState, uids: string[]): boolean {
+  if (state.phase !== "battle" || !state.battle) return false;
+  const pending = state.player.pendingDraws ?? [];
+  if (pending.length === 0) return false;
+  if (uids.length !== pending.length) return false;
+  const set = new Set(uids);
+  const discarded: CardInstance[] = [];
+  state.player.hand = state.player.hand.filter(c => {
+    if (set.has(c.uid)) {
+      discarded.push(c);
+      return false;
+    }
+    return true;
+  });
+  if (discarded.length !== pending.length) {
+    // 选的 uid 没全在 hand 里 — 回滚
+    state.player.hand.push(...discarded);
+    return false;
+  }
+  state.player.discard.push(...discarded);
+  state.player.hand.push(...pending);
+  state.player.pendingDraws = [];
+  const dropNames = discarded.map(c => CARD_DB[c.defId].name).join("、");
+  const newNames = pending.map(c => CARD_DB[c.defId].name).join("、");
+  pushLog(state, `强制弃牌：丢弃 ${discarded.length} 张（${dropNames}），换入 ${pending.length} 张（${newNames}）。`, "player");
+  return true;
+}
+
 // ─────────────────────────────────────────────────────────
 // 花色专精 · Tier 3 大招（消耗 8 亲和度，持久化扣减；本场每色限 1 次）
 // ─────────────────────────────────────────────────────────
@@ -811,41 +879,30 @@ export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
   const log = logFn(state);
   const player = state.battle.player;
   const enemies = state.battle.enemies;
-
-  // 本场限 1 次：4 花色独立，每场战斗 newBattle 重置 ultsThisBattle
-  // （配合 suitConsumedTotal 持久化消耗，让每次大招都吃永久亲和度成本）
-  if (!state.player.ultsThisBattle) {
-    state.player.ultsThisBattle = { spade: false, diamond: false, heart: false, club: false };
-  }
-  if (state.player.ultsThisBattle[suit]) {
-    log(`大招：本场每花色限 1 次，${suit} 已用过。`, "system");
-    return false;
-  }
+  // 大招"本场 1 次"限制已取消：只要专精能再次充满到 T3（消耗 8 亲和），即可再次释放。
+  // 重新放需要玩家继续打牌或装备触发亲和度回升，门槛已经够高。
 
   if (suit === "spade") {
     // 狂战之击：当前目标 50% 真实伤害（无视护甲）
     const target = enemies[state.battle.targetIndex] ?? enemies.find(e => e.alive);
     if (target) {
       const dmg = Math.max(1, Math.floor(target.hp * 0.5));
-      target.hp = Math.max(0, target.hp - dmg);
       log(`★♠ 狂战之击！${target.name} -${dmg}（真实伤害，无视护甲）。`, "win");
-      if (target.hp <= 0) { target.alive = false; log(`★ 击败 ${target.name}！`, "win"); }
+      damageEnemy(target, dmg, log);
     }
   } else if (suit === "diamond") {
-    // 影舞步：本回合敌人攻击全闪避 + 下次攻击三连击 + 敌人下回合停顿（不行动）
-    player.statuses.push({ id: "dodge_full_round", name: "影舞步·闪避", stacks: 99, duration: 1 });
-    player.statuses.push({ id: "triple_strike",   name: "影舞步·三连", stacks: 1,  duration: -1 });
-    player.statuses.push({ id: "time_stop",       name: "时停",       stacks: 1,  duration: 1 });
-    log(`★♦ 影舞步！本回合 100% 闪避，下次攻击三连击，敌人下回合停顿。`, "win");
+    // 影子杀手：本回合 100% 闪避 + 下次攻击三连击（与 keyword/T1/T2 连击叠加）
+    player.statuses.push({ id: "dodge_full_round", name: "影子杀手·闪避", stacks: 99, duration: 1 });
+    player.statuses.push({ id: "triple_strike",   name: "影子杀手·三连", stacks: 1,  duration: -1 });
+    log(`★♦ 影子杀手！本回合 100% 闪避，下次攻击 ×3 连击。`, "win");
   } else if (suit === "heart") {
-    // 生命洪流：HP +50% maxHP + maxHP +3
-    const heal = Math.ceil(player.vitaMax * 0.5);
+    // 生命洪流：HP 补满 + 永久 maxHP +5
     const before = player.vita;
-    player.vitaMax += 3;
-    player.vita = Math.min(player.vitaMax, player.vita + heal);
-    log(`★♥ 生命洪流！HP ${before} → ${player.vita}（+${heal}），maxHP +3。`, "win");
+    player.vitaMax += 5;
+    player.vita = player.vitaMax;
+    log(`★♥ 生命洪流！HP ${before} → ${player.vita}（补满），maxHP +5。`, "win");
   } else if (suit === "club") {
-    // 群体禁咒：全敌 +3 沉默 / +3 易伤 / +3 中毒
+    // 群体禁咒：全敌 沉默 3 回 + 易伤 3 层 3 回 + 中毒 3
     for (const e of enemies) {
       if (!e.alive) continue;
       const exists = (id: string) => e.statuses.find(s => s.id === id);
@@ -853,21 +910,18 @@ export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
       if (sil) sil.duration = Math.max(sil.duration, 3);
       else e.statuses.push({ id: "silenced", name: "沉默", stacks: 1, duration: 3 });
       const vul = exists("vulnerable");
-      if (vul) { vul.stacks += 1; vul.duration = Math.max(vul.duration, 3); }
-      else e.statuses.push({ id: "vulnerable", name: "易伤", stacks: 1, duration: 3 });
+      if (vul) { vul.stacks += 3; vul.duration = Math.max(vul.duration, 3); }
+      else e.statuses.push({ id: "vulnerable", name: "易伤", stacks: 3, duration: 3 });
       const psn = exists("poison");
       if (psn) psn.stacks += 3;
       else e.statuses.push({ id: "poison", name: "中毒", stacks: 3, duration: -1 });
     }
-    log(`★♣ 群体禁咒！全体敌人 +沉默 +易伤 +中毒。`, "win");
+    log(`★♣ 群体禁咒！全体敌人 +沉默 +3易伤 +3中毒。`, "win");
   }
-
-  // 本场释放标记 → 同 suit 在本场不能再放
-  state.player.ultsThisBattle![suit] = true;
 
   // 大招消耗 8 亲和度（持久化到 suitConsumedTotal，跨战不归零，让大招真正吃 build 成本）
   consumeSuitAffinity(state.battle, suit, 8);
-  log(`大招 ${suit}：消耗 8 亲和（永久），下场战斗恢复使用次数。`, "system");
+  log(`大招 ${suit}：消耗 8 亲和（永久），亲和度需重新积累方可再次释放。`, "system");
   return true;
 }
 
