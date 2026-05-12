@@ -152,6 +152,12 @@ function startNextFloor(state: GameState) {
   state.floor += 1;
   state.battleGroups = [];
   state.battleIndex = 0;
+  // 防御性补血：无论奖励流程怎么走，进新关一定 HP 满（修玩家报告 F9→F10 没补满 bug）
+  // 注：F1 初始 startNextFloor 也走这里，vita 已经 = vitaMax 不会出问题
+  if (state.player.vita < state.player.vitaMax) {
+    state.player.vita = state.player.vitaMax;
+    pushLog(state, `进入第 ${state.floor} 关：HP 补满。`, "win");
+  }
   // 生成楼层地图，进入 floor_map 阶段
   state.floorMap = generateFloorMap(state.floor);
   state.phase = "floor_map";

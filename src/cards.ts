@@ -494,16 +494,15 @@ const KATANA: CardDef = {
   id: "katana",
   name: "单手刀",
   category: "equipment",
-  desc: "装备：基础伤害 4。",
+  desc: "装备：基础伤害 5。",
   equipKind: "weapon",
   equipSuit: "diamond",
-  baseDmg: 4,
-  // XLSX v6：去掉 hits=2，回归普通 common 武器
+  baseDmg: 5,
   equipEffects: [
-    { desc: "基础伤害 4。", stat: "4 伤" },
-    { desc: "叠加 ×1.4。", stat: "5.6 伤" },
-    { desc: "叠加 ×1.8。", stat: "7.2 伤" },
-    { desc: "叠加 ×2.2。", stat: "8.8 伤" },
+    { desc: "基础伤害 5。", stat: "5 伤" },
+    { desc: "叠加 ×1.4。", stat: "7 伤" },
+    { desc: "叠加 ×1.8。", stat: "9 伤" },
+    { desc: "叠加 ×2.2。", stat: "11 伤" },
   ],
 };
 
