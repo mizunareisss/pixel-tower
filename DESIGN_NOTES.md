@@ -234,3 +234,102 @@
 - 牌升级"+ 形态"
 - 多路径分支
 - 解锁系统（完成 N 关解锁起始装备）
+
+
+---
+
+## 🌄 V2 · 3D 关卡版重构（远期，未启动）
+
+> 下一个大版本：从纯 2D 卡牌界面 → 类纪念碑谷的 3D 关卡场景 + UI HUD 叠加。
+> 由 Kuan（kuanqinc）主导场景开发，分工详见 CLAUDE.md。本节是设计上下文档案。
+
+### 核心愿景
+
+- **每关 = 一个独立的 3D 场景**
+- 视角：等距正交 + shot-based 慢摇（已在 `prototypes/scene-f1-outside.html` 验证）
+- 玩家在场景里**沿可见路径走** → 走到节点 → 触发遭遇（战斗 / 事件 / 商店 / 铁匠铺）
+- **UI 模式：HUD 悬浮** —— 手牌 / HP / 状态条 / 战斗 modal 全部作为透明 HTML 叠层，3D 场景始终可见在背景
+
+### 已就绪的资产（待清点确认）
+
+- `prototypes/scene-f1-outside.html` — F1 塔外场景 V1（参考标准）
+- `prototypes/character-gallery.html` — 主角 + NPC + 宝箱 3D 模型
+- 待确认是否齐全：
+  - 5 个事件 NPC（商人/赌徒/神社/巫师/宝箱）
+  - 铁匠铺 NPC
+  - 玩家
+  - 敌人（5 种族 × 3 tier — 估计还要做 / 走拼装方案）
+
+### 待解决的两个大系统
+
+#### 1. 场景 ↔ 随机路线 自适应匹配
+
+现状：`map.ts:generateFloorMap` 生成抽象节点图 `{layer, col, next[]}`，玩家点击节点切换战斗。
+3D 化后需要把节点图映射到场景里的实际位置。三种方案待选：
+
+- **A · 固定场景 + 候选位**：场景手工搭，节点预留 4-5 个候选位，按 generateFloorMap 数据挑能连通的位置点亮
+- **B · 程序化场景 + 路径**：场景以 tile/region 为单位"长"出来，路径决定地形布局
+- **C · 混合**：手工核心区（boss 房 / 入口 / 标志性地标）+ 中间随机段程序拼
+
+倾向：先做 A（手工掌控视觉），数据驱动节点位置只挑/不生。等关卡数 ≥ 6 之后再考虑 B/C 的可复用性。
+
+#### 2. 怪物身体组件随机拼装
+
+现状：`enemies.ts:buildRandomEnemy` 用固定种族模板 + 数值随机。
+3D 化后：模块化拼装（用户原话）→ 头 / 躯干 / 四肢 / 武器 / 尾 / 翅膀 等组件库。
+
+两种数值耦合方案待选：
+
+- **组件 = 数值 source**（构筑感强）：
+  - "巨头" → baseHp +30%，攻击 hits × 2
+  - "毒刺尾" → 攻击附 +N poison
+  - "盾臂" → armor +2
+  - 玩家看外形能预判机制 → strategic prediction
+  - 实现成本高（每组件要绑机制）
+
+- **组件 = 纯视觉**（实现简单）：
+  - 拼装只决定外观，战斗数值仍按 tier × floor 表格生成
+  - 视觉多样性 ≠ 战斗多样性
+  - 实现快，但战略深度低
+
+倾向：第一版先做"组件 = 纯视觉"快速跑通；后续再选若干旗舰组件（巨头/毒尾/盾臂）做数值耦合，逐步过渡到 v1。
+
+### 架构转场点
+
+主游戏现状（`src/main.ts`）UI 模式：
+```ts
+stageEl.innerHTML = "...";  // 全屏 DOM 铺满
+```
+
+3D 化后：
+```html
+<div id="canvas-3d"></div>          <!-- Three.js 场景占满 -->
+<div id="ui-hud">                    <!-- 透明 overlay，叠在 canvas 之上 -->
+  <div id="hand">...</div>           <!-- 手牌 HUD -->
+  <div id="hp-bar">...</div>
+  <div id="modal-layer">...</div>    <!-- 战斗 modal -->
+</div>
+```
+
+CSS：3D 容器 `position: fixed; inset: 0; z-index: 0`；UI HUD `position: fixed; inset: 0; z-index: 10; pointer-events: none` + 子元素 `pointer-events: auto`。
+
+### 视觉规范（已定稿，原型固定）
+
+- 视角：等距正交相机 + shot-based 慢摇
+- 渲染：Three.js + MeshToonMaterial + 5 段 gradientMap + UnrealBloomPass
+- 调色：暗紫底 `#1f1828` + 火光暖橙 + 紫色符文 `#c868ff`
+- 节点系统：每节点 `next[]`，玩家点底栏按钮逐个走过
+- 雾：fog near 18 / far 60
+- 移动端竖屏：相机 `d = aspect < 1 ? 9 : 12`
+
+### 已踩坑（迁移时注意）
+
+- **Z fighting**：贴表面装饰物抬高 ≥0.03；透明大面积 mesh 加 `depthWrite: false` + `renderOrder`
+- **Three.js Clock**：`getDelta()` 每帧只调一次；取累计时间用属性 `clock.elapsedTime`，不用方法 `getElapsedTime()`（俩抢内部 oldTime）
+
+### 协作分工
+
+- **Kuan**：`prototypes/*.html` 场景 / 美术 / 关卡视觉
+- **本主**：`src/*.ts` 主游戏逻辑 / 战斗 / UI
+
+物理隔离 → 冲突 ≈ 0。详见 CLAUDE.md。
