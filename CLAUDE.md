@@ -1,0 +1,128 @@
+# Suitspire / 塔牌 — 项目说明
+
+这是个 TypeScript + Vite 的 roguelike 卡牌游戏（爬塔），4 花色专精构筑。线上：https://suitspire.netlify.app
+
+## 目录结构
+
+```
+pixel-tower/
+├── src/                    # 主游戏 TS 代码（这里改影响线上）
+│   ├── main.ts             # UI 渲染入口
+│   ├── battle.ts           # 战斗系统（伤害计算 / 摸牌 / 状态）
+│   ├── cards.ts            # 所有卡定义 + 奖励抽卡
+│   ├── game.ts             # 顶层游戏状态机
+│   ├── enemies.ts          # 敌人生成
+│   ├── bossAI.ts           # Boss AI 行为
+│   ├── map.ts              # 楼层地图
+│   ├── events.ts           # 楼层事件
+│   ├── types.ts            # 类型 + 常量（STATUS_META / SUIT_TIER_DESCS）
+│   └── style.css
+├── prototypes/             # ★ 场景原型（Three.js + importmap + CDN）
+│   ├── scene-f1-outside.html  # F1 塔外大地图（当前主交付）
+│   ├── character-gallery.html # 角色定稿模型画廊
+│   ├── main-scene.html        # 12 层塔楼概览（已废）
+│   └── tower-scenes.html      # 早期塔楼实验
+├── balance-csv/            # 数值表（XLSX + 自动导出 CSV）
+├── SUITSPIRE_WORLD.md      # 世界圣经（视觉调子 / 4 段主题 / 5 种族 / 5 NPC）
+├── DESIGN_NOTES.md         # 设计笔记
+├── BALANCE_SHEET.md        # 数值汇总（balance-csv 自动生成）
+└── index.html              # Vite 主入口
+```
+
+**核心规则**：`src/` 影响线上游戏，`prototypes/` 是独立 Three.js 实验，**不会被 Vite 构建打包**，dist/ 只含 `index.html` + 主游戏 bundle。原型只在本地跑，不上线。
+
+## 分工
+
+- **场景原型**（`prototypes/*.html`）：3D 美术 / 关卡视觉
+- **主游戏**（`src/*.ts`）：玩法 / 战斗 / UI
+
+两人若都改 `src/`，按模块切：UI/战斗逻辑 vs 内容/数据。
+
+## 分支模型
+
+- `main` — 稳定，对应 Netlify 部署
+- `dev` — 日常开发，所有 commit 先进 dev
+- `feature/xxx` — 大改用 feature 分支，做完合 dev
+
+### 协作者工作流
+
+```bash
+git clone https://github.com/mizunareisss/pixel-tower.git
+cd pixel-tower
+npm install
+git checkout dev
+git pull
+
+# 改之前
+git checkout -b feature/scene-f2  # 取个描述性名字
+
+# 改完
+git add prototypes/scene-f2-inside.html
+git commit -m "feat: F2 塔内场景 v1"
+git push -u origin feature/scene-f2
+
+# 在 GitHub 上开 PR → dev 分支
+```
+
+### 仓库所有者合 PR
+
+```bash
+git checkout dev && git pull
+# 审 PR 后在 GitHub 点 merge 即可
+# 或本地：
+git merge feature/scene-f2 && git push origin dev
+```
+
+## 本地开发命令
+
+```bash
+npm install                  # 首次安装
+npm run dev                  # 主游戏 + 原型都能访问
+                             #   主游戏: http://localhost:5173/
+                             #   原型:   http://localhost:5173/prototypes/scene-f1-outside.html
+npm run build                # 产线构建（只打主游戏，不含 prototypes）
+npx tsc --noEmit             # 类型检查
+```
+
+原型完全静态，**也可以**用任意 static server 跑（不需要 npm）：
+```bash
+python3 -m http.server 5180
+# http://localhost:5180/prototypes/scene-f1-outside.html
+```
+
+## 部署
+
+**正常情况**：push 到 `main` → GitHub → Netlify 自动构建部署。
+
+**当前状态**：Netlify 账号 build credit 超额，自动部署会 fail。要发版改用 CLI 两步走：
+```bash
+npm run build
+netlify deploy --dir=dist                                  # 上传 draft
+# 复制输出里的 deploy ID（形如 6a02e280...）
+netlify api restoreSiteDeploy --data='{"site_id":"35081b0a-9da8-4bde-8a10-36593411da69","deploy_id":"<deploy_id>"}'
+# Netlify CLI 需要先 netlify link --id 35081b0a-9da8-4bde-8a10-36593411da69
+```
+
+prototypes 不会被 build，朋友改 prototype **不影响**线上游戏。
+
+## 视觉决策（已定稿，原型不要改）
+
+- 视角：等距正交相机 + shot-based 慢摇
+- 渲染：Three.js + MeshToonMaterial + 5 段 gradientMap + UnrealBloomPass
+- 调色：暗紫底 `#1f1828` + 火光暖橙 + 紫色符文 `#c868ff`
+- 节点系统：每节点定义 `next[]`，玩家点底栏按钮逐个走过
+- 雾：fog near 18 / far 60
+- 移动端竖屏：相机 `d = aspect < 1 ? 9 : 12`
+
+## 已踩过的坑
+
+- **Z fighting**：贴表面的金边/装饰物抬高 ≥0.03；透明大面积 mesh 加 `depthWrite: false` + `renderOrder`
+- **Three.js Clock**：`getDelta()` 每帧只调一次；取累计时间用 `clock.elapsedTime` 属性（不是 `getElapsedTime()` 方法），两者抢内部 oldTime 会让 dt 错乱
+- **Netlify deploy --prod**：账号 credit 超额时直接 prod deploy 会 403，必须 draft + restoreSiteDeploy 两步走
+
+## 必读文档
+
+新接手先读：
+1. **`SUITSPIRE_WORLD.md`** — 世界观 / 视觉调子 / 4 段主题
+2. **`DESIGN_NOTES.md`** — 玩法 / 系统设计
+3. **`prototypes/scene-f1-outside.html`** — F1 已完成参考实现
