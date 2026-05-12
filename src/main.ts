@@ -1408,7 +1408,7 @@ function showStatusInfo(id: string, stacks: number, duration: number) {
         <button id="status-info-close">✕</button>
       </div>
       <div class="status-info-body">
-        <p class="status-info-desc">${escapeHTML(meta.desc)}</p>
+        <p class="status-info-desc">${escapeHTML(meta.desc).replace(/\n/g, "<br>")}</p>
         <div class="status-info-stats">
           <span><b>当前层数：</b>×${stacks}</span>
           <span><b>持续：</b>${durationText}</span>
