@@ -166,7 +166,7 @@ export const STATUS_META: Record<string, StatusMeta> = {
 
   // ── 附魔触发的 status ─────────────────────────────────────
   phalanx_dr:        { name: "重甲列阵", desc: "本回合每张攻击牌使受击 -stacks（cap 按 Lv）。\n来源：附魔 ec_phalanx「重甲列阵」。", kind: "buff" },
-  fullplate_pending: { name: "反震蓄势", desc: "敌人回合内每受一击累积 +N（N 按重铠 stack）；下回合开始时全部释放为 shield_block 持续护盾。\n来源：装备 full_plate「重铠」受击触发。", kind: "buff" },
+  fullplate_pending: { name: "反震蓄势", desc: "每回合**首次**受击形成 1 层蓄势（后续受击不叠加）；下回合开始时变成 1 层 shield_block 临时护盾。\n来源：装备 full_plate「重铠」受击触发。", kind: "buff" },
   swift_dodge_temp:  { name: "风行余势", desc: "本回合内闪避概率 +stacks%（cap 按 Lv）。\n来源：附魔 ec_swift「风行步」闪避后触发。", kind: "buff" },
   enc_runic_immune:  { name: "符文护盾", desc: "本场战斗第 1 次受击免疫（Lv1-2 -50%，Lv3+ 完全免疫）。\n来源：附魔 ec_runic「符文护盾」（newBattle 时挂上）。", kind: "buff" },
   enc_dot_immune:    { name: "圣化", desc: "中毒 / 燃烧 / 出血对你无效。\n来源：附魔 ec_runic「符文护盾」**Lv5** 才挂上（Lv1-4 不带 DOT 免疫）。", kind: "buff" },

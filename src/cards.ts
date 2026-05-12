@@ -803,44 +803,30 @@ const FULL_PLATE: CardDef = {
   id: "full_plate",
   name: "重铠",
   category: "equipment",
-  desc: "装备：受击 -5 / -7 / -9 / -12（叠加）。每次受击后累积反震护盾，下回合开始时释放为临时护盾。",
+  desc: "装备：受击 -5 / -7 / -9 / -12（叠加）。每回合**第一次**受击形成 1 层反震蓄势，下回合开局变临时护盾。叠加不增加蓄势层数，只加深护甲值。",
   equipKind: "armor",
   equipSuit: "club",
   baseReduce: 5,
   equipEffects: [
-    // 反震：受击时累积到 fullplate_pending 蓄势状态（独立于 shield_block）
-    //  startNewPlayerTurn 那里会把 pending 转换为 shield_block（duration=-1 持续）
-    //  这样匹配描述「下回合开始时释放为临时护盾」，避免 shield 在敌方回合白涨然后清零
-    { desc: "-5 受击 + 反震 +2 蓄势 → 下回合开局变护盾。", stat: "-5 受击 反震+2",
-      onTakeDamage: (c, d) => {
-        const ex = c.player.statuses.find(s => s.id === "fullplate_pending");
-        if (ex) ex.stacks += 2;
-        else c.player.statuses.push({ id: "fullplate_pending", name: "反震蓄势", stacks: 2, duration: -1 });
-        return Math.max(0, d - 5);
-      } },
-    { desc: "-7 受击 + 反震 +3 蓄势 → 下回合开局变护盾。", stat: "-7 受击 反震+3",
-      onTakeDamage: (c, d) => {
-        const ex = c.player.statuses.find(s => s.id === "fullplate_pending");
-        if (ex) ex.stacks += 3;
-        else c.player.statuses.push({ id: "fullplate_pending", name: "反震蓄势", stacks: 3, duration: -1 });
-        return Math.max(0, d - 7);
-      } },
-    { desc: "-9 受击 + 反震 +4 蓄势 → 下回合开局变护盾。", stat: "-9 受击 反震+4",
-      onTakeDamage: (c, d) => {
-        const ex = c.player.statuses.find(s => s.id === "fullplate_pending");
-        if (ex) ex.stacks += 4;
-        else c.player.statuses.push({ id: "fullplate_pending", name: "反震蓄势", stacks: 4, duration: -1 });
-        return Math.max(0, d - 9);
-      } },
-    { desc: "-12 受击 + 反震 +5 蓄势 → 下回合开局变护盾。", stat: "-12 受击 反震+5",
-      onTakeDamage: (c, d) => {
-        const ex = c.player.statuses.find(s => s.id === "fullplate_pending");
-        if (ex) ex.stacks += 5;
-        else c.player.statuses.push({ id: "fullplate_pending", name: "反震蓄势", stacks: 5, duration: -1 });
-        return Math.max(0, d - 12);
-      } },
+    // 反震：每回合仅第一次受击形成 1 层 fullplate_pending；后续受击不再增加；下回合开始转 shield_block
+    // 重铠 stack 只决定护甲值（受击减伤），不影响反震蓄势量
+    { desc: "-5 受击 + 每回合首次受击 +1 反震蓄势（下回合开局变护盾）。", stat: "-5 受击 反震+1",
+      onTakeDamage: (c, d) => { addFullplatePending(c); return Math.max(0, d - 5); } },
+    { desc: "-7 受击 + 每回合首次受击 +1 反震蓄势。", stat: "-7 受击 反震+1",
+      onTakeDamage: (c, d) => { addFullplatePending(c); return Math.max(0, d - 7); } },
+    { desc: "-9 受击 + 每回合首次受击 +1 反震蓄势。", stat: "-9 受击 反震+1",
+      onTakeDamage: (c, d) => { addFullplatePending(c); return Math.max(0, d - 9); } },
+    { desc: "-12 受击 + 每回合首次受击 +1 反震蓄势。", stat: "-12 受击 反震+1",
+      onTakeDamage: (c, d) => { addFullplatePending(c); return Math.max(0, d - 12); } },
   ],
 };
+
+// 反震蓄势辅助函数：每回合首次受击才挂上，后续受击不叠加
+function addFullplatePending(c: BattleContext): void {
+  const ex = c.player.statuses.find(s => s.id === "fullplate_pending");
+  if (ex) return;  // 本回合已经有蓄势，不再添加（防止多 hit 累积）
+  c.player.statuses.push({ id: "fullplate_pending", name: "反震蓄势", stacks: 1, duration: -1 });
+}
 
 const SCALE_MAIL: CardDef = {
   id: "scale_mail",
