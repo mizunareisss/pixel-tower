@@ -316,22 +316,16 @@ const FORBIDDEN_SCEPTER: CardDef = {
   id: "forbidden_scepter",
   name: "禁忌权杖",
   category: "equipment",
-  desc: "装备：基础 7。攻击数值 += 本回合已出 ♣ 牌数 × N（N 随 stack 升级）。",
+  desc: "装备：基础 5。攻击数值 += ♣ 亲和度 × 0.5（向下取整；亲和度 cap 20，最高 +10 直伤）。",
   equipKind: "weapon",
   equipSuit: "club",
-  baseDmg: 7,
-  equipEffects: (() => {
-    const mk = (perClubBuff: number, baseStr: string) => ({
-      desc: `基础 ${baseStr} + 每张已出 ♣ 牌 +${perClubBuff}/张直伤。`,
-      stat: `${baseStr} 伤 +${perClubBuff}/♣牌`,
-    });
-    return [
-      mk(1, "7"),
-      mk(2, "9.8"),
-      mk(2, "12.6"),
-      mk(3, "15.4"),
-    ] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
-  })(),
+  baseDmg: 5,
+  equipEffects: [
+    { desc: "基础 5 + ♣ 亲和度 × 0.5（最高 +10）。", stat: "5 伤 + ♣亲和×0.5" },
+    { desc: "基础 7 + ♣ 亲和度 × 0.5（最高 +10）。", stat: "7 伤 + ♣亲和×0.5" },
+    { desc: "基础 9 + ♣ 亲和度 × 0.5（最高 +10）。", stat: "9 伤 + ♣亲和×0.5" },
+    { desc: "基础 11 + ♣ 亲和度 × 0.5（最高 +10）。", stat: "11 伤 + ♣亲和×0.5" },
+  ],
 };
 
 // ── 防具：♠ common 战甲带 ──
@@ -1290,7 +1284,7 @@ const IT_PURIFY: CardDef = {
   desc: "清除自身所有负面状态。",
   onPlay: (c) => {
     // 保留正向 buff / shield / 武器 buff，其他全清
-    const KEEP = new Set(["battle_cry", "double_strike", "evasive", "shield_block", "reflect", "busi_triggered", "weapon_buff", "sharpened", "shadow_double", "counter_stance", "frenzy", "charged", "knight_charge", "scepter_clubs", "combat_rhythm", "time_stop", "smoke_dodge", "guaranteed_dodge", "pierce_next", "phantom_charge", "echo", "dodge_full_round", "triple_strike", "phalanx_dr", "swift_dodge_temp", "enc_runic_immune", "enc_dot_immune", "warblood_perm_atk", "blood_pact", "arcane_burst", "brew_regen", "pierce_bonus", "pierce_perm", "calc_charge", "blood_pact_charge", "next_atk_apply_poison", "next_atk_apply_bleed"]);
+    const KEEP = new Set(["battle_cry", "double_strike", "evasive", "shield_block", "reflect", "busi_triggered", "weapon_buff", "sharpened", "shadow_double", "counter_stance", "frenzy", "charged", "knight_charge", "combat_rhythm", "time_stop", "smoke_dodge", "guaranteed_dodge", "pierce_next", "phantom_charge", "echo", "dodge_full_round", "triple_strike", "phalanx_dr", "swift_dodge_temp", "enc_runic_immune", "enc_dot_immune", "warblood_perm_atk", "blood_pact", "arcane_burst", "brew_regen", "pierce_bonus", "pierce_perm", "calc_charge", "blood_pact_charge", "next_atk_apply_poison", "next_atk_apply_bleed"]);
     const before = c.player.statuses.length;
     c.player.statuses = c.player.statuses.filter(s => KEEP.has(s.id));
     if (c.player.statuses.length < before) c.log(`净化药水：清除 ${before - c.player.statuses.length} 个负面状态。`, "player");
@@ -1376,9 +1370,7 @@ const SK_DRAIN_STRIKE: CardDef = {
   onPlay: (c) => {
     // nerf：35% → 25% 真伤；下回合不能攻击 → 下两回合（cost ↑↑）
     const dmg = Math.max(1, Math.floor(c.target.hp * 0.25));
-    c.target.hp = Math.max(0, c.target.hp - dmg);
-    c.log(`汲血斩：${c.target.name} -${dmg}（真伤）。`, "player");
-    if (c.target.hp <= 0) { c.target.alive = false; c.log(`★ 击败 ${c.target.name}！`, "win"); }
+    damageEnemy(c.target, dmg, c.log, `汲血斩：${c.target.name} -${dmg}（真伤）。`);
     const before = c.player.vita;
     c.player.vita = Math.min(c.player.vitaMax, c.player.vita + dmg);
     if (c.player.vita > before) c.log(`汲血：回 ${c.player.vita - before} HP。`, "player");
@@ -1470,10 +1462,8 @@ const SK_DRAIN_WAVE: CardDef = {
     for (const e of c.enemies) {
       if (!e.alive) continue;
       const dmg = Math.min(Math.max(1, Math.ceil(e.maxHp * 0.05)), e.hp);
-      e.hp = Math.max(0, e.hp - dmg);
       totalHeal += dmg;
-      c.log(`吸血潮：${e.name} -${dmg}。`, "player");
-      if (e.hp <= 0) { e.alive = false; c.log(`★ 击败 ${e.name}！`, "win"); }
+      damageEnemy(e, dmg, c.log, `吸血潮：${e.name} -${dmg}。`);
     }
     if (totalHeal > 0) {
       const before = c.player.vita;

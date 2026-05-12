@@ -12,39 +12,39 @@ export function isRedSuit(s: Suit): boolean {
   return s === "diamond" || s === "heart";
 }
 
-// 花色专精档位名 + 大招名（4 字短语）
+// 花色专精档位名 + 大招名（XLSX 新版）
 export const SUIT_TIER_NAMES: Record<Suit, { tier1: string; tier2: string; tier3: string; ult: string }> = {
-  spade:   { tier1: "锋锐怒涛", tier2: "破甲狂攻", tier3: "斩魂蓄势", ult: "狂战之击" },
-  diamond: { tier1: "灵动闪步", tier2: "灵巧连击", tier3: "幻影成形", ult: "影舞步" },
-  heart:   { tier1: "生机涌动", tier2: "绝境吸血", tier3: "生命之泉", ult: "生命洪流" },
-  club:    { tier1: "魔法庇护", tier2: "护体真言", tier3: "禁咒蓄能", ult: "群体禁咒" },
+  spade:   { tier1: "锋锐怒涛", tier2: "破甲黑刃", tier3: "斩魂蓄势", ult: "狂战之击" },
+  diamond: { tier1: "疾风闪步", tier2: "灵巧连击", tier3: "幻影成形", ult: "影子杀手" },
+  heart:   { tier1: "生机涌动", tier2: "绝境攻防", tier3: "生命之泉", ult: "生命洪流" },
+  club:    { tier1: "魔法庇护", tier2: "反应装甲", tier3: "禁咒蓄能", ult: "群体禁咒" },
 };
 
-// 各档与大招的具体效果描述（v3 强化版 — 花色构筑 fantasy 才能立稳）
+// 各档与大招的具体效果描述（XLSX 新版 — 技能/道具已无花色，keyword 全部改为攻击命中触发）
 export const SUIT_TIER_DESCS: Record<Suit, { tier1: string; tier2: string; tier3: string; ult: string }> = {
   spade: {
-    tier1: "攻击 +10%；额外 5% 概率暴击 ×2；激活『锐利』keyword — 所有 ♠ 攻击 +1 pierce。",
-    tier2: "破甲 +⌈楼层/3⌉（F3=1 / F12=4）；真伤 +3。",
+    tier1: "攻击 ×1.15；激活『锐利』keyword — ♠ 攻击命中 45% 概率施加 1 层出血。",
+    tier2: "所有攻击 pierce +1；♠ 攻击额外 +⌈楼层/4⌉ pierce（最少 +1）。",
     tier3: "可释放大招（消耗 8 亲和）。",
     ult: "对当前目标造成其当前 HP 50% 的真实伤害（无视护甲）。",
   },
   diamond: {
-    tier1: "闪避 +8%；受击反弹 +3 伤害；激活『迅捷』keyword — 所有 ♦ 攻击 25% 概率额外 +1 hit（与 T2 叠加）。",
-    tier2: "攻击 40% 概率额外 +1 hit（叠加 ♦ 迅捷）；+3 破甲。",
+    tier1: "闪避 +8%；激活『灵敏』keyword — ♦ 攻击命中 25% 概率额外 +1 hit + 10% 概率暴击 ×2。",
+    tier2: "攻击 30% 概率额外 +1 hit（与 T1 灵敏独立 roll，可叠加）。",
     tier3: "可释放大招（消耗 8 亲和）。",
-    ult: "本回合敌人攻击全部闪避，下次攻击 hits ×3。",
+    ult: "本回合 100% 闪避，下次攻击额外三连击（与连击叠加）。",
   },
   heart: {
-    tier1: "每回合开始 +2 HP；攻击吸血 8%；激活『贪婪』keyword — 所有 ♥ 攻击 + ♥ 装备 吸血 +5%。",
-    tier2: "HP <50% 受击 -35%；HP <25% 攻击 +30%。",
+    tier1: "每回合开始 +5 HP；激活『贪婪』keyword — ♥ 攻击命中 +10% 吸血。",
+    tier2: "HP <50% 受击 ×0.7；HP <25% 攻击 +30%。",
     tier3: "可释放大招（消耗 8 亲和）。",
-    ult: "HP 回满，永久 maxHP +5。",
+    ult: "HP 补满，永久 maxHP +5。",
   },
   club: {
-    tier1: "受击 -2；激活『守序』keyword — 每出 1 张 ♣ 牌本回合 +1 临时护盾。",
-    tier2: "受击再 -3（共 -5）。",
+    tier1: "受击 -3；激活『镇守』keyword — ♣ 攻击命中 +1 临时护盾，每回合 -1 自动衰减。",
+    tier2: "反应装甲：最后一层临时护盾被打破时 25% 概率给攻击者 +1 易伤（3 回合）。",
     tier3: "可释放大招（消耗 8 亲和）。",
-    ult: "对全体敌人 +3 沉默 +3 易伤 +3 中毒。",
+    ult: "全体敌人 +沉默 3 回 / +3 易伤 3 回 / +3 中毒。",
   },
 };
 
@@ -108,7 +108,7 @@ export const STATUS_META: Record<string, StatusMeta> = {
   evasive:        { name: "屏息", desc: "本回合受到伤害 ×0.7（-30%）；与闪避概率独立。\n来源：技能 sk_evasive「屏息」。", kind: "buff" },
   sharpened:      { name: "磨刀", desc: "下一张攻击伤害 ×1.5。\n来源：道具 it_whetstone「磨刀石」。", kind: "buff" },
   weapon_buff:    { name: "强化药", desc: "本场战斗武器伤害 +stacks。\n来源：道具 it_elixir「强化药」。", kind: "buff" },
-  shield_block:   { name: "护盾", desc: "吸收下次受到的 stacks 点伤害。\n来源：技能 sk_aegis「铁壁」/ ♣ T1「守序」keyword / 装备「木盾杖」「重铠」反震 / 附魔「重甲列阵」未受伤奖励 / ♦ 大招「影舞步」三连之后。", kind: "buff" },
+  shield_block:   { name: "护盾", desc: "吸收下次受到的 stacks 点伤害。\n来源：技能 sk_aegis「铁壁」/ ♣ T1「镇守」keyword（♣ 攻击命中触发，每回合 -1 衰减）/ ♣ T2「反应装甲」/ 装备「木盾杖」「重铠」反震 / 附魔「重甲列阵」未受伤奖励 / ♦ 大招「影子杀手」三连之后。", kind: "buff" },
   shadow_double:  { name: "影袭", desc: "下一张攻击 +1 hit（连击 2 次）。\n来源：技能 sk_shadow_strike「影袭」/ 装备「风刃」闪避后 / 装备「不朽战甲」受击后。", kind: "buff" },
   counter_stance: { name: "反击姿态", desc: "本回合受击反弹 50% 伤害给攻击者。\n来源：技能 sk_counter_stance「反击姿态」。", kind: "buff" },
   busi_triggered: { name: "已豁免", desc: "本场战斗已触发不死意志（复活机制只触发 1 次的标记）。\n来源：装备「不灭之心」(undying_heart) 触发后挂上。", kind: "neutral" },
@@ -119,9 +119,9 @@ export const STATUS_META: Record<string, StatusMeta> = {
   // ── 玩家 debuff ────────────────────────────────────────────
   poison:     { name: "中毒", desc: "每回合扣 maxHP × 1% × stacks，每回合 stacks -1。副作用：暴击率 -stacks × 5%（cap -50%）。\n来源：敌人 debuff intent / 技能毒刃 / 毒血 / 道具箭毒蛙 / 诅咒漩涡 等。", kind: "debuff" },
   weak:       { name: "虚弱", desc: "攻击伤害 ×0.7（-30% 固定，stacks 只决定 duration）。\n来源：敌人 debuff intent / 技能虚弱箭 / 群体虚弱 / 恐惧术。", kind: "debuff" },
-  vulnerable: { name: "易伤", desc: "受到伤害 ×1.3（+30% 固定，stacks 只决定 duration）。\n来源：敌人 debuff intent / 技能双重打击 / 恐惧术 / 诅咒漩涡 等。", kind: "debuff" },
+  vulnerable: { name: "易伤", desc: "受到伤害 ×1.3（+30% 固定，stacks 只决定 duration）。\n来源：敌人 debuff intent / 技能双重打击 / 恐惧术 / 诅咒漩涡 / ♣ T2「反应装甲」/ ♣ 大招群体禁咒。", kind: "debuff" },
   burn:       { name: "燃烧", desc: "每回合扣 maxHP × 2% × stacks，持续 duration 回合（无副作用）。\n来源：技能 sk_fire_wall「火墙」。", kind: "debuff" },
-  bleed:      { name: "出血", desc: "每回合扣当前 HP × 5% × stacks。施加在玩家身上时副作用：闪避率 -stacks × 5%（cap -50%）。\n来源：技能流血咒 / 利刃 / 神锋无影 / 道具抗凝血。", kind: "debuff" },
+  bleed:      { name: "出血", desc: "每回合扣当前 HP × 5% × stacks。施加在玩家身上时副作用：闪避率 -stacks × 5%（cap -50%）。\n来源：技能流血咒 / 利刃 / 神锋无影 / 道具抗凝血 / ♠ T1「锐利」keyword（♠ 攻击 45% 概率）。", kind: "debuff" },
   rend:       { name: "撕裂（已废弃）", desc: "（旧版状态，现在撕裂技能直接扣 armor，不再走 status）。", kind: "debuff" },
   frozen:     { name: "冰冻", desc: "下回合攻击伤害 ×0.8（-20%）+ 多动时仅 1 动。\n来源：技能 sk_freeze「冰冻」/ 群体诅咒。", kind: "debuff" },
   silenced:   { name: "沉默", desc: "下回合 buff intent 跳过（攻击 / debuff 仍出）。\n来源：技能 sk_silence「沉默」/ ♣ 大招群体禁咒。", kind: "debuff" },
@@ -142,8 +142,8 @@ export const STATUS_META: Record<string, StatusMeta> = {
   chanted_used:    { name: "本场已持咒", desc: "本场战斗内已经触发过持咒（标记，副本灰显，下场恢复）。\n来源：技能 sk_chant「持咒」触发后挂上。", kind: "neutral" },
 
   // ── ♦ T3 大招效果 ─────────────────────────────────────────
-  dodge_full_round: { name: "影舞步·闪避", desc: "本回合敌人攻击全部闪避。\n来源：♦ 方块 T3 大招「影舞步」。", kind: "buff" },
-  triple_strike:    { name: "影舞步·三连", desc: "下次攻击 hits ×3。\n来源：♦ 方块 T3 大招「影舞步」。", kind: "buff" },
+  dodge_full_round: { name: "影子杀手·闪避", desc: "本回合敌人攻击全部闪避。\n来源：♦ 方块 T3 大招「影子杀手」。", kind: "buff" },
+  triple_strike:    { name: "影子杀手·三连", desc: "下次攻击 hits ×3。\n来源：♦ 方块 T3 大招「影子杀手」。", kind: "buff" },
 
   // ── 技能 / 道具 buff ───────────────────────────────────────
   blood_pact:    { name: "血契", desc: "本回合内所有攻击吸血 +20%。\n来源：技能 sk_blood_pact「血契」。", kind: "buff" },
@@ -173,7 +173,6 @@ export const STATUS_META: Record<string, StatusMeta> = {
 
   // ── 装备触发的 status ─────────────────────────────────────
   knight_charge:     { name: "骑士充能", desc: "下次攻击 +N 直伤（N 由骑士铠 stack 决定，cap 3）。\n来源：装备 knight_plate「骑士铠」受击触发。", kind: "buff" },
-  scepter_clubs:     { name: "禁忌权杖蓄势", desc: "本回合已出 ♣ 牌数。攻击伤害 += stacks × N（N 由权杖 stack 决定）。\n来源：装备 forbidden_scepter「禁忌权杖」出 ♣ 牌触发。", kind: "buff" },
   took_damage_turn:  { name: "本回合受伤", desc: "（内部 marker）本回合受到过伤害，用于 ec_phalanx 末段判断。玩家无需关注。", kind: "neutral" },
   calc_charge:       { name: "法术蓄能", desc: "本回合已出非攻击牌数。下次攻击 +stacks × N（N 由触发源决定）。\n来源：装备 wizard_staff「法师杖」（+3）/ 附魔 e_strategist「算计」+ ec_focus「凝神」/ 技能 sk_arcane_burst「奥术爆裂」。", kind: "buff" },
 
@@ -517,13 +516,16 @@ export interface PlayerState {
   // 装备保底：连续未在 reward_card 拿到装备的场次，达 3 次下场必出装备
   battlesSinceEquipReward?: number;
 
-  // 花色专精大招本场战斗已释放标记（每场战斗 newBattle 重置；4 花色独立，每色本场限 1 次）
-  ultsThisBattle?: Record<Suit, boolean>;
 
   // EPIC 临时装备机制：装备 EPIC 武器/防具时把当前装备暂存到 backup，
   // EPIC 用尽（3 次）后自动恢复 backup。比"替换 modal"更灵活，玩家不丢原装备
   tempWeaponBackup?: CardInstance[];
   tempArmorBackup?: CardInstance[];
+
+  // 强制弃牌机制：drawCards / 复读机克隆若导致手牌 > HAND_LIMIT，超出部分进 pendingDraws
+  // UI 弹出强制弃牌 modal：玩家从 hand 选 K 张弃掉，K = pendingDraws.length
+  // 选完后 pendingDraws → hand，被弃的牌 → discard
+  pendingDraws?: CardInstance[];
 }
 
 // ── 敌人 ──────────────────────────────────────────────────

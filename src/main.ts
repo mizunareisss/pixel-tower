@@ -39,6 +39,7 @@ import {
   wizardPick,
   chestOpen,
   discardHandCards,
+  confirmForceDiscard,
   enterMapNode,
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
@@ -234,6 +235,13 @@ function render() {
     if (!document.getElementById("epic-replace-overlay")) showEpicReplacementModal();
   } else {
     document.getElementById("epic-replace-overlay")?.remove();
+  }
+
+  // 强制弃牌 modal：drawCards 溢出时 pendingDraws 非空 → 玩家从手牌选 K 张弃牌让位
+  if (state.phase === "battle" && state.battle && (state.player.pendingDraws?.length ?? 0) > 0) {
+    if (!document.getElementById("force-discard-overlay")) showForceDiscardModal();
+  } else {
+    document.getElementById("force-discard-overlay")?.remove();
   }
 
   // Player took damage → vita float + 受击动效
@@ -1300,7 +1308,7 @@ const STATUS_ICONS: Record<string, string> = {
   weapon_buff: "💪", shield_block: "🛡", shadow_double: "👥", heavy_strike: "💥",
   counter_stance: "🪞", frenzy: "💢", charged: "⚡", no_attack: "🚫",
   // 新加装备触发
-  knight_charge: "⚡", scepter_clubs: "🔮",
+  knight_charge: "⚡",
   combat_rhythm: "🥁", time_stop: "⏸",
   smoke_dodge: "💨", guaranteed_dodge: "🌟", pierce_next: "🎯",
   phantom_charge: "👤", echo: "🔁",
@@ -1344,7 +1352,7 @@ const DEFENSIVE_CHIPS: DefChipDef[] = [
     tooltip: () => `闪避姿态：本回合受到的伤害减半（点击详情）` },
   { id: "dodge_full_round", icon: "✨", variant: "dodge",
     label: () => "100%",
-    tooltip: () => `影舞步：本回合敌人攻击全闪避（点击详情）` },
+    tooltip: () => `影子杀手：本回合敌人攻击全闪避（点击详情）` },
   { id: "guaranteed_dodge", icon: "🌟", variant: "dodge",
     label: () => "",
     tooltip: () => `必闪：下次受击 100% 闪避（一次性）` },
@@ -1439,7 +1447,6 @@ function computeStatusEffectiveText(id: string, stacks: number): string | null {
     case "brew_regen":       return `每回合开始 +${stacks} HP`;
     case "frenzy":           return `下次攻击 +${stacks * 2} 直伤（攻击 +1 层）`;
     case "knight_charge":    return `下次攻击 +${stacks * 3}~${stacks * 6} 直伤（按骑士铠 stack）`;
-    case "scepter_clubs":    return `本回合攻击 +${stacks} × N（按禁忌权杖 stack）`;
     case "warblood_perm_atk": return `永久攻击 +${stacks}`;
     case "blood_pact_charge": return `下次攻击 +${stacks} 直伤`;
     case "calc_charge":      return `下次攻击 +${stacks} × N（按法师杖 / 算计 / 凝神 / 奥术爆裂）`;
@@ -1718,11 +1725,13 @@ function renderBattleVictory() {
 // ─────────────────────────────────────────────────────────
 
 function renderRewardCard() {
+  const isBossBonus = state.choices.length >= 4;
   stageEl.innerHTML = `
-    <p class="hint">选中的牌会进入你的牌库（不是手牌）。</p>
+    <p class="hint">${isBossBonus ? "★ Boss 战利品：额外掉落一张史诗，4 选 1。" : "选中的牌会进入你的牌库（不是手牌）。"}</p>
   `;
   const grid = document.createElement("div");
-  grid.className = "choice-grid cols-3";
+  // 4 张时改 2×2 网格，避免 cols-3 的 3+1 错位
+  grid.className = isBossBonus ? "choice-grid cols-2" : "choice-grid cols-3";
   for (const inst of state.choices) {
     grid.appendChild(renderChoiceCardEl(inst, () => {
       animateChoicePick(grid, inst.uid, () => { pickRewardCard(state, inst.uid); render(); });
@@ -3176,6 +3185,97 @@ function showEpicReplacementModal(): void {
     overlay.remove();
     render();
   });
+  document.body.appendChild(overlay);
+}
+
+// 强制弃牌 modal：drawCards / 复读机克隆 溢出时弹出
+// 显示 pendingDraws（新摸到的牌，必须接收）+ hand（玩家手选 K 张弃掉）
+function showForceDiscardModal(): void {
+  const pending = state.player.pendingDraws ?? [];
+  if (pending.length === 0) return;
+  const K = pending.length;
+
+  const overlay = document.createElement("div");
+  overlay.id = "force-discard-overlay";
+  overlay.className = "ic-overlay";
+
+  // 渲染新摸到的牌（只读、可悬停看 desc）
+  const pendingHtml = pending.map(inst => {
+    const def = CARD_DB[inst.defId];
+    const rarity = def.rarity ?? "common";
+    const suit = def.attackSuit ?? def.equipSuit ?? def.defaultSuit;
+    const suitTag = suit ? `<span class="card-suit-corner${isRedSuit(suit) ? " red" : ""}">${SUIT_SYMBOLS[suit]}</span>` : "";
+    return `
+      <div class="fd-card cat-${def.category} rarity-${rarity}">
+        ${suitTag}
+        <div class="card-name">${escapeHTML(def.name)}</div>
+        <div class="card-desc">${escapeHTML(def.desc)}</div>
+      </div>
+    `;
+  }).join("");
+
+  // 渲染手牌（可点选）
+  const handHtml = state.player.hand.map(inst => {
+    const def = CARD_DB[inst.defId];
+    const rarity = def.rarity ?? "common";
+    const suit = def.attackSuit ?? def.equipSuit ?? def.defaultSuit;
+    const suitTag = suit ? `<span class="card-suit-corner${isRedSuit(suit) ? " red" : ""}">${SUIT_SYMBOLS[suit]}</span>` : "";
+    return `
+      <button class="fd-card cat-${def.category} rarity-${rarity}" data-pick-uid="${inst.uid}">
+        ${suitTag}
+        <div class="card-name">${escapeHTML(def.name)}</div>
+        <div class="card-desc">${escapeHTML(def.desc)}</div>
+      </button>
+    `;
+  }).join("");
+
+  overlay.innerHTML = `
+    <div class="ic-modal force-discard-modal">
+      <div class="ic-title">⚠ 手牌已满 · 强制弃牌</div>
+      <div class="fd-tip">手牌已达 ${state.player.hand.length} / 10，新摸到 ${K} 张需要让位。请从手牌中选 <b>${K}</b> 张弃掉。</div>
+      <div class="fd-section-title">新摸到的牌（${K}）</div>
+      <div class="fd-grid fd-pending">${pendingHtml}</div>
+      <div class="fd-section-title fd-hand-title">从手牌选 <span class="fd-count">0</span> / ${K} 张弃掉</div>
+      <div class="fd-grid fd-hand">${handHtml}</div>
+      <div class="ic-actions">
+        <button class="ic-confirm" disabled>确认弃牌（0 / ${K}）</button>
+      </div>
+    </div>
+  `;
+
+  const selected = new Set<string>();
+  const countEl = overlay.querySelector(".fd-count")!;
+  const confirmBtn = overlay.querySelector<HTMLButtonElement>(".ic-confirm")!;
+
+  function refresh() {
+    countEl.textContent = String(selected.size);
+    confirmBtn.textContent = `确认弃牌（${selected.size} / ${K}）`;
+    confirmBtn.disabled = selected.size !== K;
+  }
+
+  overlay.querySelectorAll<HTMLButtonElement>("[data-pick-uid]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const uid = btn.dataset.pickUid!;
+      if (selected.has(uid)) {
+        selected.delete(uid);
+        btn.classList.remove("fd-selected");
+      } else {
+        if (selected.size >= K) return;  // 已选满
+        selected.add(uid);
+        btn.classList.add("fd-selected");
+      }
+      refresh();
+    });
+  });
+
+  confirmBtn.addEventListener("click", () => {
+    if (selected.size !== K) return;
+    if (confirmForceDiscard(state, Array.from(selected))) {
+      overlay.remove();
+      render();
+    }
+  });
+
   document.body.appendChild(overlay);
 }
 
