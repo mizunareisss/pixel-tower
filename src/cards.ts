@@ -1593,10 +1593,10 @@ const PERK_CRIT: CardDef = {
     unitDesc: "暴击率 +5%（每张，×2 暴击伤；中毒削减）",
     summary: (s) => `${Math.min(100, s * 5)}% 暴击 ×2`,
     onDealDamage: (c, d, s) => {
-      // 中毒削减：每 stack -3 百分点（cap -30）
+      // 中毒削减：每 stack -5 百分点（cap -50）— 与系统级 getPoisonCritPenalty 对齐
       const poison = c.player.statuses.find(st => st.id === "poison");
-      const penalty = poison ? Math.min(0.30, poison.stacks * 0.03) : 0;
-      const chance = Math.max(0, Math.min(1, s * 0.05) - penalty);
+      const penaltyPct = poison ? Math.min(50, poison.stacks * 5) : 0;
+      const chance = Math.max(0, Math.min(100, s * 5) - penaltyPct) / 100;
       if (chance > 0 && Math.random() < chance) { c.log("暴击！×2", "player"); return d * 2; }
       return d;
     },
