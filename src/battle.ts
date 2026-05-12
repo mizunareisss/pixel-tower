@@ -35,34 +35,36 @@ function getDyedSuit(player: PlayerState): Suit | null {
 // ─────────────────────────────────────────────────────────
 
 // 同花色攻击累积上限（cap，按花色独立计）
-export const SUIT_PLAYED_CAP = 30;
+// 30 → 100：让玩家在后期仍能通过打牌持续叠加（30 张就锁死的体验是 bug）
+export const SUIT_PLAYED_CAP = 100;
 
 // 每个花色 3 类来源累计（持久化跨战斗）
-//  - 装备同花色：每件 +1.5（武器/防具叠加各算）
-//  - 特性同花色：每张 +1
-//  - 出过的同花色攻击牌（含染色/持咒后视为色）：每张 +0.2，cap 30
-// 染色/持咒不再直接 +X 亲和（避免战斗内"暴涨 → 战斗后塌陷"的体验割裂）；
-// 它们的"协助专精"作用通过 trackSuitPlayed 已经按视为色累积进 player.suitPlayedTotal
+//  - 装备同花色：每件 +1.3（武器/防具叠加各算；Epic 装备不算 — 避免装上不同色 Epic 抢走专精）
+//  - 特性同花色：每张 +0.8
+//  - 出过的同花色攻击牌（含染色/持咒后视为色）：每张 +0.3，cap 100
 export function getSuitAffinity(state: BattleState, suit: Suit): number {
   let aff = 0;
-  // 装备同花色：每件 +1.3
+  // 装备同花色：每件 +1.3 — Epic 武器/防具不计入（玩家可能装 Epic 拿数值但不想切流派）
   for (const w of state.player.weapons) {
-    if (CARD_DB[w.defId]?.equipSuit === suit) aff += 1.3;
+    const def = CARD_DB[w.defId];
+    if (def?.equipSuit === suit && def.rarity !== "epic") aff += 1.3;
   }
   for (const a of state.player.armors) {
-    if (CARD_DB[a.defId]?.equipSuit === suit) aff += 1.3;
+    const def = CARD_DB[a.defId];
+    if (def?.equipSuit === suit && def.rarity !== "epic") aff += 1.3;
   }
   // 特性同花色：每张 +0.8
   for (const p of state.player.perks) {
     if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 0.8;
   }
-  // 出过的同花色攻击牌：每张 +0.3（持久化到 player.suitPlayedTotal，cap 30）
+  // 出过的同花色攻击牌：每张 +0.3（持久化到 player.suitPlayedTotal，cap 100）
   const played = state.player.suitPlayedTotal?.[suit] ?? 0;
   aff += Math.min(SUIT_PLAYED_CAP, played) * 0.3;
   // 大招消耗：跨战斗持久化（读 player.suitConsumedTotal，不再用 status）
   const consumed = state.player.suitConsumedTotal?.[suit] ?? 0;
   aff -= consumed;
-  return Math.max(0, Math.min(20, aff));
+  // 总 aff cap 30（20 → 30）：留出大招消耗 8 之后的再充能空间；T3 门槛仍是 15
+  return Math.max(0, Math.min(30, aff));
 }
 
 // 当前花色档位：0 / 1（≥5）/ 2（≥10）/ 3（≥15，可释放大招）

@@ -677,15 +677,22 @@ function runOnce(runId: number, opts: SimOptions): RunResult {
       result.finalSuitTier[s] = suitTier(state.battle, s);
     }
   } else {
-    // 没有 battle 时手算亲和度（仅装备+特性+suitPlayedTotal）
+    // 没有 battle 时手算亲和度（与 battle.ts/getSuitAffinity 同步）
     for (const s of SUITS) {
       let aff = 0;
-      for (const w of state.player.weapons) if (CARD_DB[w.defId]?.equipSuit === s) aff += 1.5;
-      for (const a of state.player.armors) if (CARD_DB[a.defId]?.equipSuit === s) aff += 1.5;
-      for (const p of state.player.perks) if (CARD_DB[p.defId]?.defaultSuit === s) aff += 1;
-      const played = Math.min(30, state.player.suitPlayedTotal?.[s] ?? 0);
-      aff += played * 0.2;
-      result.finalSuitAffinity[s] = Math.min(20, aff);
+      for (const w of state.player.weapons) {
+        const def = CARD_DB[w.defId];
+        if (def?.equipSuit === s && def.rarity !== "epic") aff += 1.3;
+      }
+      for (const a of state.player.armors) {
+        const def = CARD_DB[a.defId];
+        if (def?.equipSuit === s && def.rarity !== "epic") aff += 1.3;
+      }
+      for (const p of state.player.perks) if (CARD_DB[p.defId]?.defaultSuit === s) aff += 0.8;
+      const played = Math.min(100, state.player.suitPlayedTotal?.[s] ?? 0);
+      aff += played * 0.3;
+      aff -= state.player.suitConsumedTotal?.[s] ?? 0;
+      result.finalSuitAffinity[s] = Math.max(0, Math.min(30, aff));
       result.finalSuitTier[s] = (aff >= 15 ? 3 : aff >= 10 ? 2 : aff >= 5 ? 1 : 0) as 0|1|2|3;
     }
   }

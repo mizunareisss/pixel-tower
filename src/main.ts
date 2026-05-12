@@ -2928,18 +2928,25 @@ function showLoadoutModal(): void {
       <div class="loadout-label">🎴 花色亲和</div>
       <div class="loadout-content loadout-suits">
         ${SUITS.map(suit => {
-          // 计算与 battle.ts/getSuitAffinity 一致的亲和度（地图阶段也准确显示）
+          // 与 battle.ts/getSuitAffinity 一致：1.3/件（Epic 不计）+ 0.8/特性 + 0.3/出牌（cap 100）；总 cap 30，扣大招消耗
           let aff = 0;
-          for (const w of player.weapons) if (CARD_DB[w.defId]?.equipSuit === suit) aff += 1.5;
-          for (const a of player.armors) if (CARD_DB[a.defId]?.equipSuit === suit) aff += 1.5;
-          for (const p of player.perks) if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 1;
-          const played = Math.min(30, player.suitPlayedTotal?.[suit] ?? 0);
-          aff += played * 0.2;
-          aff = Math.max(0, Math.min(20, aff));
+          for (const w of player.weapons) {
+            const wDef = CARD_DB[w.defId];
+            if (wDef?.equipSuit === suit && wDef.rarity !== "epic") aff += 1.3;
+          }
+          for (const a of player.armors) {
+            const aDef = CARD_DB[a.defId];
+            if (aDef?.equipSuit === suit && aDef.rarity !== "epic") aff += 1.3;
+          }
+          for (const p of player.perks) if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 0.8;
+          const played = Math.min(100, player.suitPlayedTotal?.[suit] ?? 0);
+          aff += played * 0.3;
+          aff -= player.suitConsumedTotal?.[suit] ?? 0;
+          aff = Math.max(0, Math.min(30, aff));
           const isRed = suit === "heart" || suit === "diamond";
           const tier = aff >= 15 ? 3 : aff >= 10 ? 2 : aff >= 5 ? 1 : 0;
           const tierLabel = tier > 0 ? `T${tier}` : "—";
-          return `<span class="loadout-suit-pill${isRed ? " red" : ""}${tier > 0 ? " lit" : ""}" title="装备 +1.5/件 · 特性 +1/张 · 出牌累积 ${played}/30">${SUIT_SYMBOLS[suit]} ${aff.toFixed(1)} <em>${tierLabel}</em></span>`;
+          return `<span class="loadout-suit-pill${isRed ? " red" : ""}${tier > 0 ? " lit" : ""}" title="装备 +1.3/件（Epic 不计） · 特性 +0.8/张 · 出牌累积 ${played}/100 × 0.3">${SUIT_SYMBOLS[suit]} ${aff.toFixed(1)} <em>${tierLabel}</em></span>`;
         }).join("")}
       </div>
     </div>
