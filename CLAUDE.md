@@ -99,7 +99,7 @@ python3 -m http.server 5180
 ```bash
 # Claude 做的：
 npm run build
-netlify deploy --dir=dist  # 上传 draft，输出里会给一个 deploy 链接
+netlify deploy --dir=dist --no-build  # 上传 draft，输出里会给一个 deploy 链接
 ```
 
 然后 **把 deploy 详情链接发给用户**，让用户**亲自**点一次 `Publish deploy` 按钮就上线：
@@ -107,6 +107,8 @@ netlify deploy --dir=dist  # 上传 draft，输出里会给一个 deploy 链接
 ```
 https://app.netlify.com/projects/suitspire/deploys/<deploy_id>
 ```
+
+⚠ **必须加 `--no-build`**。不加的话 Netlify 会在远端 build 容器里再 build 一次，经常在 "CDN diffing files..." 卡 3+ 分钟最后报 `Error: Error while running build`。本地已经 `npm run build` 过了，远端没必要重 build，直接传 `dist/` 就行。
 
 ⚠ **不要**用 `netlify api restoreSiteDeploy` 自己 promote。亲测会卡死整个 CLI 进程，还把 Netlify API 打成 429 rate limit。用户点一下 = 1 秒搞定，Claude 别自己折腾。
 
