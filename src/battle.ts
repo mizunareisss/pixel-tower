@@ -2010,16 +2010,16 @@ function awardFragments(state: BattleState, log: (m: string, k?: LogKind) => voi
           enchant.onKill(ctx, e);
         }
       }
-      // 精英额外掉落：随机一张 SR 卡，进入牌库（不含 Boss，Boss 走 epic 保底）
+      // 精英额外掉落：随机一张 SR 卡进 buffer，战斗胜利后玩家手动选接受/弃掉（不含 Boss，Boss 走 epic 保底）
       if (e.tier === "elite") {
         const srPool = getEliteSRDropPool(state.floor);
         if (srPool.length > 0) {
           const pickedId = srPool[Math.floor(Math.random() * srPool.length)];
           const inst = makeInstance(pickedId, undefined, state.floor);
-          state.player.deck.push(inst);
-          shuffleArr(state.player.deck);
+          if (!state.player.pendingEliteDropsBuffer) state.player.pendingEliteDropsBuffer = [];
+          state.player.pendingEliteDropsBuffer.push(inst);
           const name = CARD_DB[pickedId]?.name ?? pickedId;
-          log(`★ 精英掉落：${name}（SR）进入牌库。`, "win");
+          log(`★ 精英掉落：${name}（SR）— 战斗胜利后选择是否接受。`, "win");
         }
       }
     }

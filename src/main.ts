@@ -40,6 +40,8 @@ import {
   chestOpen,
   discardHandCards,
   confirmForceDiscard,
+  acceptEliteDrop,
+  discardEliteDrop,
   enterMapNode,
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
@@ -212,6 +214,7 @@ function render() {
   else if (state.phase === "battle") renderBattle();
   else if (state.phase === "suit_pick") renderSuitPick();
   else if (state.phase === "battle_victory") renderBattleVictory();
+  else if (state.phase === "elite_drop_choice") renderEliteDropChoice();
   else if (state.phase === "reward_card") renderRewardCard();
   else if (state.phase === "reward_perk") renderRewardPerk();
   else if (state.phase === "discard") renderDiscard();
@@ -737,6 +740,7 @@ function phaseLabel(p: GameState["phase"]) {
     starter_perk_picks: `起手选特性（剩 ${state.picksRemaining}）`,
     battle: state.battle ? `第 ${state.floor} 关 · ${state.battleIndex + 1}/${FIGHTS_PER_FLOOR} · 回合 ${state.battle.turn}` : "战斗中",
     battle_victory: "★ 战斗胜利",
+    elite_drop_choice: "精英掉落 · 接受 / 弃掉",
     suit_pick: "选择花色",
     reward_card: "战利品 · 选 1 张牌",
     reward_perk: "通关 · 选 1 张特性",
@@ -1900,6 +1904,48 @@ function renderSuitPick() {
         render();
       },
     });
+  });
+}
+
+// 精英 SR 掉落：玩家逐张选择接受 / 弃掉，队列空后进 reward_card
+function renderEliteDropChoice() {
+  const queue = state.pendingEliteDrops ?? [];
+  if (queue.length === 0) {
+    stageEl.innerHTML = `<p class="hint">无掉落，进入战利品选择...</p>`;
+    return;
+  }
+  const inst = queue[0];
+  const def = CARD_DB[inst.defId];
+  const remaining = queue.length;
+  const rarity = def.rarity ?? "common";
+  const suit = def.attackSuit ?? def.equipSuit ?? def.defaultSuit;
+  const suitTag = suit
+    ? `<span class="card-suit-corner${isRedSuit(suit) ? " red" : ""}">${SUIT_SYMBOLS[suit]}</span>`
+    : "";
+
+  stageEl.innerHTML = `
+    <p class="hint">★ 精英掉落（剩 ${remaining} 张）：可选择**接受**进牌库，或**弃掉**避免污染卡组。</p>
+    <div class="elite-drop-wrap">
+      <div class="card choice cat-${def.category} rarity-${rarity} elite-drop-card" data-uid="${inst.uid}">
+        ${suitTag}
+        <div class="card-icon">${getCardIcon(def.id, def.category)}</div>
+        <div class="card-name">${escapeHTML(def.name)}</div>
+        <div class="card-desc">${escapeHTML(def.desc)}</div>
+        <div class="card-meta">${rarityLabel(rarity)} · ${categoryLabel(def.category)}</div>
+      </div>
+      <div class="elite-drop-actions">
+        <button class="elite-drop-discard">弃掉</button>
+        <button class="elite-drop-accept">接受（进牌库）</button>
+      </div>
+    </div>
+  `;
+  stageEl.querySelector(".elite-drop-accept")!.addEventListener("click", () => {
+    acceptEliteDrop(state);
+    render();
+  });
+  stageEl.querySelector(".elite-drop-discard")!.addEventListener("click", () => {
+    discardEliteDrop(state);
+    render();
   });
 }
 

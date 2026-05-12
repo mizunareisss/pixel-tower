@@ -3072,6 +3072,57 @@ body.is-touch button:hover:not(:disabled) {
   100% { opacity: 0; transform: translate(-50%, -30px) scale(1); }
 }
 
+/* ── 精英 SR 掉落选择 modal（接受 / 弃掉 + 卡片预览） ── */
+.elite-drop-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+.elite-drop-card {
+  width: min(220px, 70%);
+  min-height: 200px;
+  padding: 12px 10px 18px;
+  background: var(--bg-card);
+  border: 2px solid var(--yellow);
+  box-shadow: 0 0 24px 6px rgba(241,196,15,0.45);
+  transform: scale(1.02);
+  animation: elite-drop-pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.1) backwards;
+}
+@keyframes elite-drop-pop {
+  0%   { opacity: 0; transform: scale(0.7) translateY(8px); }
+  60%  { opacity: 1; transform: scale(1.1) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1.02) translateY(0); }
+}
+.elite-drop-actions {
+  display: flex;
+  gap: 12px;
+}
+.elite-drop-accept,
+.elite-drop-discard {
+  font-size: 13px;
+  font-weight: 900;
+  padding: 8px 22px;
+  border: none;
+  cursor: pointer;
+  clip-path: none !important;
+  text-transform: none !important;
+  letter-spacing: 0.05em;
+}
+.elite-drop-accept {
+  background: var(--yellow);
+  color: #1b1108;
+  box-shadow: 0 0 14px rgba(241,196,15,0.5);
+}
+.elite-drop-accept:hover { background: #ffd95a; }
+.elite-drop-discard {
+  background: rgba(231,76,60,0.20);
+  border: 1px solid rgba(231,76,60,0.55) !important;
+  color: #ffb5b5;
+}
+.elite-drop-discard:hover { background: rgba(231,76,60,0.35); }
+
 /* ── 完全格挡：金色盾牌闪现 + 金属反光圈 + BLOCK 文字 ──
    注：故意用金色而非蓝色，跟蓝色调的 MISS 动画明显区分 */
 

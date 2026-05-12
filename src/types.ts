@@ -529,6 +529,10 @@ export interface PlayerState {
   // UI 弹出强制弃牌 modal：玩家从 hand 选 K 张弃掉，K = pendingDraws.length
   // 选完后 pendingDraws → hand，被弃的牌 → discard
   pendingDraws?: CardInstance[];
+
+  // 精英怪击杀 SR 掉落临时队列：战斗内击杀 elite 时入队，onBattleWon 处理（player → state.pendingEliteDrops）
+  // 用 player 字段是因为 battle.ts 的 awardFragments 只访问 BattleState，没法直接写 GameState
+  pendingEliteDropsBuffer?: CardInstance[];
 }
 
 // ── 敌人 ──────────────────────────────────────────────────
@@ -654,6 +658,7 @@ export type GamePhase =
   | "battle"
   | "suit_pick"           // 手选花色（染色术 / 共鸣咒）
   | "battle_victory"
+  | "elite_drop_choice"    // 精英 SR 掉落选择（接受 / 弃掉）
   | "reward_card"          // 战利品（1 张卡进牌库）
   | "reward_perk"          // 通关额外特性
   | "floor_event"          // 触发某事件（从 map node 进入）
@@ -713,6 +718,9 @@ export interface GameState {
   activeEventId?: string;
   // 商人事件的子界面状态（由 main.ts 渲染时使用）
   merchantStock?: CardInstance[];
+
+  // 精英怪掉落的 SR 待处理队列：玩家击杀 elite 时入队，战斗胜利后弹 modal 让玩家选接受/弃掉
+  pendingEliteDrops?: CardInstance[];
 
   // 楼层地图（floor_map 阶段时由 map.ts 设置）
   floorMap?: FloorMap;
