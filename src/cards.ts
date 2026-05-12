@@ -1044,12 +1044,11 @@ const SK_COUNTER_STANCE: CardDef = {
 
 const SK_BLAST: CardDef = {
   id: "sk_blast", name: "爆裂术", category: "skill", target: "single",
-  desc: "自损 5% 生命上限（永久扣除当前血量和上限），对目标造成其当前 HP 20% 的直接伤害。",
+  desc: "自损 5% 生命上限的血量（不降低生命上限），对目标造成其当前 HP 20% 的直接伤害。",
   onPlay: (c) => {
     const cut = Math.max(1, Math.round(c.player.vitaMax * 0.05));
-    c.player.vitaMax = Math.max(1, c.player.vitaMax - cut);  // 永久 -maxHP
-    c.player.vita = Math.max(0, Math.min(c.player.vita - cut, c.player.vitaMax));  // 当前 HP 同步降
-    c.log(`爆裂术：永久自损 ${cut} maxHP（当前 + 上限同时扣）。`, "player");
+    c.player.vita = Math.max(0, c.player.vita - cut);  // 只扣当前 HP，maxHP 不变
+    c.log(`爆裂术：自损 ${cut} HP（maxHP 不变）。`, "player");
     const enemyDmg = Math.max(1, Math.round(c.target.hp * 0.20));
     dealDirectDamage(c, c.target, enemyDmg);
   },
