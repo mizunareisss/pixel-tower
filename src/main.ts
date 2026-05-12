@@ -1511,7 +1511,7 @@ const STATUS_ICONS: Record<string, string> = {
   burn: "🔥", rend: "🪓", frozen: "❄", silenced: "🤐", bleed: "🩸",
   fear: "😱",
   // 新增附魔状态
-  phalanx_dr: "🛡", swift_dodge_temp: "💨", enc_runic_immune: "🔰", fullplate_pending: "⚙",
+  phalanx_dr: "🛡", swift_dodge_temp: "💨", enc_runic_immune: "🔰", fullplate_pending: "⚙", fullplate_shield: "🛡",
   enc_dot_immune: "🕊", warblood_perm_atk: "🩸",
   blood_pact: "💉", arcane_burst: "🔮", brew_regen: "🌿",
   no_skill: "🔒", pierce_bonus: "🎯", pierce_perm: "🛢",

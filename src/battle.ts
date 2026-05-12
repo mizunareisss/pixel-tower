@@ -1279,7 +1279,19 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   // 没在这里取整的话，下面 shield 吸收会把浮点累积进 shield.stacks → 0.7000004 这种鬼数字
   dmg = Math.max(0, Math.floor(dmg));
 
-  // 护盾吸收
+  // 重铠护盾优先消耗（1 层独立护盾，吸收完即移除，不衰减）
+  const fpShield = state.player.statuses.find(s => s.id === "fullplate_shield");
+  if (fpShield && dmg > 0) {
+    const absorbed = Math.min(fpShield.stacks, dmg);
+    dmg -= absorbed;
+    fpShield.stacks -= absorbed;
+    log(`♣ 重铠护盾吸收 ${absorbed}。`, "player");
+    if (fpShield.stacks <= 0) {
+      state.player.statuses = state.player.statuses.filter(s => s.id !== "fullplate_shield");
+    }
+  }
+
+  // 护盾吸收（镇守 / sk_aegis / 其他来源）
   const shield = state.player.statuses.find(s => s.id === "shield_block");
   if (shield && dmg > 0) {
     const absorbed = Math.min(shield.stacks, dmg);
@@ -1857,15 +1869,18 @@ function startNewPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) =>
     state.player.statuses = state.player.statuses.filter(s => s.id !== "draining_charge");
   }
 
-  // 重铠（♣ rare+ 防具）：上回合累积的 fullplate_pending 转换为 shield_block（duration:-1 持续护盾）
-  // 配合 ♣ 镇守 keyword 每回合 -1 衰减，重铠 build 的护盾真正能用在攻击上而不是白涨白消
+  // 重铠（♣ rare+ 防具）：fullplate_pending → fullplate_shield（独立 1 层，不衰减不增长）
+  //   如果上回合的 fullplate_shield 还在（未被消耗）→ pending 丢弃，不重复生成（维持最多 1 层）
   if (state.player.armors[0]?.defId === "full_plate") {
     const pending = state.player.statuses.find(s => s.id === "fullplate_pending");
-    if (pending && pending.stacks > 0) {
-      const sh = state.player.statuses.find(s => s.id === "shield_block");
-      if (sh) sh.stacks += pending.stacks;
-      else state.player.statuses.push({ id: "shield_block", name: "护盾", stacks: pending.stacks, duration: -1 });
-      log(`♣ 重铠：反震 ${pending.stacks} 释放为持续护盾。`, "player");
+    if (pending) {
+      const existing = state.player.statuses.find(s => s.id === "fullplate_shield");
+      if (existing) {
+        log(`♣ 重铠：上回合护盾未消耗，跳过本次反震生成（保持 1 层上限）。`, "system");
+      } else {
+        state.player.statuses.push({ id: "fullplate_shield", name: "重铠护盾", stacks: 1, duration: -1 });
+        log(`♣ 重铠：反震 → 1 层重铠护盾（不衰减）。`, "player");
+      }
       state.player.statuses = state.player.statuses.filter(s => s.id !== "fullplate_pending");
     }
   }

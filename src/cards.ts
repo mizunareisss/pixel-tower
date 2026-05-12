@@ -1276,7 +1276,7 @@ const IT_PURIFY: CardDef = {
   desc: "清除自身所有负面状态。",
   onPlay: (c) => {
     // 保留正向 buff / shield / 武器 buff，其他全清
-    const KEEP = new Set(["battle_cry", "double_strike", "evasive", "shield_block", "reflect", "busi_triggered", "weapon_buff", "sharpened", "shadow_double", "counter_stance", "frenzy", "charged", "knight_charge", "combat_rhythm", "time_stop", "smoke_dodge", "guaranteed_dodge", "pierce_next", "phantom_charge", "echo", "dodge_full_round", "triple_strike", "phalanx_dr", "swift_dodge_temp", "enc_runic_immune", "enc_dot_immune", "warblood_perm_atk", "blood_pact", "arcane_burst", "brew_regen", "pierce_bonus", "pierce_perm", "calc_charge", "blood_pact_charge", "next_atk_apply_poison", "next_atk_apply_bleed", "fullplate_pending"]);
+    const KEEP = new Set(["battle_cry", "double_strike", "evasive", "shield_block", "reflect", "busi_triggered", "weapon_buff", "sharpened", "shadow_double", "counter_stance", "frenzy", "charged", "knight_charge", "combat_rhythm", "time_stop", "smoke_dodge", "guaranteed_dodge", "pierce_next", "phantom_charge", "echo", "dodge_full_round", "triple_strike", "phalanx_dr", "swift_dodge_temp", "enc_runic_immune", "enc_dot_immune", "warblood_perm_atk", "blood_pact", "arcane_burst", "brew_regen", "pierce_bonus", "pierce_perm", "calc_charge", "blood_pact_charge", "next_atk_apply_poison", "next_atk_apply_bleed", "fullplate_pending", "fullplate_shield"]);
     const before = c.player.statuses.length;
     c.player.statuses = c.player.statuses.filter(s => KEEP.has(s.id));
     if (c.player.statuses.length < before) c.log(`净化药水：清除 ${before - c.player.statuses.length} 个负面状态。`, "player");
