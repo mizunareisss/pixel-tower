@@ -580,9 +580,12 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
       const armorBreakStacks = player.perks.filter(p => p.defId === "p_armor_break").length;
       pierce += armorBreakStacks;
       if (wDef.id === "raider") {
-        const stacks = Math.min(player.weapons.length, 4);
-        const ratio = [0.50, 0.50, 0.60, 0.70][stacks - 1];
-        pierce += Math.ceil(enemyArmor * ratio);
+        // XLSX v6：固定 50% armor 破甲（向上取整），不再 stack 缩放
+        pierce += Math.ceil(enemyArmor * 0.50);
+      }
+      // 狂剑 berserker_blade：HP < 50% 时额外 +2 pierce
+      if (wDef.id === "berserker_blade" && player.vita < player.vitaMax * 0.5) {
+        pierce += 2;
       }
       // 王者之剑（excalibur, ♠ epic）：v5 nerf，动态破甲 70% armor（同 raider 模式但固定 70%）
       if (wDef.id === "excalibur") {
@@ -783,17 +786,7 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
       log(`法杖：${target.name} +易伤（×1.5）。`, "player");
     }
 
-    // 木盾杖（♣ common）：攻击后 +(2 + floor/3) × stackMult 临时护盾
-    // v5：护盾随楼层缩放，让中后期 F6+ 仍有意义（boss 一招 25+ 伤）
-    if (weaponId === "shield_staff") {
-      const stack = Math.min(state.player.weapons.length, 4);
-      const stackMult = [1, 1, 2, 2][stack - 1] ?? 1;
-      const shieldVal = (2 + Math.floor(state.floor / 3)) * stackMult;
-      const sh = state.player.statuses.find(s => s.id === "shield_block");
-      if (sh) sh.stacks += shieldVal;
-      else state.player.statuses.push({ id: "shield_block", name: "护盾", stacks: shieldVal, duration: 1 });
-      log(`木盾杖：+${shieldVal} 护盾。`, "player");
-    }
+    // 木盾杖（♣ common）：XLSX v6 简化为纯基础 5 伤，去掉护盾累积机制
 
     // 链刃：对其他存活敌人溅射，叠加值按 stack 升级 3/4/5/6
     if (weaponId === "chain_blade") {
@@ -1336,28 +1329,23 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
       log(`骑士铠充能：下次攻击 +${bonus} 直伤（×${existing?.stacks ?? 1}，cap 3）。`, "player");
     }
 
-    // 战甲带（♠ common 防具）：受击后本回合下次攻击 +X 攻击（1 回合内 duration）
+    // 战甲带（♠ rare 防具）：XLSX v6 固定 +2 攻击（去掉 stack 缩放）
     if (state.player.armors[0]?.defId === "combat_belt") {
-      const stack = Math.min(state.player.armors.length, 4);
-      const bonusByStack = [2, 3, 4, 5];
-      const bonus = bonusByStack[stack - 1] ?? 2;
       const existing = state.player.statuses.find(s => s.id === "battle_cry");
-      if (existing) existing.stacks += bonus;
-      else state.player.statuses.push({ id: "battle_cry", name: "战甲带激怒", stacks: bonus, duration: 1 });
-      log(`♠ 战甲带：下次攻击 +${bonus}。`, "player");
+      if (existing) existing.stacks += 2;
+      else state.player.statuses.push({ id: "battle_cry", name: "战甲带激怒", stacks: 2, duration: 1 });
+      log(`♠ 战甲带：下次攻击 +2。`, "player");
     }
 
-    // 斩魂铠（♠ super_rare 防具）：本场每受击 +1/+2 永久攻击（cap 10 次 → 复用 warblood_perm_atk）
+    // 斩魂铠（♠ super_rare 防具）：XLSX v6 固定 +1 永久攻 / 受击（cap 10）
     if (state.player.armors[0]?.defId === "soulreaver_plate") {
-      const stack = Math.min(state.player.armors.length, 4);
-      const permPer = stack >= 3 ? 2 : 1;
       const existing = state.player.statuses.find(s => s.id === "warblood_perm_atk");
       if (existing) {
-        if (existing.stacks < 10) existing.stacks = Math.min(10, existing.stacks + permPer);
+        if (existing.stacks < 10) existing.stacks = Math.min(10, existing.stacks + 1);
       } else {
-        state.player.statuses.push({ id: "warblood_perm_atk", name: "斩魂蓄势", stacks: permPer, duration: -1 });
+        state.player.statuses.push({ id: "warblood_perm_atk", name: "斩魂蓄势", stacks: 1, duration: -1 });
       }
-      log(`♠ 斩魂铠：永久攻击 +${permPer}（累计 ${(existing?.stacks ?? 0) + permPer}）。`, "player");
+      log(`♠ 斩魂铠：永久攻击 +1（累计 ${(existing?.stacks ?? 0) + 1}）。`, "player");
     }
 
     // 不朽战甲（♠ epic 防具）：受击后下张攻击 +1 hit（复用 shadow_double）
@@ -1371,16 +1359,13 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
       damageEnemy(attackerEnemy, 3, log, `♦ 方块专精反伤 → ${attackerEnemy.name} -3。`);
     }
 
-    // 不灭之心：HP 即将归 0 时复活，整局仅 1 次（用 player.revivesUsed 持久化）
-    // 叠加层数决定复活后的 HP 比例：×1=50%, ×2=65%, ×3=80%, ×4=100%
+    // 不灭之心：HP 归 0 时复活到 50%，整局仅 1 次（XLSX v6：固定 50%，stack 不增加复活效率）
     if (state.player.vita <= 0
         && state.player.armors[0]?.defId === "undying_heart"
         && (state.player.revivesUsed ?? 0) < 1) {
-      const stacks = Math.min(state.player.armors.length, 4);
-      const ratio = [0.50, 0.65, 0.80, 1.00][stacks - 1];
-      state.player.vita = Math.round(state.player.vitaMax * ratio);
+      state.player.vita = Math.round(state.player.vitaMax * 0.50);
       state.player.revivesUsed = (state.player.revivesUsed ?? 0) + 1;
-      log(`★ 不灭之心：整局唯一一次复活，恢复到 ${state.player.vita} HP（${Math.round(ratio * 100)}%）。`, "win");
+      log(`★ 不灭之心：整局唯一一次复活，恢复到 ${state.player.vita} HP（50%）。`, "win");
     }
 
     // 反击姿态：反弹 50%
@@ -1789,6 +1774,9 @@ function startNewPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) =>
     if (state.player.vita > before) log(`吸血盾：延迟回血 +${state.player.vita - before} HP。`, "player");
     state.player.statuses = state.player.statuses.filter(s => s.id !== "draining_charge");
   }
+
+  // 反伤甲：清掉 thorn_chain 连击计数（每回合从 1 开始算）
+  state.player.statuses = state.player.statuses.filter(s => s.id !== "thorn_chain");
 
   // 重甲（♣ rare 防具）：每回合 30% 概率随机去 1 debuff
   if (state.player.armors[0]?.defId === "heavy_armor" && Math.random() < 0.30) {

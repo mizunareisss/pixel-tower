@@ -176,30 +176,29 @@ const BLOOD_BLADE: CardDef = {
   id: "blood_blade",
   name: "血裂刃",
   category: "equipment",
-  desc: "装备：基础伤害 7，吸血 30%。击杀目标时额外回 20% 最大 HP。",
+  desc: "装备：基础伤害 7，吸血 35%。击杀目标时额外回 20% 最大 HP。",
   equipKind: "weapon",
   equipSuit: "heart",
   baseDmg: 7,
   equipEffects: (() => {
-    const mk = (vampPct: number, killPct: number) => ({
-      desc: `基础 7×N + 吸血 ${Math.round(vampPct * 100)}% + 击杀回 ${Math.round(killPct * 100)}% maxHP。`,
-      stat: `吸${Math.round(vampPct * 100)}% 击杀+${Math.round(killPct * 100)}%`,
+    const mk = () => ({
+      desc: "基础 7 + 吸血 35% + 击杀回 20% maxHP。",
+      stat: "吸35% 击杀+20%",
       onAttack: (ctx: BattleContext, d: number) => {
-        const heal = Math.floor(d * vampPct);
+        const heal = Math.floor(d * 0.35);
         if (heal > 0) {
           ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + heal);
           ctx.log(`血裂刃吸血 ${heal}。`, "player");
         }
-        // 击杀检测：本击若致死，额外回 X% maxHP
         if (ctx.target.alive && ctx.target.hp - d <= 0) {
-          const bonus = Math.floor(ctx.player.vitaMax * killPct);
+          const bonus = Math.floor(ctx.player.vitaMax * 0.20);
           ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + bonus);
           ctx.log(`血裂刃击杀回血 ${bonus}。`, "player");
         }
         return d;
       },
     });
-    return [mk(0.30, 0.15), mk(0.35, 0.18), mk(0.40, 0.22), mk(0.50, 0.28)] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
+    return [mk(), mk(), mk(), mk()] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
   })(),
 };
 
@@ -207,19 +206,19 @@ const WAR_BOW: CardDef = {
   id: "war_bow",
   name: "战弓",
   category: "equipment",
-  desc: "装备：基础伤害 6，狙击——攻击 HP > 50% 的敌人 +4 伤。",
+  desc: "装备：基础伤害 6，狙击——攻击 HP > 50% 的敌人 +3 伤。",
   equipKind: "weapon",
   equipSuit: "spade",
   baseDmg: 6,
   equipEffects: [
-    { desc: "基础 6 + HP>50% 狙击 +4。", stat: "6 伤 狙击+4",
-      onAttack: (c, d) => c.target.hp > Math.floor(c.target.maxHp * 0.5) ? d + 4 : d },
-    { desc: "叠加 ×1.4 + 狙击 +4。", stat: "8.4 伤 狙击+4",
-      onAttack: (c, d) => c.target.hp > Math.floor(c.target.maxHp * 0.5) ? d + 4 : d },
-    { desc: "叠加 ×1.8 + 狙击 +4。", stat: "10.8 伤 狙击+4",
-      onAttack: (c, d) => c.target.hp > Math.floor(c.target.maxHp * 0.5) ? d + 4 : d },
-    { desc: "叠加 ×2.2 + 狙击 +4。", stat: "13.2 伤 狙击+4",
-      onAttack: (c, d) => c.target.hp > Math.floor(c.target.maxHp * 0.5) ? d + 4 : d },
+    { desc: "基础 6 + HP>50% 狙击 +3。", stat: "6 伤 狙击+3",
+      onAttack: (c, d) => c.target.hp > Math.floor(c.target.maxHp * 0.5) ? d + 3 : d },
+    { desc: "叠加 ×1.4 + 狙击 +3。", stat: "8.4 伤 狙击+3",
+      onAttack: (c, d) => c.target.hp > Math.floor(c.target.maxHp * 0.5) ? d + 3 : d },
+    { desc: "叠加 ×1.8 + 狙击 +3。", stat: "10.8 伤 狙击+3",
+      onAttack: (c, d) => c.target.hp > Math.floor(c.target.maxHp * 0.5) ? d + 3 : d },
+    { desc: "叠加 ×2.2 + 狙击 +3。", stat: "13.2 伤 狙击+3",
+      onAttack: (c, d) => c.target.hp > Math.floor(c.target.maxHp * 0.5) ? d + 3 : d },
   ],
 };
 
@@ -286,14 +285,14 @@ const EVERLAST_FANG: CardDef = {
   id: "everlast_fang",
   name: "永生之牙",
   category: "equipment",
-  desc: "装备：基础 8，吸血 60%；击杀目标回 30% maxHP。",
+  desc: "装备：基础 8，吸血 60%；击杀目标回 20% maxHP。",
   equipKind: "weapon",
   equipSuit: "heart",
   baseDmg: 8,
   equipEffects: (() => {
-    const mk = (killPct: number) => ({
-      desc: `基础 8×N + 吸血 60% + 击杀回 ${Math.round(killPct * 100)}% maxHP。`,
-      stat: `吸 60% 击杀+${Math.round(killPct * 100)}%`,
+    const mk = () => ({
+      desc: "基础 8 + 吸血 60% + 击杀回 20% maxHP。",
+      stat: "吸 60% 击杀+20%",
       onAttack: (ctx: BattleContext, d: number) => {
         const heal = Math.floor(d * 0.60);
         if (heal > 0) {
@@ -301,14 +300,14 @@ const EVERLAST_FANG: CardDef = {
           ctx.log(`永生之牙吸血 ${heal}。`, "player");
         }
         if (ctx.target.alive && ctx.target.hp - d <= 0) {
-          const bonus = Math.floor(ctx.player.vitaMax * killPct);
+          const bonus = Math.floor(ctx.player.vitaMax * 0.20);
           ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + bonus);
           ctx.log(`永生之牙击杀回血 ${bonus}。`, "player");
         }
         return d;
       },
     });
-    return [mk(0.30), mk(0.35), mk(0.40), mk(0.50)] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
+    return [mk(), mk(), mk(), mk()] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
   })(),
 };
 
@@ -344,11 +343,12 @@ const COMBAT_BELT: CardDef = {
   equipKind: "armor",
   equipSuit: "spade",
   baseReduce: 1,
+  // XLSX v6：固定 +2 攻击（去掉 stack 缩放）
   equipEffects: [
     { desc: "减 1 + 受击后下次攻击 +2。", stat: "-1 受击+2 攻" },
-    { desc: "减 1 + 受击后下次攻击 +3。", stat: "-1 受击+3 攻" },
-    { desc: "减 2 + 受击后下次攻击 +4。", stat: "-2 受击+4 攻" },
-    { desc: "减 2 + 受击后下次攻击 +5。", stat: "-2 受击+5 攻" },
+    { desc: "减 1 + 受击后下次攻击 +2。", stat: "-1 受击+2 攻" },
+    { desc: "减 2 + 受击后下次攻击 +2。", stat: "-2 受击+2 攻" },
+    { desc: "减 2 + 受击后下次攻击 +2。", stat: "-2 受击+2 攻" },
   ],
 };
 
@@ -361,11 +361,12 @@ const SOULREAVER_PLATE: CardDef = {
   equipKind: "armor",
   equipSuit: "spade",
   baseReduce: 3,
+  // XLSX v6：固定 +1 攻 / 受击（去掉 stack ×2 缩放）
   equipEffects: [
     { desc: "减 3 + 受击 +1 永久攻。", stat: "-3 永久+1/受击" },
     { desc: "减 4 + 受击 +1 永久攻。", stat: "-4 永久+1/受击" },
-    { desc: "减 5 + 受击 +2 永久攻。", stat: "-5 永久+2/受击" },
-    { desc: "减 6 + 受击 +2 永久攻。", stat: "-6 永久+2/受击" },
+    { desc: "减 5 + 受击 +1 永久攻。", stat: "-5 永久+1/受击" },
+    { desc: "减 6 + 受击 +1 永久攻。", stat: "-6 永久+1/受击" },
   ],
 };
 
@@ -374,32 +375,33 @@ const IMMORTAL_PLATE: CardDef = {
   id: "immortal_plate",
   name: "不朽战甲",
   category: "equipment",
-  desc: "装备：减 3，受击后下张攻击 hits +1。",
+  desc: "装备：减 4，受击后下张攻击 hits +1。",
   equipKind: "armor",
   equipSuit: "spade",
-  baseReduce: 3,
+  baseReduce: 4,  // XLSX v6：3 → 4
   equipEffects: [
-    { desc: "减 3 + 受击后 +1 hit。", stat: "-3 +1 hit/受击" },
     { desc: "减 4 + 受击后 +1 hit。", stat: "-4 +1 hit/受击" },
     { desc: "减 5 + 受击后 +1 hit。", stat: "-5 +1 hit/受击" },
     { desc: "减 6 + 受击后 +1 hit。", stat: "-6 +1 hit/受击" },
+    { desc: "减 8 + 受击后 +1 hit。", stat: "-8 +1 hit/受击" },
   ],
 };
 
 // ── 防具：♥ super_rare 生命囊 ──
+// XLSX v6: -1 受击 + 每回合 +3% maxHP × stack（实际 % maxHP 缩放在 battle.ts startNewPlayerTurn 内）
 const LIFE_POUCH: CardDef = {
   id: "life_pouch",
   name: "生命囊",
   category: "equipment",
-  desc: "装备：减 1，每回合开始 +3 HP（与 leather_armor 叠加）。",
+  desc: "装备：受击 -1，每回合开始 +3% maxHP（可叠加）。",
   equipKind: "armor",
   equipSuit: "heart",
   baseReduce: 1,
   equipEffects: [
-    { desc: "减 1 + 每回合 +3 HP。", stat: "-1 +3 HP/回" },
-    { desc: "减 1 + 每回合 +4 HP。", stat: "-1 +4 HP/回" },
-    { desc: "减 2 + 每回合 +5 HP。", stat: "-2 +5 HP/回" },
-    { desc: "减 2 + 每回合 +6 HP。", stat: "-2 +6 HP/回" },
+    { desc: "-1 受击 + 每回合 +3% maxHP。", stat: "-1 +3%/回" },
+    { desc: "-1 受击 + 每回合 +6% maxHP。", stat: "-1 +6%/回" },
+    { desc: "-2 受击 + 每回合 +9% maxHP。", stat: "-2 +9%/回" },
+    { desc: "-2 受击 + 每回合 +12% maxHP。", stat: "-2 +12%/回" },
   ],
 };
 
@@ -408,15 +410,15 @@ const PHANTOM_CLOAK: CardDef = {
   id: "phantom_cloak",
   name: "幻影披风",
   category: "equipment",
-  desc: "装备：减 1，闪避触发后摸 1 张。",
+  desc: "装备：减 2，闪避触发后摸 1 张。",
   equipKind: "armor",
   equipSuit: "diamond",
-  baseReduce: 1,
+  baseReduce: 2,  // XLSX v6：3 → 2
   equipEffects: [
-    { desc: "减 1 + 闪避后摸 1 张。", stat: "-1 闪避→摸 1" },
     { desc: "减 2 + 闪避后摸 1 张。", stat: "-2 闪避→摸 1" },
-    { desc: "减 2 + 闪避后摸 2 张。", stat: "-2 闪避→摸 2" },
-    { desc: "减 3 + 闪避后摸 2 张。", stat: "-3 闪避→摸 2" },
+    { desc: "减 3 + 闪避后摸 1 张。", stat: "-3 闪避→摸 1" },
+    { desc: "减 4 + 闪避后摸 1 张。", stat: "-4 闪避→摸 1" },
+    { desc: "减 5 + 闪避后摸 1 张。", stat: "-5 闪避→摸 1" },
   ],
 };
 
@@ -429,20 +431,18 @@ const VAMPIRE_FANG: CardDef = {
   id: "vampire_fang",
   name: "吸血獠牙",
   category: "equipment",
-  desc: "装备：基础伤害 6，吸血 40%；目标 HP < 50% 时伤害 +5。",
+  desc: "装备：基础伤害 6，吸血 35%；目标 HP < 50% 时伤害 +5。",
   equipKind: "weapon",
   equipSuit: "heart",
   baseDmg: 6,
   equipEffects: (() => {
-    const mk = (vampPct: number, lowHpBonus: number) => ({
-      desc: `基础 6×N + 吸血 ${Math.round(vampPct * 100)}% + HP<50% 时 +${lowHpBonus} 伤。`,
-      stat: `吸${Math.round(vampPct * 100)}% HP<50%+${lowHpBonus}`,
+    const mk = () => ({
+      desc: "基础 6 + 吸血 35% + HP<50% 时 +5 伤。",
+      stat: "吸35% HP<50%+5",
       onAttack: (ctx: BattleContext, d: number) => {
-        // HP <50% bonus 先加
         let finalD = d;
-        if (ctx.target.hp < ctx.target.maxHp * 0.5) finalD += lowHpBonus;
-        // 吸血
-        const heal = Math.floor(finalD * vampPct);
+        if (ctx.target.hp < ctx.target.maxHp * 0.5) finalD += 5;
+        const heal = Math.floor(finalD * 0.35);
         if (heal > 0) {
           ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + heal);
           ctx.log(`吸血獠牙吸血 ${heal}。`, "player");
@@ -450,7 +450,7 @@ const VAMPIRE_FANG: CardDef = {
         return finalD;
       },
     });
-    return [mk(0.40, 5), mk(0.45, 7), mk(0.50, 9), mk(0.55, 12)] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
+    return [mk(), mk(), mk(), mk()] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
   })(),
 };
 
@@ -511,32 +511,31 @@ const GIANT_HAMMER: CardDef = {
   id: "giant_hammer",
   name: "巨锤",
   category: "equipment",
-  desc: "装备：基础伤害 8，**击晕**——单次伤害达到目标最大 HP 的 25% 时，按概率沉默 1 回合。已沉默时不刷新。",
+  desc: "装备：基础伤害 8，单次伤害达到目标最大 HP 的 25% 时，按 50% 概率沉默 1 回合。已沉默时不刷新或叠加。",
   equipKind: "weapon",
   equipSuit: "club",
   baseDmg: 8,
   equipEffects: (() => {
-    const tryStun = (c: BattleContext, d: number, chance: number): number => {
+    const trySilence = (c: BattleContext, d: number): number => {
       if (
         d >= c.target.maxHp * 0.25
-        && Math.random() < chance
+        && Math.random() < 0.50
         && !c.target.statuses.find(s => s.id === "silenced")
       ) {
         c.target.statuses.push({ id: "silenced", name: "沉默", stacks: 1, duration: 1 });
-        c.log(`巨锤击晕：${c.target.name} 沉默 1 回合。`, "player");
+        c.log(`巨锤沉默：${c.target.name} 沉默 1 回合（25% maxHP 触发）。`, "player");
       }
       return d;
     };
-    // nerf：击晕率 30/40/50/60% → 25/35/40/45%（4 stack 不再实质控锁 boss）
     return [
-      { desc: "基础 8，25% 上限击晕（25% 概率）。", stat: "8 伤 击晕25%",
-        onAttack: (c, d) => tryStun(c, d, 0.25) },
-      { desc: "叠加 ×1.4，击晕概率 35%。", stat: "11.2 伤 击晕35%",
-        onAttack: (c, d) => tryStun(c, d, 0.35) },
-      { desc: "叠加 ×1.8,击晕概率 40%。", stat: "14.4 伤 击晕40%",
-        onAttack: (c, d) => tryStun(c, d, 0.40) },
-      { desc: "叠加 ×2.2，击晕概率 45%。", stat: "17.6 伤 击晕45%",
-        onAttack: (c, d) => tryStun(c, d, 0.45) },
+      { desc: "基础 8 + 25% maxHP 单击沉默 50%。", stat: "8 伤 沉默50%",
+        onAttack: trySilence },
+      { desc: "叠加 ×1.4。", stat: "11.2 伤 沉默50%",
+        onAttack: trySilence },
+      { desc: "叠加 ×1.8。", stat: "14.4 伤 沉默50%",
+        onAttack: trySilence },
+      { desc: "叠加 ×2.2。", stat: "17.6 伤 沉默50%",
+        onAttack: trySilence },
     ] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
   })(),
 };
@@ -578,45 +577,46 @@ const BERSERKER_BLADE: CardDef = {
   id: "berserker_blade",
   name: "狂剑",
   category: "equipment",
-  desc: "装备：基础伤害 6，HP < 50% 时所有攻击 +4 伤。",
+  desc: "装备：基础伤害 6，HP < 50% 时所有攻击 +4 伤、+2 穿甲。",
   equipKind: "weapon",
   equipSuit: "spade",
   baseDmg: 6,
+  // XLSX v6：HP < 50% 时 +2 pierce（在 battle.ts calcAttackDamage 内特判）
   equipEffects: [
-    { desc: "基础 6，低血 +4。", stat: "6 伤（低血+4）",
+    { desc: "基础 6 + 低血 +4 伤 +2 破甲。", stat: "6 伤 低血+4+破2",
       onAttack: (c, d) => c.player.vita < Math.floor(c.player.vitaMax * 0.5) ? d + 4 : d },
-    { desc: "叠加 ×1.4，低血 +4。", stat: "8.4 伤（低血+4）",
+    { desc: "叠加 ×1.4 + 低血 +4 +2 破。", stat: "8.4 伤 低血+4+破2",
       onAttack: (c, d) => c.player.vita < Math.floor(c.player.vitaMax * 0.5) ? d + 4 : d },
-    { desc: "叠加 ×1.8，低血 +4。", stat: "10.8 伤（低血+4）",
+    { desc: "叠加 ×1.8 + 低血 +4 +2 破。", stat: "10.8 伤 低血+4+破2",
       onAttack: (c, d) => c.player.vita < Math.floor(c.player.vitaMax * 0.5) ? d + 4 : d },
-    { desc: "叠加 ×2.2，低血 +4。", stat: "13.2 伤（低血+4）",
+    { desc: "叠加 ×2.2 + 低血 +4 +2 破。", stat: "13.2 伤 低血+4+破2",
       onAttack: (c, d) => c.player.vita < Math.floor(c.player.vitaMax * 0.5) ? d + 4 : d },
   ],
 };
 
-// 法师杖：每出 1 张非攻击牌，下张攻击 +3 伤（同回合累积，攻击后清零）
+// 权杖：每出 1 张非攻击牌，下张攻击 +3 伤（同回合累积，攻击后清零）
 const ARCANE_SCEPTER: CardDef = {
   id: "arcane_scepter",
-  name: "法师杖",
+  name: "权杖",
   category: "equipment",
   desc: "装备：基础伤害 4，每出 1 张非攻击牌下次攻击 +3 伤（同回合累积，攻击后清零）。",
   equipKind: "weapon",
   equipSuit: "club",
   baseDmg: 4,
   equipEffects: [
-    { desc: "基础 4 + 法师杖加成。", stat: "4 伤 +3/非攻击" },
-    { desc: "叠加 ×1.4 + 法师杖。", stat: "5.6 伤 +3/非攻击" },
-    { desc: "叠加 ×1.8 + 法师杖。", stat: "7.2 伤 +3/非攻击" },
-    { desc: "叠加 ×2.2 + 法师杖。", stat: "8.8 伤 +3/非攻击" },
+    { desc: "基础 4 + 权杖加成。", stat: "4 伤 +3/非攻击" },
+    { desc: "叠加 ×1.4 + 权杖。", stat: "5.6 伤 +3/非攻击" },
+    { desc: "叠加 ×1.8 + 权杖。", stat: "7.2 伤 +3/非攻击" },
+    { desc: "叠加 ×2.2 + 权杖。", stat: "8.8 伤 +3/非攻击" },
   ],
 };
 
-// 连弩：每回合可出多张攻击牌；连续 2 回合出攻击后第 3 回合开始时自动弃置
+// 连弩：每回合可出多张攻击牌。连续两回合都出了一张以上的攻击，下一回合无法攻击，再下一回合恢复
 const REPEATING_BOW: CardDef = {
   id: "repeating_bow",
   name: "连弩",
   category: "equipment",
-  desc: "装备：基础伤害 3，每回合可出多张攻击牌（nerf：原 4 降为 3，叠满 6.6 伤）。连续两回合都出了一张以上的攻击时，第三回合开始自动弃置。",
+  desc: "装备：基础伤害 3，每回合可出多张攻击牌。连续两回合都出了一张以上的攻击时，下一回合无法出攻击牌，再下一回合恢复。",
   equipKind: "weapon",
   equipSuit: "diamond",
   baseDmg: 3,
@@ -628,21 +628,21 @@ const REPEATING_BOW: CardDef = {
   ],
 };
 
-// 破军：动态破甲武器，pierce 跟随目标 armor 自适应（在 calcAttackDamage 特判）
+// 破军：动态破甲武器，pierce = 目标当前护甲 × 50%（向上取整），自适应
 const RAIDER: CardDef = {
   id: "raider",
   name: "破军",
   category: "equipment",
-  desc: "装备：基础伤害 5，破甲数等于目标当前护甲的 50%（自适应）。",
+  desc: "装备：基础伤害 5，破甲数等于目标当前护甲的 50%（向上取整）。",
   equipKind: "weapon",
   equipSuit: "spade",
   baseDmg: 5,
   pierce: 0,  // 实际 pierce 在 battle.ts/calcAttackDamage 里基于 target.armor 动态计算
   equipEffects: [
     { desc: "基础 5，破甲 50% 目标护甲。", stat: "5 伤 破50%" },
-    { desc: "叠加 ×1.4，破甲 50%。",       stat: "7 伤 破50%" },
-    { desc: "叠加 ×1.8，破甲 60%。",       stat: "9 伤 破60%" },
-    { desc: "叠加 ×2.2，破甲 70%。",       stat: "11 伤 破70%" },
+    { desc: "叠加 ×1.4。",                stat: "7 伤 破50%" },
+    { desc: "叠加 ×1.8。",                stat: "9 伤 破50%" },
+    { desc: "叠加 ×2.2。",                stat: "11 伤 破50%" },
   ],
 };
 
@@ -724,30 +724,45 @@ const THORN_ARMOR: CardDef = {
   equipKind: "armor",
   equipSuit: "diamond",
   baseReduce: 0,
-  equipEffects: [
-    { desc: "反伤 3。", stat: "反伤 3", onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 3, c.log, `反伤甲 → ${t.name} -3。`); return d; } },
-    { desc: "反伤 4。", stat: "反伤 4", onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 4, c.log, `反伤甲 → ${t.name} -4。`); return d; } },
-    { desc: "反伤 5。", stat: "反伤 5", onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 5, c.log, `反伤甲 → ${t.name} -5。`); return d; } },
-    { desc: "反伤 7。", stat: "反伤 7", onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 7, c.log, `反伤甲 → ${t.name} -7。`); return d; } },
-  ],
+  // XLSX v6: 受击反伤 3，连续受击 +10%/hit 累加（用 status thorn_chain 临时累加，每回合开始清零）
+  equipEffects: (() => {
+    const mk = (base: number) => ({
+      desc: `反伤 ${base}（每回合 1st hit 反伤 ${base}，后续每 hit +10% 反 ${base}）。`,
+      stat: `反伤 ${base} 连击+10%`,
+      onTakeDamage: (c: BattleContext, d: number) => {
+        // 累积连击 hit 计数（每回合开始 startNewPlayerTurn 清掉 thorn_chain）
+        const chain = c.player.statuses.find(s => s.id === "thorn_chain");
+        const hitNum = (chain?.stacks ?? 0) + 1;  // 第几 hit（1-indexed）
+        if (chain) chain.stacks = hitNum;
+        else c.player.statuses.push({ id: "thorn_chain", name: "反伤连击", stacks: 1, duration: -1 });
+        // 第 1 hit 反 base，第 2 hit 反 base * 1.1，第 3 hit 反 base * 1.2，...
+        const reflect = Math.floor(base * (1 + 0.10 * (hitNum - 1)));
+        const t = c.enemies.find(e => e.alive);
+        if (t && reflect > 0) damageEnemy(t, reflect, c.log, `反伤甲（×${hitNum}）→ ${t.name} -${reflect}。`);
+        return d;
+      },
+    });
+    return [mk(3), mk(4), mk(5), mk(7)] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
+  })(),
 };
 
 const HEAVY_ARMOR: CardDef = {
   id: "heavy_armor",
   name: "重甲",
   category: "equipment",
-  desc: "装备：受击 -4 / -5 / -7 / -9（叠加）。v5 去掉攻击 -1 副作用。",
+  desc: "装备：受击 -4（可叠加），每回合 30% 概率随机去除一条 debuff 效果。",
   equipKind: "armor",
   equipSuit: "club",
   baseReduce: 4,
+  // XLSX v6: -4 受击（可叠加），每回合 30% 概率随机去 1 debuff（在 startNewPlayerTurn 内联实装）
   equipEffects: [
-    { desc: "受击 -4。", stat: "-4 受击",
+    { desc: "受击 -4 + 每回合 30% 去 1 debuff。", stat: "-4 受击 30%去debuff",
       onTakeDamage: (_c, d) => Math.max(0, d - 4) },
-    { desc: "受击 -5。", stat: "-5 受击",
+    { desc: "叠加 ×1.4 → 受击 -5。", stat: "-5 受击 30%去debuff",
       onTakeDamage: (_c, d) => Math.max(0, d - 5) },
-    { desc: "受击 -7。", stat: "-7 受击",
+    { desc: "叠加 ×1.8 → 受击 -7。", stat: "-7 受击 30%去debuff",
       onTakeDamage: (_c, d) => Math.max(0, d - 7) },
-    { desc: "受击 -9。", stat: "-9 受击",
+    { desc: "叠加 ×2.2 → 受击 -9。", stat: "-9 受击 30%去debuff",
       onTakeDamage: (_c, d) => Math.max(0, d - 9) },
   ],
 };
@@ -1566,16 +1581,17 @@ const UNDYING_HEART: CardDef = {
   desc: "受击 -2。HP 归 0 时复活到 50%（整局 1 次）。",
   equipKind: "armor",
   equipSuit: "heart",
-  baseReduce: 2,
+  baseReduce: 3,
+  // XLSX v6: 受击 -3，HP 归 0 复活到 50%（整局 1 次，stack 不增加复活效率）
   equipEffects: [
-    { desc: "受击 -2，整局 1 次复活到 50% HP。", stat: "-2 受击 复活50%",
-      onTakeDamage: (_c, d) => Math.max(0, d - 2) },
-    { desc: "叠加：复活到 65% HP。", stat: "-2 受击 复活65%",
-      onTakeDamage: (_c, d) => Math.max(0, d - 2) },
-    { desc: "叠加：复活到 80% HP。", stat: "-2 受击 复活80%",
-      onTakeDamage: (_c, d) => Math.max(0, d - 2) },
-    { desc: "叠加：复活到 100% HP。", stat: "-2 受击 复活100%",
-      onTakeDamage: (_c, d) => Math.max(0, d - 2) },
+    { desc: "受击 -3，HP 归 0 时复活到 50%（整局 1 次）。", stat: "-3 受击 复活50%",
+      onTakeDamage: (_c, d) => Math.max(0, d - 3) },
+    { desc: "叠加 ×1.4 → 受击 -4。", stat: "-4 受击 复活50%",
+      onTakeDamage: (_c, d) => Math.max(0, d - 4) },
+    { desc: "叠加 ×1.8 → 受击 -5。", stat: "-5 受击 复活50%",
+      onTakeDamage: (_c, d) => Math.max(0, d - 5) },
+    { desc: "叠加 ×2.2 → 受击 -6。", stat: "-6 受击 复活50%",
+      onTakeDamage: (_c, d) => Math.max(0, d - 6) },
   ],
 };
 

@@ -187,8 +187,9 @@ export const STATUS_META: Record<string, StatusMeta> = {
   // ── 玩家「下次攻击命中附加 debuff」标记 ────────────────────
   next_atk_apply_poison: { name: "箭毒预备", desc: "下次攻击命中时给目标 +stacks 中毒。\n来源：道具 it_poison_dart「箭毒蛙」。", kind: "buff" },
   next_atk_apply_bleed:  { name: "抗凝血预备", desc: "下次攻击命中时给目标 +stacks 出血（持续 2 回合）。\n来源：道具 it_anticoag「抗凝血」。", kind: "buff" },
-  // ── 吸血盾蓄势 ──
+  // ── 吸血盾 / 反伤甲 ──
   draining_charge:   { name: "吸血盾蓄势", desc: "已累积 stacks 点延迟回血，下回合开始时全部回给玩家。\n来源：装备「吸血盾」受击触发。", kind: "buff" },
+  thorn_chain:       { name: "反伤连击", desc: "本回合已累计受击 stacks 次（用于反伤甲计算每 hit +10% 反伤）。每回合开始清零。\n来源：装备「反伤甲」受击触发。", kind: "neutral" },
   // ── 敌人 buff intent 触发的 status（v6 buff dispatch 系统）──
   temp_armor:        { name: "临时护甲", desc: "本回合敌人护甲临时 +stacks。\n来源：敌人 buff intent self_armor（兽 血怒 / 巨怪 硬化）或 team_armor（人型 结阵）。", kind: "buff" },
   enemy_atk_buff:    { name: "强化", desc: "下次攻击 +stacks 伤害（一次性）。\n来源：敌人 buff intent next_attack_3（兽 嚎叫 / 人型 战吼 / 暗影 暗影遁）。", kind: "buff" },
