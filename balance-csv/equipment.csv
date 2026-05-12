@@ -1,4 +1,4 @@
-id,name,slot,suit,rarity,baseDmg,hits,pierce,baseReduce,desc,stack1_stat,stack1_desc,stack2_stat,stack2_desc,stack3_stat,stack3_desc,stack4_stat,stack4_desc
+﻿id,name,slot,suit,rarity,baseDmg,hits,pierce,baseReduce,desc,stack1_stat,stack1_desc,stack2_stat,stack2_desc,stack3_stat,stack3_desc,stack4_stat,stack4_desc
 short_sword,短剑,weapon,spade,common,5,,,,装备：基础伤害 5。打出后装上武器槽（同款叠加 ×1.4/×1.8/×2.2）。,5 伤,基础伤害 5。,7 伤,叠加 ×1.4 → 7 基础伤。,9 伤,叠加 ×1.8 → 9 基础伤。,11 伤,叠加 ×2.2 → 11 基础伤。
 long_sword,长剑,weapon,spade,common,7,,5,,装备：基础伤害 7，破甲 5（无视敌人 5 点护甲）。,7 伤 破5,基础 7，破甲 5。,9.8 伤 破5,叠加 ×1.4，破甲 5。,12.6 伤 破5,叠加 ×1.8，破甲 5。,15.4 伤 破5,叠加 ×2.2，破甲 5。
 dagger,匕首,weapon,heart,common,5,,,,装备：基础伤害 5，攻击吸血 35%。,吸35%,基础 5×N + 吸血 35%。,吸35%,基础 5×N + 吸血 35%。,吸35%,基础 5×N + 吸血 35%。,吸35%,基础 5×N + 吸血 35%。

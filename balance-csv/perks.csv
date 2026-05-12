@@ -1,4 +1,4 @@
-id,name,default_suit,rarity,unit_desc,full_desc
+﻿id,name,default_suit,rarity,unit_desc,full_desc
 p_bleed,流血,spade,common,武器伤害 +5%（每张）,每张：武器伤害 +5%（叠加无上限）。
 p_dodge,闪避,diamond,common,闪避 +3%（每张，cap 50%）,每张：完全闪避概率 +3%（叠加上限 50%）。
 p_regen,再生,heart,common,每回合 +3% 最大 HP（每张）,每张：每回合回最大 HP × 3%（向下取整，最少 1）。

@@ -1,4 +1,4 @@
-id,name,suit,rarity,target,desc
+﻿id,name,suit,rarity,target,desc
 it_heal,回血药水,,common,self,回复最大 HP 的 20%（最少 12 点）。
 it_purify,驱毒剂,,common,self,清除自身所有负面状态 + 摸 1 张牌。
 it_whetstone,磨刀石,,common,self,下一张攻击伤害 ×1.5。

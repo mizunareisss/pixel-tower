@@ -1,4 +1,4 @@
-id,name,suit,rarity,target,desc
+﻿id,name,suit,rarity,target,desc
 sk_poison_blade,毒刃,,common,single,目标 +6 层中毒：每回合扣等同层数 HP（合计 21 伤害），每回合自动 -1 层。可叠加施放。
 sk_battle_cry,战吼,,common,self,本回合所有攻击 +3 伤。
 sk_frenzy,激奋,,super_rare,self,激活激奋：4 回合内每打出一张攻击牌后层数 +1，下次攻击额外 +2 × 层数伤害。

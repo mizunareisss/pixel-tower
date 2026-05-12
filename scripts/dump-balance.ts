@@ -204,6 +204,12 @@ console.log(`✓ BALANCE_SHEET.md (${out.length} lines)`);
 // ───────── CSV 导出（按类别每文件一份，便于 Sheets / Numbers / Excel）─────────
 mkdirSync("balance-csv", { recursive: true });
 
+// UTF-8 BOM — 加在 CSV 文件开头让 Excel / Numbers 自动按 UTF-8 解析中文（否则按 GBK 乱码）
+const BOM = "﻿";
+function writeCsv(path: string, lines: string[]): void {
+  writeFileSync(path, BOM + lines.join("\n") + "\n");
+}
+
 // 1) attacks.csv / skills.csv / items.csv — 共用列
 {
   const cats: Record<string, [string, CardDef][]> = { attack: [], skill: [], item: [] };
@@ -222,7 +228,7 @@ mkdirSync("balance-csv", { recursive: true });
         d.desc,
       ]));
     }
-    writeFileSync(fname, lines.join("\n") + "\n");
+    writeCsv(fname, lines);
     console.log(`✓ ${fname} (${rows.length} rows)`);
   }
 }
@@ -254,7 +260,7 @@ mkdirSync("balance-csv", { recursive: true });
       eff[3]?.stat ?? "", eff[3]?.desc ?? "",
     ]));
   }
-  writeFileSync("balance-csv/equipment.csv", lines.join("\n") + "\n");
+  writeCsv("balance-csv/equipment.csv", lines);
   console.log(`✓ balance-csv/equipment.csv (${rows.length} rows)`);
 }
 
@@ -272,7 +278,7 @@ mkdirSync("balance-csv", { recursive: true });
       d.desc,
     ]));
   }
-  writeFileSync("balance-csv/perks.csv", lines.join("\n") + "\n");
+  writeCsv("balance-csv/perks.csv", lines);
   console.log(`✓ balance-csv/perks.csv (${rows.length} rows)`);
 }
 
@@ -303,7 +309,7 @@ mkdirSync("balance-csv", { recursive: true });
       params[4].join("/"), getEnchantDescAt(id, 5),
     ]));
   }
-  writeFileSync("balance-csv/enchants.csv", lines.join("\n") + "\n");
+  writeCsv("balance-csv/enchants.csv", lines);
   console.log(`✓ balance-csv/enchants.csv (${ENCHANTS.length} rows)`);
 }
 
@@ -349,7 +355,7 @@ mkdirSync("balance-csv", { recursive: true });
     ["♣ 梅花", "T3 大招", "群体禁咒", "全敌 沉默 3 回 + 易伤 3 层 3 回 + 中毒 3", "—"],
   ];
   for (const row of data) lines.push(csvRow(row));
-  writeFileSync("balance-csv/specialty.csv", lines.join("\n") + "\n");
+  writeCsv("balance-csv/specialty.csv", lines);
   console.log(`✓ balance-csv/specialty.csv (${data.length} rows)`);
 }
 

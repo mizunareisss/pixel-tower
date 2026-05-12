@@ -1,4 +1,4 @@
-id,name,branch,kind,variant,tier,recipe_cost,lv1_params,lv1_desc,lv2_params,lv2_desc,lv3_params,lv3_desc,lv4_params,lv4_desc,lv5_params,lv5_desc
+﻿id,name,branch,kind,variant,tier,recipe_cost,lv1_params,lv1_desc,lv2_params,lv2_desc,lv3_params,lv3_desc,lv4_params,lv4_desc,lv5_params,lv5_desc
 e_brawler,强袭,spade,single,specialize,普通,beast×3,10,HP < 50% 时，攻击 +10%。,12,HP < 50% 时，攻击 +12%。,14,HP < 50% 时，攻击 +14%。,16,HP < 50% 时，攻击 +16%。,18,HP < 50% 时，攻击 +18%。
 e_strategist,算计,club,single,specialize,普通,humanoid×3,2,每出 1 张非攻击牌，下张攻击 +2 伤（同回合累积，攻击后清零）。,2,每出 1 张非攻击牌，下张攻击 +2 伤（同回合累积，攻击后清零）。,2,每出 1 张非攻击牌，下张攻击 +2 伤（同回合累积，攻击后清零）。,3,每出 1 张非攻击牌，下张攻击 +3 伤（同回合累积，攻击后清零）。,3,每出 1 张非攻击牌，下张攻击 +3 伤（同回合累积，攻击后清零）。
 e_reaper,收割,heart,single,specialize,普通,undead×3,140,击杀敌人后，下次攻击 ×1.40（一次性）。,150,击杀敌人后，下次攻击 ×1.50（一次性）。,160,击杀敌人后，下次攻击 ×1.60（一次性）。,165,击杀敌人后，下次攻击 ×1.65（一次性）。,175,击杀敌人后，下次攻击 ×1.75（一次性）。

@@ -1,4 +1,4 @@
-suit,tier,effect_kind,effect,param
+﻿suit,tier,effect_kind,effect,param
 公式,—,装备同色加成,每件 +1.3,1.3
 公式,—,特性同色加成,每张 +0.8,0.8
 公式,—,出牌同色加成,每张 +0.3（cap 30）,0.3
