@@ -16,7 +16,13 @@ interface AIContext {
   hpPct: number;          // boss 当前 HP%
   playerHpPct: number;    // 玩家当前 HP%
   turn: number;
+  // 多动：本回合已经选过的 intent indices，避免一个回合内重复出同一招
+  usedThisTurn: number[];
 }
+
+// 模块级变量：多动时本回合已选过的 intent indices（avoidRepeat 用）
+// selectAIIntent 在每次决策前 set 一次，避免改所有 callsite
+let _currentUsedThisTurn: number[] = [];
 
 // 工具：从招式池里按 type 过滤
 function pickByType(enemy: EnemyState, types: ("attack" | "buff" | "debuff")[]): number[] {
@@ -45,9 +51,12 @@ function pickHighestValue(enemy: EnemyState, indices: number[]): number {
 }
 
 // 工具：避免立即重复同一招（更自然）
+//   多动时也排除本回合已选过的 indices（从 _currentUsedThisTurn 读，由 selectAIIntent 设置）
 function avoidRepeat(indices: number[], lastIdx: number): number[] {
   if (indices.length === 1) return indices;
-  return indices.filter(i => i !== lastIdx);
+  const exclude = new Set([lastIdx, ..._currentUsedThisTurn]);
+  const filtered = indices.filter(i => !exclude.has(i));
+  return filtered.length > 0 ? filtered : indices.filter(i => i !== lastIdx);  // 保底
 }
 
 // 工具：boss 检测玩家上一回合是否上 buff（看 player.statuses 里 duration > 0 的 buff）
@@ -314,18 +323,24 @@ export const BOSS_AI: Record<BossAIId, (ctx: AIContext) => number> = {
 
 // 入口：battle.ts enemyTurn 时调用
 // 返回招式 index；如果 enemy.ai 未设置或无效，返回 -1（由调用方 fallback 到旧逻辑）
-export function selectAIIntent(enemy: EnemyState, state: BattleState): number {
+// usedThisTurn: 多动时本回合已经选过的 intent index 列表（避免立即重复同一招）
+export function selectAIIntent(enemy: EnemyState, state: BattleState, usedThisTurn: number[] = []): number {
   if (!enemy.ai) return -1;
   const fn = BOSS_AI[enemy.ai];
   if (!fn) return -1;
   const hpPct = enemy.hp / enemy.maxHp;
   const playerHpPct = state.player.vita / state.player.vitaMax;
-  // 用 enemy.aiState.turnCount 记录回合数（每次决策递增）
+  // 用 enemy.aiState.turnCount 记录回合数（仅每回合首次决策时 +1）
   if (!enemy.aiState) enemy.aiState = {};
-  enemy.aiState.turnCount = (enemy.aiState.turnCount ?? 0) + 1;
-  const turn = enemy.aiState.turnCount;
-  // 记录玩家本回合 buff 数（用于报复者）
-  return fn({ enemy, state, hpPct, playerHpPct, turn });
+  if (usedThisTurn.length === 0) {
+    enemy.aiState.turnCount = (enemy.aiState.turnCount ?? 0) + 1;
+  }
+  const turn = enemy.aiState.turnCount ?? 1;
+  // 设置模块级变量供 avoidRepeat 读
+  _currentUsedThisTurn = usedThisTurn;
+  const result = fn({ enemy, state, hpPct, playerHpPct, turn, usedThisTurn });
+  _currentUsedThisTurn = [];
+  return result;
 }
 
 // F12 flavor log — main.ts 在 renderEnemy 时检测 aiState.phase 变化触发

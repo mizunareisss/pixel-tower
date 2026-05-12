@@ -1136,6 +1136,11 @@ function renderEnemy(e: EnemyState, idx: number): HTMLElement {
   const dodgeBadge = dodgeNow > 0
     ? `<span class="ec-equip dodge" title="闪避率 ${dodgeNow}%（基础 ${dodgeBase}% − 出血削减 ${dodgeBase - dodgeNow}%）每 hit 单独 roll">🎯${dodgeNow}%</span>`
     : "";
+  // AP 徽章：>1 才显示
+  const ap = e.actionsPerTurn ?? 1;
+  const apBadge = ap > 1
+    ? `<span class="ec-equip ap" title="每回合行动 ${ap} 次（多动）；frozen / fear 时限 1 动">⚡×${ap}</span>`
+    : "";
 
   // tier 缩写（左上角标右下角）— 像扑克牌左上 + 右下对角花色
   const tierMark = tier === "boss" ? "B" : tier === "elite" ? "E" : "";
@@ -1174,6 +1179,7 @@ function renderEnemy(e: EnemyState, idx: number): HTMLElement {
       <span class="ec-race" title="${RACE_NAMES[e.race]} · 击败掉 ${FRAGMENT_NAMES[e.race]} 1 枚">${FRAGMENT_ICONS[e.race]}${RACE_NAMES[e.race]}</span>
       ${weaponBadge}
       ${armorBadge}
+      ${apBadge}
       ${critBadge}
       ${dodgeBadge}
       ${e.eliteAbility ? `<span class="ec-ability" title="${escapeHTML(ABILITY_DESCS[e.eliteAbility] ?? "")}">★${escapeHTML(e.eliteAbility)}</span>` : ""}

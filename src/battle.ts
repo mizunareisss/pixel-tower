@@ -8,6 +8,7 @@ import type {
   BattleContext,
   PlayerState,
   EnemyState,
+  EnemyIntent,
   CardInstance,
   CardDef,
   LogKind,
@@ -569,13 +570,15 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
 
   // 敌人 armor 减伤（受 pierce 影响；夺命斩杀绕过；穿甲射绕过）
   if (!bypassArmor) {
-    const enemyArmor = ctx.target.armor ?? 0;
+    // 临时护甲（敌人 buff intent 触发：self_armor / team_armor）叠加到基础 armor 上
+    const tempArmor = ctx.target.statuses.find(s => s.id === "temp_armor");
+    const enemyArmor = (ctx.target.armor ?? 0) + (tempArmor?.stacks ?? 0);
     if (enemyArmor > 0) {
-      // pierce 来源汇总：武器 + 洞察特性 + 破甲专家特性 + 破军 + ♠ Tier 2 + 穿甲斩 + 穿甲油
+      // pierce 来源汇总：武器 + 破甲特性 + 破军 + ♠ Tier 2 + 穿甲斩 + 穿甲油
+      // 注：p_insight 已改名"力量"并改为伤害%加成（onDealDamage 内处理），不再走 pierce 路径
       let pierce = wDef.pierce ?? 0;
-      const insightStacks = player.perks.filter(p => p.defId === "p_insight").length;
       const armorBreakStacks = player.perks.filter(p => p.defId === "p_armor_break").length;
-      pierce += insightStacks + armorBreakStacks;
+      pierce += armorBreakStacks;
       if (wDef.id === "raider") {
         const stacks = Math.min(player.weapons.length, 4);
         const ratio = [0.50, 0.50, 0.60, 0.70][stacks - 1];
@@ -1073,7 +1076,7 @@ export function getCurrentDodgeChance(player: PlayerState, state?: BattleState):
   }
   // p_dodge 特性：每张 +3%，cap 50%
   const dodgePerks = player.perks.filter(p => p.defId === "p_dodge").length;
-  chance += Math.min(50, dodgePerks * 3);
+  chance += Math.min(50, dodgePerks * 5);
   // 烟雾弹临时 buff（多回合）
   const smoke = player.statuses.find(s => s.id === "smoke_dodge");
   if (smoke) chance += smoke.stacks;
@@ -1386,6 +1389,197 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
 // 敌人回合
 // ─────────────────────────────────────────────────────────
 
+// 选择 enemy 本回合下一个 intent 的 index
+// - 装备 AI 的精英/boss：调用 bossAI selectAIIntent（带 avoidIndices）
+// - 普通 boss：随机不重复
+// - 其他：顺序循环
+function chooseEnemyIntentIdx(enemy: EnemyState, state: BattleState, usedThisTurn: number[]): number {
+  if (enemy.ai) {
+    const aiIdx = selectAIIntent(enemy, state, usedThisTurn);
+    if (aiIdx >= 0 && aiIdx < enemy.intents.length) return aiIdx;
+  }
+  if (enemy.tier === "boss" && enemy.intents.length > 1) {
+    let next: number;
+    let safety = 8;
+    do {
+      next = Math.floor(Math.random() * enemy.intents.length);
+      safety--;
+    } while ((next === enemy.intentIndex || usedThisTurn.includes(next)) && safety > 0);
+    return next;
+  }
+  // 顺序循环（普通敌人 / 精英无 AI）
+  return (enemy.intentIndex + 1) % enemy.intents.length;
+}
+
+// 执行单个 intent（attack / buff / debuff）— 含多动 log 前缀
+function executeIntent(
+  state: BattleState,
+  enemy: EnemyState,
+  intent: EnemyIntent,
+  log: (m: string, k?: LogKind) => void,
+  prefix: string,
+): void {
+  // 沉默时 buff intent 跳过（攻击 / debuff 仍可出）
+  if (intent.type === "buff" && enemy.statuses.find(s => s.id === "silenced")) {
+    log(`${prefix}${enemy.name} 被沉默，跳过 buff。`, "player");
+    return;
+  }
+
+  if (intent.type === "attack") {
+    let value = intent.value;
+    if (enemy.statuses.find(s => s.id === "frozen")) {
+      value = Math.floor(value * 0.8);
+    }
+    if (enemy.statuses.find(s => s.id === "fear")) {
+      value = Math.floor(value * 0.5);
+    }
+    if (enemy.statuses.find(s => s.id === "weak")) {
+      value = Math.floor(value * 0.7);
+    }
+    // 嗜血（HP <50% +30%）
+    if (enemy.eliteAbility === "嗜血" && enemy.hp < enemy.maxHp * 0.5) {
+      value = Math.round(value * 1.3);
+    }
+    // buff intent 蓄势：next attack +N
+    const atkBuff = enemy.statuses.find(s => s.id === "enemy_atk_buff");
+    if (atkBuff) {
+      value += atkBuff.stacks;
+      enemy.statuses = enemy.statuses.filter(s => s.id !== "enemy_atk_buff");
+    }
+    // 血祭蓄势：next attack +N%
+    const sacBuff = enemy.statuses.find(s => s.id === "enemy_sacrifice");
+    if (sacBuff) {
+      value = Math.round(value * (1 + sacBuff.stacks / 100));
+      enemy.statuses = enemy.statuses.filter(s => s.id !== "enemy_sacrifice");
+    }
+    // 暴击率：基础 + 致命一击 +30%，cap 50
+    const baseCrit = getEnemyCritChance(enemy);
+    const fatalBonus = enemy.eliteAbility === "致命一击" ? 30 : 0;
+    const critChance = Math.min(50, baseCrit + fatalBonus);
+    // hits：intent.hits + buff intent 多段蓄势
+    let hits = intent.hits ?? 1;
+    const hitsBuff = enemy.statuses.find(s => s.id === "enemy_next_hits");
+    if (hitsBuff) {
+      hits += hitsBuff.stacks;
+      enemy.statuses = enemy.statuses.filter(s => s.id !== "enemy_next_hits");
+    }
+    log(`${prefix}${enemy.name} ${intent.desc}（${hits > 1 ? `${hits}×` : ""}${value}）。`, "enemy");
+    for (let i = 0; i < hits; i++) {
+      let hitValue = value;
+      if (critChance > 0 && Math.random() * 100 < critChance) {
+        const orig = hitValue;
+        hitValue = Math.round(hitValue * 1.5);
+        log(`★ ${enemy.name} 暴击！${orig} → ${hitValue}（${critChance}%）`, "enemy");
+      }
+      damagePlayer(state, hitValue, log, enemy);
+      if (state.player.vita <= 0) break;
+    }
+  } else if (intent.type === "buff") {
+    executeBuffIntent(state, enemy, intent, log, prefix);
+  } else if (intent.type === "debuff") {
+    const id = intent.debuffId ?? "weak";
+    const name = intent.debuffName ?? "状态";
+    const stacks = intent.value;
+    const duration = intent.debuffDuration ?? -1;
+    const isDot = id === "poison" || id === "burn" || id === "bleed";
+    if (isDot && state.player.statuses.find(s => s.id === "enc_dot_immune")) {
+      log(`${prefix}${enemy.name} 试图施加「${name}」，被符文护盾化解。`, "player");
+      return;
+    }
+    const existing = state.player.statuses.find(s => s.id === id);
+    if (existing) {
+      existing.stacks += stacks;
+      if (duration > 0) existing.duration = Math.max(existing.duration, duration);
+    } else {
+      state.player.statuses.push({ id, name, stacks, duration });
+    }
+    log(`${prefix}${enemy.name} 施加「${name}」+${stacks}${duration > 0 ? ` (${duration} 回合)` : ""}。`, "enemy");
+  }
+}
+
+// 执行 buff intent — 按 buffId 分发不同效果
+function executeBuffIntent(
+  state: BattleState,
+  enemy: EnemyState,
+  intent: EnemyIntent,
+  log: (m: string, k?: LogKind) => void,
+  prefix: string,
+): void {
+  const id = intent.buffId ?? "next_attack_3";
+  const value = intent.buffValue ?? 3;
+  switch (id) {
+    case "next_attack_3": {
+      // 下次攻击 +value（status，consumed on next attack）
+      const ex = enemy.statuses.find(s => s.id === "enemy_atk_buff");
+      if (ex) ex.stacks += value;
+      else enemy.statuses.push({ id: "enemy_atk_buff", name: "强化", stacks: value, duration: -1 });
+      log(`${prefix}${enemy.name} ${intent.desc}：下次攻击 +${value}。`, "enemy");
+      break;
+    }
+    case "self_armor": {
+      // 本回合自身 +armor（duration 2 让它能保护下个玩家回合）
+      const ex = enemy.statuses.find(s => s.id === "temp_armor");
+      if (ex) { ex.stacks += value; ex.duration = Math.max(ex.duration, 2); }
+      else enemy.statuses.push({ id: "temp_armor", name: "临时护甲", stacks: value, duration: 2 });
+      log(`${prefix}${enemy.name} ${intent.desc}：临时护甲 +${value}。`, "enemy");
+      break;
+    }
+    case "team_armor": {
+      let count = 0;
+      for (const e of state.enemies) {
+        if (!e.alive) continue;
+        const ex = e.statuses.find(s => s.id === "temp_armor");
+        if (ex) { ex.stacks += value; ex.duration = Math.max(ex.duration, 2); }
+        else e.statuses.push({ id: "temp_armor", name: "临时护甲", stacks: value, duration: 2 });
+        count++;
+      }
+      log(`${prefix}${enemy.name} ${intent.desc}：${count} 个敌人 +${value} 临时护甲。`, "enemy");
+      break;
+    }
+    case "self_heal_pct": {
+      const heal = Math.max(1, Math.ceil(enemy.maxHp * value / 100));
+      const before = enemy.hp;
+      enemy.hp = Math.min(enemy.maxHp, enemy.hp + heal);
+      const actual = enemy.hp - before;
+      log(`${prefix}${enemy.name} ${intent.desc}：回 ${actual} HP（${value}% maxHP）。`, "enemy");
+      break;
+    }
+    case "next_hits": {
+      const ex = enemy.statuses.find(s => s.id === "enemy_next_hits");
+      if (ex) ex.stacks += value;
+      else enemy.statuses.push({ id: "enemy_next_hits", name: "多段蓄势", stacks: value, duration: -1 });
+      log(`${prefix}${enemy.name} ${intent.desc}：下张攻击 +${value} hits。`, "enemy");
+      break;
+    }
+    case "self_sacrifice": {
+      const cost = Math.max(1, Math.ceil(enemy.maxHp * 0.03));
+      enemy.hp = Math.max(1, enemy.hp - cost);
+      const ex = enemy.statuses.find(s => s.id === "enemy_sacrifice");
+      if (ex) ex.stacks = Math.max(ex.stacks, value);
+      else enemy.statuses.push({ id: "enemy_sacrifice", name: "血祭蓄势", stacks: value, duration: -1 });
+      log(`${prefix}${enemy.name} ${intent.desc}：自损 ${cost} HP，下张攻击 +${value}%。`, "enemy");
+      break;
+    }
+    case "double_debuffs": {
+      // F12 限定：玩家身上所有 debuff stacks ×2
+      const debuffIds = new Set(["poison", "burn", "bleed", "weak", "vulnerable"]);
+      let doubled = 0;
+      for (const s of state.player.statuses) {
+        if (debuffIds.has(s.id)) {
+          s.stacks *= 2;
+          doubled++;
+        }
+      }
+      if (doubled > 0) {
+        log(`★ ${prefix}${enemy.name} 终末降临！${doubled} 个 debuff stack 翻倍！`, "enemy");
+      } else {
+        log(`${prefix}${enemy.name} 终末降临，但你身上没有 debuff，效果落空。`, "system");
+      }
+      break;
+    }
+  }
+}
+
 function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
   log("── 敌人回合 ──", "enemy");
   const skipActions = !!state.player.statuses.find(s => s.id === "time_stop");
@@ -1422,106 +1616,35 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
     // intent 行动（time_stop 跳过）
     if (skipActions) continue;
 
-    const intent = enemy.intents[enemy.intentIndex];
-    // 跟踪玩家已见过的招式（AI 敌人 info modal 只显示见过的）
-    const seen = (enemy as any)._seenIntents as number[] ?? [];
-    if (!seen.includes(enemy.intentIndex)) {
-      seen.push(enemy.intentIndex);
-      (enemy as any)._seenIntents = seen;
-    }
-    // 招式决策：
-    //   1. 如果 enemy.ai 设置（精英 / boss 装备 AI）→ 调用 bossAI 决策（隐式行为，无 telegraph）
-    //   2. 否则：boss 随机抽（避免立即重复）/ 其他档：顺序循环
-    if (enemy.ai) {
-      const aiIdx = selectAIIntent(enemy, state);
-      if (aiIdx >= 0 && aiIdx < enemy.intents.length) {
-        enemy.intentIndex = aiIdx;
-      } else {
-        // fallback 到旧逻辑
-        enemy.intentIndex = (enemy.intentIndex + 1) % enemy.intents.length;
-      }
-    } else if (enemy.tier === "boss" && enemy.intents.length > 1) {
-      let next: number;
-      do {
-        next = Math.floor(Math.random() * enemy.intents.length);
-      } while (next === enemy.intentIndex);
-      enemy.intentIndex = next;
-    } else {
-      enemy.intentIndex = (enemy.intentIndex + 1) % enemy.intents.length;
+    // 多动 AP：frozen / fear 限 1 动
+    let maxActions = enemy.actionsPerTurn ?? 1;
+    if (enemy.statuses.find(s => s.id === "frozen") || enemy.statuses.find(s => s.id === "fear")) {
+      maxActions = Math.min(1, maxActions);
     }
 
-    if (intent.type === "buff" && enemy.statuses.find(s => s.id === "silenced")) {
-      log(`${enemy.name} 被沉默，跳过。`, "player");
-      continue;
-    }
+    const usedIndices: number[] = [];  // 本回合已选过的 intent idx（传给 AI 避免立即重复）
+    for (let actionNum = 1; actionNum <= maxActions; actionNum++) {
+      if (!enemy.alive) break;
 
-    if (intent.type === "attack") {
-      let value = intent.value;
-      if (enemy.statuses.find(s => s.id === "frozen")) {
-        value = Math.floor(value * 0.8);
-        log(`${enemy.name} 被冰冻，伤害 -20%。`, "player");
-        // 多动系统实装后：frozen 时本回合最多 1 动（TODO 在 enemyTurn 外层循环里读 frozen）
+      // 选 intent
+      const intentIdx = chooseEnemyIntentIdx(enemy, state, usedIndices);
+      usedIndices.push(intentIdx);
+      enemy.intentIndex = intentIdx;
+      const intent = enemy.intents[intentIdx];
+      // 跟踪玩家已见过的招式（AI 敌人 info modal 只显示见过的）
+      const seen = (enemy as any)._seenIntents as number[] ?? [];
+      if (!seen.includes(intentIdx)) {
+        seen.push(intentIdx);
+        (enemy as any)._seenIntents = seen;
       }
-      // 恐惧：攻击伤害 -50%（duration 1 回合）
-      if (enemy.statuses.find(s => s.id === "fear")) {
-        value = Math.floor(value * 0.5);
-        log(`${enemy.name} 陷入恐惧，伤害减半。`, "player");
-      }
-      // 敌人虚弱：攻击 ×0.7（-30% 固定，stacks 决定 duration）
-      if (enemy.statuses.find(s => s.id === "weak")) {
-        value = Math.floor(value * 0.7);
-        log(`${enemy.name} 虚弱 ×0.7。`, "player");
-      }
-      // 特能修饰：嗜血（HP <50% 攻击 +30%）
-      if (enemy.eliteAbility === "嗜血" && enemy.hp < enemy.maxHp * 0.5) {
-        const orig = value;
-        value = Math.round(value * 1.3);
-        log(`${enemy.name} 嗜血发动：${orig} → ${value}。`, "enemy");
-      }
-      // 暴击率合并：基础 + 致命一击 +30%（cap 50）
-      const baseCrit = getEnemyCritChance(enemy);
-      const fatalBonus = enemy.eliteAbility === "致命一击" ? 30 : 0;
-      const critChance = Math.min(50, baseCrit + fatalBonus);
-      const hits = intent.hits ?? 1;
-      for (let i = 0; i < hits; i++) {
-        let hitValue = value;
-        // Per-hit 暴击 roll
-        if (critChance > 0 && Math.random() * 100 < critChance) {
-          const orig = hitValue;
-          hitValue = Math.round(hitValue * 1.5);
-          log(`★ ${enemy.name} 暴击！${orig} → ${hitValue}（${critChance}%）`, "enemy");
-        }
-        damagePlayer(state, hitValue, log, enemy);
-        if (state.player.vita <= 0) break;
-      }
-    } else if (intent.type === "buff") {
-      const next = enemy.intents[enemy.intentIndex];
-      next.value += 3;
-      next.desc = next.desc + "(强化)";
-      log(`${enemy.name} 咆哮：下次攻击 +3。`, "enemy");
-    } else if (intent.type === "debuff") {
-      // 给玩家上 debuff
-      const id = intent.debuffId ?? "weak";
-      const name = intent.debuffName ?? "状态";
-      const stacks = intent.value;
-      const duration = intent.debuffDuration ?? -1;
-      // 符文护盾：dot 类（poison/burn/bleed）对玩家无效
-      const isDot = id === "poison" || id === "burn" || id === "bleed";
-      if (isDot && state.player.statuses.find(s => s.id === "enc_dot_immune")) {
-        log(`${enemy.name} 试图施加「${name}」，被符文护盾化解。`, "player");
-        continue;
-      }
-      const existing = state.player.statuses.find(s => s.id === id);
-      if (existing) {
-        existing.stacks += stacks;
-        if (duration > 0) existing.duration = Math.max(existing.duration, duration);
-      } else {
-        state.player.statuses.push({ id, name, stacks, duration });
-      }
-      log(`${enemy.name} 施加「${name}」+${stacks}${duration > 0 ? ` (${duration} 回合)` : ""}。`, "enemy");
-    }
 
-    if (state.player.vita <= 0) break;
+      // 多动 log 前缀（仅 maxActions > 1 时显示）
+      const prefix = maxActions > 1 ? `[${actionNum}/${maxActions}] ` : "";
+
+      executeIntent(state, enemy, intent, log, prefix);
+
+      if (state.player.vita <= 0) break;
+    }
   }
 
   // ec_phalanx：本回合未受伤 → 下回合开局护盾 +K（K = idx 2；Lv1-5: 3/4/5/6/7）

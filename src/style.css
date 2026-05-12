@@ -1506,6 +1506,13 @@ h2.lose::before { display: none; }
   background: rgba(74,144,217,0.12);
   border-color: rgba(74,144,217,0.3);
 }
+/* AP 徽章 — 紫，提示玩家本回合受 N 击 */
+.ec-equip.ap {
+  color: #c8a8ff;
+  background: rgba(180, 130, 255, 0.18);
+  border-color: rgba(200, 160, 255, 0.5);
+  font-weight: 900;
+}
 /* 暴击徽章 — 橙红，警示玩家这一击可能暴击 */
 .ec-equip.crit {
   color: #ff8060;

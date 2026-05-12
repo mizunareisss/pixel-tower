@@ -35,10 +35,10 @@
 | ID | 名称 | 单张效果 | 默认花色 |
 |---|---|---|---|
 | `p_bleed` | 流血 | 武器伤害 +5%（每张） | spade |
-| `p_iron_will` | 钢铁意志 | HP ≤ 30% 时受击 -5%（每张） | spade |
-| `p_executioner` | 处刑 | HP ≤ 30% 敌人攻击 +10%（每张） | spade |
-| `p_insight` | 洞察 | 破甲 +1（每张） | spade |
-| `p_armor_break` | 破甲专家 | 破甲 +1（每张，pierce 总线） | spade |
+| `p_iron_will` | 钢铁意志 | HP ≤ 30% 时受击 -8%（每张） | spade |
+| `p_executioner` | 处刑 | HP ≤ 30% 敌人攻击 +10%（每张, cap 30%） | spade |
+| `p_insight` | 力量 | 同色不同花 +8%（每张, cap 25%） | spade |
+| `p_armor_break` | 破甲 | 破甲 +1（每张，pierce 总线） | spade |
 
 ## ♦ 方块 / 暗影流（闪避 / 多段）（共 15 张）
 
@@ -67,10 +67,10 @@
 
 | ID | 名称 | 单张效果 | 默认花色 |
 |---|---|---|---|
-| `p_dodge` | 闪避 | 闪避 +3%（每张，cap 50%） | diamond |
-| `p_crit` | 暴击 | 暴击率 +5%（每张，×2 暴击伤；中毒削减） | diamond |
+| `p_dodge` | 闪避 | 闪避 +5%（每张，cap 50%） | diamond |
+| `p_crit` | 暴击 | 暴击率 +8%（每张，×2 暴击伤；中毒削减） | diamond |
 | `p_overload` | 过载 | 每回合额外摸 1 张（每张，cap 4） | diamond |
-| `p_swift_strike` | 疾风斩 | 本场战斗第 1 回合首次攻击 +10%（每张） | diamond |
+| `p_swift_strike` | 疾风斩 | 本场战斗第 1 回合首次攻击 +20%（每张） | diamond |
 
 ## ♥ 红心 / 生机流（吸血 / 续航）（共 14 张）
 
@@ -100,7 +100,7 @@
 |---|---|---|---|
 | `p_regen` | 再生 | 每回合 +3% 最大 HP（每张） | heart |
 | `p_vampire` | 吸血 | 造伤的 5% 回血（每张） | heart |
-| `p_resonance` | 同花共鸣 | 同花攻击 +5%（每张） | heart |
+| `p_resonance` | 同花共鸣 | 同花攻击 +8%（每张） | heart |
 | `p_blood_pact` | 血誓 | 受到伤害的 5% 转化为下次攻击 +X 伤（cap +6 / 张） | heart |
 
 ## ♣ 梅花 / 法术流（护盾 / 控制）（共 14 张）
@@ -131,8 +131,8 @@
 |---|---|---|---|
 | `p_tough` | 强壮 | 受击伤害 -3%（每张，cap 30%） | club |
 | `p_thorns` | 荆棘 | 反伤 = 受到伤害的 10%（每张，cap 80%） | club |
-| `p_lifetap` | 生命汲取 | 每回合 -3% 最大 HP，伤敌 = 最大 HP × 5%（每张） | club |
-| `p_coldblood` | 冷血 | 无 debuff 时攻击 +3%（每张） | club |
+| `p_lifetap` | 生命汲取 | 每回合 -2% 最大 HP（固定），伤敌 = 最大 HP × 5%（每张） | club |
+| `p_coldblood` | 冷血 | 无 debuff 时攻击 +8%（每张） | club |
 
 ## 无花色 / 通用（共 54 张）
 

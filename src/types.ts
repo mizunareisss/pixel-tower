@@ -179,6 +179,11 @@ export const STATUS_META: Record<string, StatusMeta> = {
   scepter_clubs:     { name: "禁忌权杖蓄势", desc: "本回合已出 ♣ 牌数（攻击/技能/道具/装备均计入）。本回合内攻击伤害 += stacks × (N 由禁忌权杖 stack 决定，1/2/2/3)。", kind: "buff" },
   took_damage_turn:  { name: "本回合受伤", desc: "（内部状态，玩家无需关注）本回合受到过伤害，用于附魔机制末段判断。", kind: "neutral" },
   calc_charge:       { name: "法术蓄能", desc: "本回合已出非攻击牌数。配合法师杖 / 算计附魔 / 凝神附魔 / 奥术爆裂 → 下次攻击 +X 直伤。", kind: "buff" },
+  // ── 敌人 buff intent 相关（v6）──
+  temp_armor:        { name: "临时护甲", desc: "本回合敌人护甲临时 +stacks（自身或全队 buff 触发）。", kind: "buff" },
+  enemy_atk_buff:    { name: "强化", desc: "下次攻击 +stacks 伤害（敌人 buff intent 蓄势）。", kind: "buff" },
+  enemy_next_hits:   { name: "多段蓄势", desc: "下次攻击 +stacks hits（巨怪狂奔等触发）。", kind: "buff" },
+  enemy_sacrifice:   { name: "血祭蓄势", desc: "下次攻击 +stacks% 伤害（暗影血祭，已扣除 3% maxHP）。", kind: "buff" },
 };
 
 // ── 敌人种族 ──────────────────────────────────────────────
@@ -510,6 +515,19 @@ export interface PlayerState {
 }
 
 // ── 敌人 ──────────────────────────────────────────────────
+// Buff intent 类型 ID（buff intent 的 effect 分发用）
+//   next_attack_3      - 下次攻击 +3（旧默认行为）
+//   self_armor         - 本回合自身 armor +value
+//   team_armor         - 全队本回合 armor +value
+//   self_heal_pct      - boss 回血 maxHP × value%
+//   next_hits          - 下张攻击 +value hits
+//   self_sacrifice     - 自损 3% maxHP，下张攻击 +value%
+//   double_debuffs     - F12 限定：玩家身上所有 debuff stack ×2
+export type BuffIntentId =
+  | "next_attack_3" | "self_armor" | "team_armor"
+  | "self_heal_pct" | "next_hits" | "self_sacrifice"
+  | "double_debuffs";
+
 export interface EnemyIntent {
   type: "attack" | "buff" | "debuff";
   value: number;
@@ -519,6 +537,9 @@ export interface EnemyIntent {
   debuffId?: string;          // "poison" | "weak" | "vulnerable"
   debuffName?: string;
   debuffDuration?: number;    // -1 表示由 stacks 自衰减（如中毒），>0 表示固定回合
+  // buff 专用：buffId 决定 enemyTurn 里如何执行；buffValue 是参数
+  buffId?: BuffIntentId;
+  buffValue?: number;
 }
 
 // Boss AI 流派 ID（5 基础 + 5 复合 + 1 演化）
@@ -558,6 +579,11 @@ export interface EnemyState {
   //   实战通过 getEnemyCritChance / getEnemyDodgeChance 减去 poison / bleed penalty）
   critChance?: number;     // 基础暴击率（百分点），精英 cap 15 / boss cap 25
   dodgeChance?: number;    // 基础闪避率（百分点），精英 cap 9 / boss cap 15
+  // 多动 AP：每回合执行的 intent 次数（按 tier × floor 决定）
+  //   普通 / 精英 F1-5: 1；精英 F6-10: 2；精英 F11+: 3
+  //   Boss F3/F6: 2；F9: 3；F12: 4；F15+: 3
+  //   frozen / fear 状态下本回合限 1 动
+  actionsPerTurn?: number;
   // 共鸣咒：保存原始花色，4 回合后回归
   originalSuit?: Suit;
   // Boss AI 行为流派（精英 + boss 装备），普通敌人不带；详见 bossAI.ts

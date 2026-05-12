@@ -1444,9 +1444,9 @@ const IT_PIERCE_OIL: CardDef = {
   },
 };
 
-// 特性：破甲专家 — 每张 +1 pierce（与洞察叠加）
+// 特性：破甲 — 每张 +1 pierce（原 p_insight 改写后 ♠ 唯一 pierce 特性）
 const PERK_ARMOR_BREAK: CardDef = {
-  id: "p_armor_break", name: "破甲专家", category: "perk",
+  id: "p_armor_break", name: "破甲", category: "perk",
   desc: "每张：所有攻击 +1 pierce。",
   defaultSuit: "spade",
   perkEffect: {
@@ -1587,11 +1587,11 @@ const PERK_BLEED: CardDef = {
 
 const PERK_DODGE: CardDef = {
   id: "p_dodge", name: "闪避", category: "perk",
-  desc: "每张：完全闪避概率 +3%（叠加上限 50%）。",
+  desc: "每张：完全闪避概率 +5%（叠加上限 50%）。",
   defaultSuit: "diamond",
   perkEffect: {
-    unitDesc: "闪避 +3%（每张，cap 50%）",
-    summary: (s) => `闪避 +${Math.min(50, s * 3)}%`,
+    unitDesc: "闪避 +5%（每张，cap 50%）",
+    summary: (s) => `闪避 +${Math.min(50, s * 5)}%`,
     // 闪避 roll 走 battle.ts 统一处理（getCurrentDodgeChance 读取 perk 层数）
   },
 };
@@ -1614,16 +1614,16 @@ const PERK_REGEN: CardDef = {
 
 const PERK_CRIT: CardDef = {
   id: "p_crit", name: "暴击", category: "perk",
-  desc: "每张：暴击率 +5%（暴击伤害 ×2，可叠到 100%）。中毒会削减暴击率。",
+  desc: "每张：暴击率 +8%（暴击伤害 ×2，可叠到 100%）。中毒会削减暴击率。",
   defaultSuit: "diamond",
   perkEffect: {
-    unitDesc: "暴击率 +5%（每张，×2 暴击伤；中毒削减）",
-    summary: (s) => `${Math.min(100, s * 5)}% 暴击 ×2`,
+    unitDesc: "暴击率 +8%（每张，×2 暴击伤；中毒削减）",
+    summary: (s) => `${Math.min(100, s * 8)}% 暴击 ×2`,
     onDealDamage: (c, d, s) => {
-      // 中毒削减：每 stack -5 百分点（cap -50）— 与系统级 getPoisonCritPenalty 对齐
+      // 中毒削减：每 stack -5 百分点（cap -50）
       const poison = c.player.statuses.find(st => st.id === "poison");
       const penaltyPct = poison ? Math.min(50, poison.stacks * 5) : 0;
-      const chance = Math.max(0, Math.min(100, s * 5) - penaltyPct) / 100;
+      const chance = Math.max(0, Math.min(100, s * 8) - penaltyPct) / 100;
       if (chance > 0 && Math.random() < chance) { c.log("暴击！×2", "player"); return d * 2; }
       return d;
     },
@@ -1680,14 +1680,14 @@ const PERK_THORNS: CardDef = {
 
 const PERK_IRON_WILL: CardDef = {
   id: "p_iron_will", name: "钢铁意志", category: "perk",
-  desc: "每张：HP ≤ 30% 时受击 -5%。",
+  desc: "每张：HP ≤ 30% 时受击 -8%。",
   defaultSuit: "spade",
   perkEffect: {
-    unitDesc: "HP ≤ 30% 时受击 -5%（每张）",
-    summary: (s) => `濒死(≤30%) 受击 -${s * 5}%`,
+    unitDesc: "HP ≤ 30% 时受击 -8%（每张）",
+    summary: (s) => `濒死(≤30%) 受击 -${s * 8}%`,
     onTakeDamage: (c, d, s) => {
       if (c.player.vita <= Math.floor(c.player.vitaMax * 0.3)) {
-        return Math.max(0, d * (1 - 0.05 * s));
+        return Math.max(0, d * (1 - 0.08 * s));
       }
       return d;
     },
@@ -1696,13 +1696,14 @@ const PERK_IRON_WILL: CardDef = {
 
 const PERK_LIFETAP: CardDef = {
   id: "p_lifetap", name: "生命汲取", category: "perk",
-  desc: "每张：每回合自损 3% 最大 HP，伤敌 = 玩家最大 HP × 5%（皆最少 1）。",
+  desc: "每张：每回合自损 2% 最大 HP（固定，不随 stack 叠加），伤敌 = 玩家最大 HP × 5%（按 stack 叠加，皆最少 1）。",
   defaultSuit: "club",
   perkEffect: {
-    unitDesc: "每回合 -3% 最大 HP，伤敌 = 最大 HP × 5%（每张）",
-    summary: (s) => `-${s * 3}% HP / 回 → 伤敌 ${s * 5}% HP`,
+    unitDesc: "每回合 -2% 最大 HP（固定），伤敌 = 最大 HP × 5%（每张）",
+    summary: (s) => `-2% HP / 回 → 伤敌 ${s * 5}% HP`,
     onTurnStart: (c, s) => {
-      const cost = Math.max(1, Math.floor(c.player.vitaMax * 0.03 * s));
+      // 自损固定 2%（不随 stack 增长）
+      const cost = Math.max(1, Math.floor(c.player.vitaMax * 0.02));
       c.player.vita = Math.max(0, c.player.vita - cost);
       const t = c.enemies.find(e => e.alive);
       const dmg = Math.max(1, Math.floor(c.player.vitaMax * 0.05 * s));
@@ -1724,13 +1725,16 @@ const PERK_OVERLOAD: CardDef = {
 
 const PERK_EXECUTIONER: CardDef = {
   id: "p_executioner", name: "处刑", category: "perk",
-  desc: "每张：对 HP ≤ 30% 敌人攻击 +10%。",
+  desc: "每张：对 HP ≤ 30% 敌人攻击 +10%（cap 30%）。",
   defaultSuit: "spade",
   perkEffect: {
-    unitDesc: "HP ≤ 30% 敌人攻击 +10%（每张）",
-    summary: (s) => `处刑(≤30%) +${s * 10}%`,
+    unitDesc: "HP ≤ 30% 敌人攻击 +10%（每张, cap 30%）",
+    summary: (s) => `处刑(≤30%) +${Math.min(30, s * 10)}%`,
     onDealDamage: (c, d, s) => {
-      if (c.target.hp <= Math.floor(c.target.maxHp * 0.3)) return d * (1 + 0.10 * s);
+      if (c.target.hp <= Math.floor(c.target.maxHp * 0.3)) {
+        const bonus = Math.min(0.30, 0.10 * s);
+        return d * (1 + bonus);
+      }
       return d;
     },
   },
@@ -1738,13 +1742,13 @@ const PERK_EXECUTIONER: CardDef = {
 
 const PERK_RESONANCE: CardDef = {
   id: "p_resonance", name: "同花共鸣", category: "perk",
-  desc: "每张：同花攻击（攻击牌花色 == 敌人花色）伤害 +5%。",
+  desc: "每张：同花攻击（攻击牌花色 == 敌人花色）伤害 +8%。",
   defaultSuit: "heart",
   perkEffect: {
-    unitDesc: "同花攻击 +5%（每张）",
-    summary: (s) => `同花 +${s * 5}%`,
+    unitDesc: "同花攻击 +8%（每张）",
+    summary: (s) => `同花 +${s * 8}%`,
     onDealDamage: (c, d, s) => {
-      if (c.attackSuit && c.attackSuit === c.target.suit) return d * (1 + 0.05 * s);
+      if (c.attackSuit && c.attackSuit === c.target.suit) return d * (1 + 0.08 * s);
       return d;
     },
   },
@@ -1752,33 +1756,32 @@ const PERK_RESONANCE: CardDef = {
 
 const PERK_COLDBLOOD: CardDef = {
   id: "p_coldblood", name: "冷血", category: "perk",
-  desc: "每张：无负面状态时攻击 +3%。",
+  desc: "每张：无负面状态时攻击 +8%。",
   defaultSuit: "club",
   perkEffect: {
-    unitDesc: "无 debuff 时攻击 +3%（每张）",
-    summary: (s) => `无 debuff +${s * 3}%`,
+    unitDesc: "无 debuff 时攻击 +8%（每张）",
+    summary: (s) => `无 debuff +${s * 8}%`,
     onDealDamage: (c, d, s) => {
-      if (!playerHasDebuff(c)) return d * (1 + 0.03 * s);
+      if (!playerHasDebuff(c)) return d * (1 + 0.08 * s);
       return d;
     },
   },
 };
 
-// 疾风斩 ♦：本场战斗第 1 回合首次攻击 +10%（每张）
+// 疾风斩 ♦：本场战斗第 1 回合首次攻击 +20%（每张）
 const PERK_SWIFT_STRIKE: CardDef = {
   id: "p_swift_strike", name: "疾风斩", category: "perk",
-  desc: "每张：本场战斗第 1 回合首次攻击 +10%。",
+  desc: "每张：本场战斗第 1 回合首次攻击 +20%。",
   defaultSuit: "diamond",
   perkEffect: {
-    unitDesc: "本场战斗第 1 回合首次攻击 +10%（每张）",
-    summary: (s) => `第 1 回合首攻 +${s * 10}%`,
+    unitDesc: "本场战斗第 1 回合首次攻击 +20%（每张）",
+    summary: (s) => `第 1 回合首攻 +${s * 20}%`,
     onDealDamage: (c, d, s) => {
-      // 第 1 回合 + 还没出过攻击牌的"本回合首次攻击"
       const used = c.player.statuses.find(st => st.id === "swift_first_used");
       if (c.turn === 1 && !used) {
         c.player.statuses.push({ id: "swift_first_used", name: "疾风触发", stacks: 1, duration: -1 });
-        c.log(`疾风斩：第 1 回合首攻 +${s * 10}%。`, "player");
-        return d * (1 + 0.10 * s);
+        c.log(`疾风斩：第 1 回合首攻 +${s * 20}%。`, "player");
+        return d * (1 + 0.20 * s);
       }
       return d;
     },
@@ -1816,15 +1819,27 @@ const PERK_BLOOD_PACT: CardDef = {
   },
 };
 
-// 洞察：每张 pierce +1（与武器/附魔的 pierce 累加）
+// 力量：对"同色不同花"敌人攻击 +8% / 张（cap 25%）
+//   同色 = 同颜色（♥/♦ 红 或 ♠/♣ 黑）；不同花 = 花色不同
+//   例：玩家 ♠ 攻击 → ♣ 敌人（黑↔黑，不同花）触发；♠ 攻击 → ♠ 敌人不触发（同花已 ×1.2）
 const PERK_INSIGHT: CardDef = {
-  id: "p_insight", name: "洞察", category: "perk",
-  desc: "每张：所有攻击破甲 +1（与武器/附魔/穿甲射叠加）。",
+  id: "p_insight", name: "力量", category: "perk",
+  desc: "每张：攻击同色不同花的敌人 +8%（cap 25%）。",
   defaultSuit: "spade",
   perkEffect: {
-    unitDesc: "破甲 +1（每张）",
-    summary: (s) => `破甲 +${s}`,
-    // pierce 加成走 battle.ts/calcAttackDamage 统一汇总
+    unitDesc: "同色不同花 +8%（每张, cap 25%）",
+    summary: (s) => `同色异花 +${Math.min(25, s * 8)}%`,
+    onDealDamage: (c, d, s) => {
+      const aSuit = c.attackSuit;
+      if (!aSuit) return d;
+      const sameColour = isRedSuit(aSuit) === isRedSuit(c.target.suit);
+      const diffSuit = aSuit !== c.target.suit;
+      if (sameColour && diffSuit) {
+        const bonus = Math.min(0.25, 0.08 * s);
+        return d * (1 + bonus);
+      }
+      return d;
+    },
   },
 };
 
