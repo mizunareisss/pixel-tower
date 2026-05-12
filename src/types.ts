@@ -474,6 +474,8 @@ export interface CardInstance {
   attackSuitOverride?: Suit;
   // 史诗卡使用次数限制（每场战斗 3 次；用尽后回到牌库，需要重新抽起）
   usesRemaining?: number;
+  // 短期复刻牌（复读机克隆等）：回合结束直接消失，不进弃牌堆/牌库
+  ephemeral?: boolean;
 }
 
 // ── 玩家状态 ──────────────────────────────────────────────

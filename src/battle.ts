@@ -904,15 +904,16 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
   }
 
   // 复读机：本场战斗每出非攻击牌后，复制 1 份到手牌（不复制复读机自己，避免无限链）
+  // 克隆标记 ephemeral：回合结束时（enemyTurnSteps 开头）从 hand/discard/pendingDraws 全部清除，不进牌库
   if (state.player.statuses.find(s => s.id === "echo") && card.defId !== "it_echo") {
-    const clone = { ...card, uid: `${card.uid}_echo_${Math.random().toString(36).slice(2, 6)}` };
+    const clone: CardInstance = { ...card, uid: `${card.uid}_echo_${Math.random().toString(36).slice(2, 6)}`, ephemeral: true };
     if (state.player.hand.length < HAND_LIMIT) {
       state.player.hand.push(clone);
-      log(`复读机：复制了一份 ${CARD_DB[card.defId].name} 回手牌。`, "player");
+      log(`复读机：复制了一份 ${CARD_DB[card.defId].name} 回手牌（回合末消失）。`, "player");
     } else {
       if (!state.player.pendingDraws) state.player.pendingDraws = [];
       state.player.pendingDraws.push(clone);
-      log(`复读机：${CARD_DB[card.defId].name} 待手动弃牌后入手。`, "player");
+      log(`复读机：${CARD_DB[card.defId].name} 待手动弃牌后入手（回合末消失）。`, "player");
     }
   }
 
@@ -1643,8 +1644,30 @@ function executeBuffIntent(
 //   2. 每次 executeIntent 后 yield 一次（看清多动每一击）
 // UI 调用 endPlayerTurnAnimated 在每个 yield 之间 render + sleep；
 // 简单 sync 调用走 enemyTurn() 一次跑完（用于 simulator 等无 UI 场景）
+// 清理标记为 ephemeral 的卡（复读机克隆等）— 从 hand / discard / pendingDraws 全部移除，不进牌库
+function cleanupEphemeralCards(state: BattleState, log: (m: string, k?: LogKind) => void): void {
+  const removed: string[] = [];
+  const filter = (arr: CardInstance[]) => arr.filter(c => {
+    if (c.ephemeral) {
+      removed.push(CARD_DB[c.defId]?.name ?? c.defId);
+      return false;
+    }
+    return true;
+  });
+  state.player.hand = filter(state.player.hand);
+  state.player.discard = filter(state.player.discard);
+  if (state.player.pendingDraws && state.player.pendingDraws.length > 0) {
+    state.player.pendingDraws = filter(state.player.pendingDraws);
+  }
+  if (removed.length > 0) {
+    log(`回合结束：复读机克隆 ×${removed.length} 消散（${removed.join("、")}）。`, "system");
+  }
+}
+
 function* enemyTurnSteps(state: BattleState, log: (m: string, k?: LogKind) => void): Generator<void, void, void> {
   log("── 敌人回合 ──", "enemy");
+  // 短期复刻牌清理（复读机克隆等）：回合结束即消失，不进弃牌堆/牌库
+  cleanupEphemeralCards(state, log);
   const skipActions = !!state.player.statuses.find(s => s.id === "time_stop");
   if (skipActions) log("时停：敌人无法行动！", "player");
 
