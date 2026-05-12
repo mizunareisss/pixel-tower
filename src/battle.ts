@@ -1293,7 +1293,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   // 完全格挡反馈：base 攻击 > 0 但 dmg 被减到 0，玩家应该看到"挡住了"，否则 banner 显示但 UI 没反应像 bug
   if (base > 0 && dmg === 0) {
     log(`✦ 完全格挡（${base} 伤被减伤 / 护盾全吸收）。`, "player");
-    state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;  // 复用 dodge 动效信号（先简化，后续可加专门的 block 视觉）
+    state.pendingBlockFx = (state.pendingBlockFx ?? 0) + 1;  // 触发盾牌闪光动效
   }
 
   if (dmg > 0) {

@@ -2,7 +2,7 @@ import "./style.css";
 import { getCardIcon } from "./icons.ts";
 import {
   playSlashHit, playSkillBurst, playDebuffApply, playBuffApply,
-  playHealSparkle, playAoeWave, playPlayerHit, playEquip, playDodgeMiss,
+  playHealSparkle, playAoeWave, playPlayerHit, playEquip, playDodgeMiss, playShieldBlock,
 } from "./animations.ts";
 import {
   newGame,
@@ -257,6 +257,13 @@ function render() {
     const playerArea = document.querySelector("#player-card") as HTMLElement | null;
     if (playerArea) playDodgeMiss(playerArea);
     state.battle.pendingDodgeFx = 0;
+  }
+
+  // 完全格挡动效信号（battle.ts 设置 pendingBlockFx，盾牌闪光 + BLOCK 文字）
+  if (state.battle?.pendingBlockFx && state.battle.pendingBlockFx > 0) {
+    const playerArea = document.querySelector("#player-card") as HTMLElement | null;
+    if (playerArea) playShieldBlock(playerArea);
+    state.battle.pendingBlockFx = 0;
   }
 
   // Enemy HP changes → enemy float

@@ -626,6 +626,7 @@ export interface BattleState {
   pendingSuitPick?: string;     // 等待玩家手选花色的动作 ("dye" | "resonance")
   floor: number;                // 当前楼层（calcAttackDamage 里的 sharp 附魔需要）
   pendingDodgeFx?: number;      // 待播放的闪避动效次数（main.ts 渲染时消费）
+  pendingBlockFx?: number;      // 待播放的完全格挡动效次数（盾牌闪光）
 
   // 战斗开始时的骰子先手机制：roll 1d6，单数玩家先手 / 双数敌人先手
   // diceRoll 由 game.ts startNodeBattle 设置；main.ts 渲染时显示骰子动画

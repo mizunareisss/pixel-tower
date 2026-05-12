@@ -3072,6 +3072,83 @@ body.is-touch button:hover:not(:disabled) {
   100% { opacity: 0; transform: translate(-50%, -30px) scale(1); }
 }
 
+/* ── 完全格挡：盾牌闪现 + 金属反光圈 + BLOCK 文字 ── */
+
+/* 盾牌图标（CSS 画一个盾形 + 内部高光），出现时放大闪光、之后缩小淡出 */
+.fx-shield-icon {
+  top: 50%;
+  left: 50%;
+  width: 72px;
+  height: 84px;
+  /* 盾牌形状：上半圆 + 下尖角 */
+  clip-path: polygon(50% 0%, 100% 18%, 100% 55%, 50% 100%, 0% 55%, 0% 18%);
+  background: linear-gradient(135deg, #c0d6ff 0%, #6e9bff 50%, #2a4fbb 100%);
+  border: 2px solid rgba(255,255,255,0.85);
+  box-shadow:
+    0 0 24px 6px rgba(110,155,255,0.85),
+    inset 0 0 12px rgba(255,255,255,0.6);
+  transform: translate(-50%, -50%);
+  animation: shieldFlash 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2) forwards;
+  z-index: 2;
+}
+/* 盾牌中心十字高光（伪元素） */
+.fx-shield-icon::before {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  background:
+    linear-gradient(90deg, transparent 45%, rgba(255,255,255,0.7) 50%, transparent 55%),
+    linear-gradient(0deg,  transparent 45%, rgba(255,255,255,0.5) 50%, transparent 55%);
+  filter: blur(0.5px);
+}
+@keyframes shieldFlash {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4) rotate(-12deg); }
+  35%  { opacity: 1; transform: translate(-50%, -50%) scale(1.25) rotate(2deg); }
+  60%  { opacity: 1; transform: translate(-50%, -50%) scale(1.0)  rotate(0deg); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9)  rotate(0deg); }
+}
+
+/* 反光圈：从盾牌中心扩散出去 */
+.fx-shield-ring {
+  top: 50%;
+  left: 50%;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid rgba(170,200,255,0.95);
+  box-shadow: 0 0 20px 4px rgba(110,155,255,0.7);
+  transform: translate(-50%, -50%);
+  animation: shieldRing 0.65s cubic-bezier(0.2, 0.9, 0.3, 1.0) forwards;
+  z-index: 1;
+}
+@keyframes shieldRing {
+  0%   { opacity: 0.0; transform: translate(-50%, -50%) scale(0.4); border-width: 4px; }
+  30%  { opacity: 1.0; }
+  100% { opacity: 0.0; transform: translate(-50%, -50%) scale(4.0); border-width: 1px; }
+}
+
+/* BLOCK 文字 */
+.fx-block-text {
+  top: 32%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 22px;
+  font-weight: 900;
+  color: #e6f0ff;
+  text-shadow:
+    0 0 8px rgba(110,155,255,0.95),
+    0 0 16px rgba(170,200,255,0.8);
+  letter-spacing: 0.12em;
+  animation: blockTextFloat 0.75s ease-out forwards;
+  z-index: 3;
+}
+@keyframes blockTextFloat {
+  0%   { opacity: 0; transform: translate(-50%, 8px) scale(0.6); }
+  35%  { opacity: 1; transform: translate(-50%, -8px) scale(1.15); }
+  70%  { opacity: 1; transform: translate(-50%, -18px) scale(1.0); }
+  100% { opacity: 0; transform: translate(-50%, -28px) scale(0.95); }
+}
+
 /* ═══════════════════════════════════════
    游戏内确认弹窗
 ═══════════════════════════════════════ */
