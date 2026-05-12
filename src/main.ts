@@ -773,6 +773,18 @@ function renderBattle() {
   const dodgeChip = dodgePct > 0
     ? `<span class="pcard-dodge-chip" title="闪避概率 ${dodgePct}%">🎯${dodgePct}%</span>`
     : "";
+  // 临时护盾汇总：shield_block.stacks（吸收型）+ phalanx_dr.stacks（减伤型）
+  // 在 HP 行右侧显示真实数值，避免分散在小芯片里看不清
+  const shieldStat = state.player.statuses.find(s => s.id === "shield_block");
+  const phalanxStat = state.player.statuses.find(s => s.id === "phalanx_dr");
+  const shieldVal = shieldStat?.stacks ?? 0;
+  const phalanxVal = phalanxStat?.stacks ?? 0;
+  const shieldChip = shieldVal > 0
+    ? `<span class="pcard-shield-chip" title="临时护盾 ${shieldVal}（吸收下次受到的伤害）">🛡 ${shieldVal}</span>`
+    : "";
+  const phalanxChip = phalanxVal > 0
+    ? `<span class="pcard-shield-chip phalanx" title="重甲列阵 减伤 ${phalanxVal}（本回合每次受击减 ${phalanxVal}）">🪖 -${phalanxVal}</span>`
+    : "";
   const hpLow = hpPct <= 30;
   // 专精方块（替代旧的 .pcard-suit-row 长芯片）
   const suitBlock = renderSuitBlock();
@@ -783,6 +795,8 @@ function renderBattle() {
         <div class="pcard-hp-row">
           <span class="pcard-hp-val">${state.player.vita} / ${state.player.vitaMax}</span>
           <div class="pcard-hp-bar"><div class="pcard-hp-fill" style="width:${hpPct}%"></div></div>
+          ${shieldChip}
+          ${phalanxChip}
           ${dodgeChip}
         </div>
         <button class="pcard-summary-btn" id="pcard-summary-btn"></button>
