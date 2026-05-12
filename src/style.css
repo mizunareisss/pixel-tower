@@ -2550,6 +2550,15 @@ h2.lose::before { display: none; }
   letter-spacing: 0.05em; text-transform: uppercase;
 }
 .codex-card-desc { color: #ccc; line-height: 1.5; margin-bottom: 4px; }
+/* 附魔 5 档梯度展示（Lv 1/3/5）*/
+.codex-enchant-tier {
+  font-size: 11px;
+  color: #c0c4cb;
+  line-height: 1.45;
+  margin: 2px 0;
+  padding-left: 8px;
+  border-left: 2px solid rgba(245, 197, 24, 0.3);
+}
 .codex-origin {
   display: inline-block;
   font-size: 9px;

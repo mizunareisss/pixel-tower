@@ -50,7 +50,7 @@ import {
 import type { EventId } from "./events.ts";
 import { NODE_TYPE_META, getReachableNodes } from "./map.ts";
 import { SUIT_SYMBOLS, SUITS, isRedSuit, FIGHTS_PER_FLOOR, STATUS_META, RACES, FRAGMENT_NAMES, FRAGMENT_ICONS,
-  ENCHANTS, ENCHANT_NAMES, ENCHANT_DESCS, ENCHANT_RECIPES, RACE_NAMES, isRareRace,
+  ENCHANTS, ENCHANT_NAMES, ENCHANT_RECIPES, RACE_NAMES, isRareRace,
   ENCHANT_MAX_LEVEL, getEnchantDescAt,
   SUIT_TIER_NAMES, SUIT_TIER_DESCS, SUIT_THEMES } from "./types.ts";
 import type { EnemyRace, Suit, EnchantId } from "./types.ts";
@@ -114,35 +114,43 @@ const ONBOARDING_KEY = "pxtower_onboarding_done";
 const ONBOARDING_STEPS = [
   {
     title: "① 出牌攻击",
-    body: "每回合从手牌打出 1 张攻击牌（♠♦♥♣），配合武器造成伤害。技能牌和道具牌随时可用，回合内可打多张。",
+    body: "每回合从手牌打出 1 张攻击牌（♠♦♥♣）造成伤害；技能牌、道具牌不占攻击次数，回合内可多张。",
   },
   {
     title: "② 花色相性",
-    body: "攻击牌与敌人花色相同 → 伤害 +20%；同色（同为红色或黑色）→ 无加成；不同色 → 伤害 -20%。",
+    body: "攻击花色 = 敌人花色 → 伤害 ×1.2；同色（同红或同黑）→ ×1.0；不同色 → ×0.8。",
   },
   {
-    title: "③ 装备系统",
-    body: "装备牌打出后进入常驻武器/防具槽，同款最多叠 4 张，倍率逐渐提升。武器决定攻击力，防具每回合减伤。",
+    title: "③ 装备",
+    body: "装备牌打出后进常驻槽，武器 / 防具各 1 件。同款最多叠 4 张，每叠加 1 件倍率 +×0.4。武器决定攻击数值，防具每次受击减伤。",
   },
   {
     title: "④ 牌库与战利品",
-    body: "每场战斗起手摸 6 张牌。胜利可选 1 张新牌加入牌库；通关再选 1 个特性。",
+    body: "起手摸 6 张。每场战斗胜利选 1 张新牌入库；关末通关再选 1 个特性（被动）。卡的稀有度：common / rare / super_rare / epic。",
   },
   {
     title: "⑤ 花色专精",
-    body: "♠ 堆伤 / ♦ 闪避 / ♥ 续航 / ♣ 减伤——4 花色各有路线。装备、特性、染色 / 持咒 / 染坊和打出的攻击牌都会累积亲和度，达 5 / 10 / 15 解锁三档被动 + 大招。同一时间只激活一条最高花色。点 HP 条下方的花色芯片查看 4 花色对比面板。",
+    body: "装备同色 +1.3 / 件、特性同色 +0.8 / 张、打出同色攻击牌 +0.3 / 张（cap 30）。亲和度 ≥5 / 10 / 15 解锁 T1 / T2 / T3，最高的那个花色激活专精。每色一个 keyword（锐利 / 迅捷 / 贪婪 / 守序）。T3 可放大招——每场每色限 1 次，永久消耗 8 亲和（跨战不归零）。",
   },
   {
-    title: "⑥ 特性 · 碎片 · 附魔",
-    body: "特性是常驻被动，每关末获得 1 张。击败不同种族敌人掉灵魂碎片，去铁匠铺给武器附魔——单种族 ×3 或两种族 ×2+×2，搭配出 13 种附魔。",
+    title: "⑥ 碎片 / 附魔（5 档升级）",
+    body: "击败不同种族（兽 / 人型 / 不死 / 巨怪 / 暗影）掉对应碎片。每关至少有 1 个铁匠铺，用碎片附魔武器：单种族 ×3 / 复合 ×2+×2 共 13 种。同附魔重附升 Lv，最高 Lv 5；换不同附魔 Lv 重置 1。",
   },
   {
-    title: "⑦ 大地图 · 选择路线",
-    body: "每关一张分支地图，节点上的种族 emoji 提示战斗会掉哪种碎片——根据你想做的附魔 / build 主动选路线。事件、铁匠铺、商店都是节点。",
+    title: "⑦ 大地图选路",
+    body: "每关一张分支地图，节点种族 emoji 提示战斗会掉哪种碎片。事件 / 铁匠铺 / 商店都是节点，按你想做的 build 主动选路。",
   },
   {
     title: "⑧ 爬塔节奏",
-    body: "每关 3 场战斗，最后一场是精英或 Boss。通关后 HP 补满进下一关。第 3/6/9 关是 Boss 关。",
+    body: "F1-F5 关末是精英，F6 起每关末都是 Boss。F9 是固定 Boss（亡灵之主），F12 是终末 Boss（无相之主）。通关后 HP 补满进下一关。",
+  },
+  {
+    title: "⑨ 防御类数值",
+    body: "HP 行右侧实时显示所有防御芯片：🛡 临时护盾（吸收）/ 🪖 减伤 / 🌬 闪避姿态 / ✨ 100% 闪避 / 🌟 必闪 / 💨 烟幕 / 🪞 反击 50% / ⏸ 时停 / 🔰 首次免疫 / 🕊 DOT 免疫。点击芯片看详情。",
+  },
+  {
+    title: "⑩ 敌人威胁 + DOT",
+    body: "精英 F6+ 多动（F11+ 3 动），Boss F3+ 2 动、F9+ 3 动、F12 4 动。Boss / 精英有暴击（×1.5）和闪避（每 hit 单 roll）。中毒削敌人暴击 -5%/层、出血削闪避 -5%/层（cap -50%）。DOT 全部按 % maxHP / 当前 HP 缩放：中毒 1% maxHP × 层 / 燃烧 2% × 层 / 出血 5% 当前 HP × 层。",
   },
 ];
 
@@ -678,7 +686,7 @@ function showFragmentInfo(race: EnemyRace) {
   const enchantList = usedIn.map(eid => {
     const r = ENCHANT_RECIPES[eid];
     const allCost = Object.entries(r.cost).map(([rc, n]) => `${FRAGMENT_ICONS[rc as EnemyRace]}×${n}`).join(" + ");
-    return `<li><b>${ENCHANT_NAMES[eid]}</b> · 需 ${allCost}<br><span class="frag-info-enchant-desc">${escapeHTML(ENCHANT_DESCS[eid])}</span></li>`;
+    return `<li><b>${ENCHANT_NAMES[eid]}</b> · 需 ${allCost}<br><span class="frag-info-enchant-desc">Lv 1：${escapeHTML(getEnchantDescAt(eid, 1))}</span></li>`;
   }).join("");
   const rareTag = isRareRace(race) ? '<span class="frag-info-rare">★ 稀少种族</span>' : "";
 
@@ -2614,8 +2622,8 @@ function showLoadoutModal(): void {
     <div class="loadout-row">
       <div class="loadout-label">⚒ 附魔</div>
       <div class="loadout-content">
-        <div class="loadout-name">${escapeHTML(ENCHANT_NAMES[enc])}</div>
-        <div class="loadout-desc">${escapeHTML(ENCHANT_DESCS[enc])}</div>
+        <div class="loadout-name">${escapeHTML(ENCHANT_NAMES[enc])} <span class="forge-lv-badge">Lv ${player.weaponEnchantLevel ?? 1}/${ENCHANT_MAX_LEVEL}</span></div>
+        <div class="loadout-desc">${escapeHTML(getEnchantDescAt(enc, player.weaponEnchantLevel ?? 1))}</div>
       </div>
     </div>
   ` : `<div class="loadout-row"><div class="loadout-label">⚒ 附魔</div><div class="loadout-content loadout-empty">无</div></div>`;
@@ -3479,14 +3487,18 @@ function openCodex() {
           .map(([rc, n]) => `${FRAGMENT_ICONS[rc as EnemyRace]}${FRAGMENT_NAMES[rc as EnemyRace]} ×${n}`)
           .join(" + ");
         const tierClass = r.doubleRare ? " codex-enchant-ultimate" : r.hasRare ? " codex-enchant-rare" : "";
+        // 5 档展示：Lv 1 / 3 / 5
+        const tierLines = [1, 3, 5].map(lv =>
+          `<div class="codex-enchant-tier">Lv ${lv}：${escapeHTML(getEnchantDescAt(eid, lv))}</div>`
+        ).join("");
         return `
           <div class="codex-card codex-enchant${tierClass}">
             <div class="codex-card-head">
               <span class="codex-card-name">${ENCHANT_NAMES[eid]}</span>
               <span class="codex-cat">${kindLabel} · ${variant}${tier === "普通" ? "" : ` · ${tier}`}</span>
             </div>
-            <div class="codex-card-desc">${escapeHTML(ENCHANT_DESCS[eid])}</div>
-            <div class="codex-card-cost">配方：${costStr}</div>
+            ${tierLines}
+            <div class="codex-card-cost">配方：${costStr}（同附魔重附升 Lv，最高 Lv 5）</div>
           </div>
         `;
       };
