@@ -414,6 +414,13 @@ function onBattleWon(state: GameState) {
     state.player.discard.push(...state.player.pendingDraws);
     state.player.pendingDraws = [];
   }
+  // ★ 战斗胜利时把 hand / discard / pendingDraws 里残留的 ephemeral 克隆全部清除
+  //   （cleanupEphemeralCards 只在敌方回合开头跑，玩家击杀最后敌人后那一回合不触发，会让克隆漏进 deck）
+  state.player.hand = state.player.hand.filter(c => !c.ephemeral);
+  state.player.discard = state.player.discard.filter(c => !c.ephemeral);
+  if (state.player.pendingDraws) {
+    state.player.pendingDraws = state.player.pendingDraws.filter(c => !c.ephemeral);
+  }
   // 关卡末节点（boss 或非 boss 关末的 elite）= 关卡完成
   if (state.floorMap) {
     const cur = getNode(state.floorMap, state.floorMap.currentNodeId);

@@ -268,7 +268,9 @@ export function newBattle(player: PlayerState, enemies: EnemyState[], floor: num
   player.statuses = [];
   player.turnsElapsed = 0;
   // 把上一场残留的手牌/弃牌/未消化的强制弃牌候选全部塞回牌库，重新洗
-  player.deck = [...player.deck, ...player.hand, ...player.discard, ...(player.pendingDraws ?? [])];
+  // ★ 过滤 ephemeral 标记的卡（复读机克隆等短期复刻）— 它们不应跨战斗存活
+  const merged = [...player.deck, ...player.hand, ...player.discard, ...(player.pendingDraws ?? [])];
+  player.deck = merged.filter(c => !c.ephemeral);
   player.hand = [];
   player.discard = [];
   player.pendingDraws = [];
