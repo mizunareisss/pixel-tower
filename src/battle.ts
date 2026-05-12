@@ -35,34 +35,36 @@ function getDyedSuit(player: PlayerState): Suit | null {
 // ─────────────────────────────────────────────────────────
 
 // 同花色攻击累积上限（cap，按花色独立计）
-export const SUIT_PLAYED_CAP = 30;
+// 30 → 100：让玩家在后期仍能通过打牌持续叠加（30 张就锁死的体验是 bug）
+export const SUIT_PLAYED_CAP = 100;
 
 // 每个花色 3 类来源累计（持久化跨战斗）
-//  - 装备同花色：每件 +1.5（武器/防具叠加各算）
-//  - 特性同花色：每张 +1
-//  - 出过的同花色攻击牌（含染色/持咒后视为色）：每张 +0.2，cap 30
-// 染色/持咒不再直接 +X 亲和（避免战斗内"暴涨 → 战斗后塌陷"的体验割裂）；
-// 它们的"协助专精"作用通过 trackSuitPlayed 已经按视为色累积进 player.suitPlayedTotal
+//  - 装备同花色：每件 +1.3（武器/防具叠加各算；Epic 装备不算 — 避免装上不同色 Epic 抢走专精）
+//  - 特性同花色：每张 +0.8
+//  - 出过的同花色攻击牌（含染色/持咒后视为色）：每张 +0.3，cap 100
 export function getSuitAffinity(state: BattleState, suit: Suit): number {
   let aff = 0;
-  // 装备同花色：每件 +1.3
+  // 装备同花色：每件 +1.3 — Epic 武器/防具不计入（玩家可能装 Epic 拿数值但不想切流派）
   for (const w of state.player.weapons) {
-    if (CARD_DB[w.defId]?.equipSuit === suit) aff += 1.3;
+    const def = CARD_DB[w.defId];
+    if (def?.equipSuit === suit && def.rarity !== "epic") aff += 1.3;
   }
   for (const a of state.player.armors) {
-    if (CARD_DB[a.defId]?.equipSuit === suit) aff += 1.3;
+    const def = CARD_DB[a.defId];
+    if (def?.equipSuit === suit && def.rarity !== "epic") aff += 1.3;
   }
   // 特性同花色：每张 +0.8
   for (const p of state.player.perks) {
     if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 0.8;
   }
-  // 出过的同花色攻击牌：每张 +0.3（持久化到 player.suitPlayedTotal，cap 30）
+  // 出过的同花色攻击牌：每张 +0.3（持久化到 player.suitPlayedTotal，cap 100）
   const played = state.player.suitPlayedTotal?.[suit] ?? 0;
   aff += Math.min(SUIT_PLAYED_CAP, played) * 0.3;
   // 大招消耗：跨战斗持久化（读 player.suitConsumedTotal，不再用 status）
   const consumed = state.player.suitConsumedTotal?.[suit] ?? 0;
   aff -= consumed;
-  return Math.max(0, Math.min(20, aff));
+  // 总 aff cap 30（20 → 30）：留出大招消耗 8 之后的再充能空间；T3 门槛仍是 15
+  return Math.max(0, Math.min(30, aff));
 }
 
 // 当前花色档位：0 / 1（≥5）/ 2（≥10）/ 3（≥15，可释放大招）
@@ -266,7 +268,9 @@ export function newBattle(player: PlayerState, enemies: EnemyState[], floor: num
   player.statuses = [];
   player.turnsElapsed = 0;
   // 把上一场残留的手牌/弃牌/未消化的强制弃牌候选全部塞回牌库，重新洗
-  player.deck = [...player.deck, ...player.hand, ...player.discard, ...(player.pendingDraws ?? [])];
+  // ★ 过滤 ephemeral 标记的卡（复读机克隆等短期复刻）— 它们不应跨战斗存活
+  const merged = [...player.deck, ...player.hand, ...player.discard, ...(player.pendingDraws ?? [])];
+  player.deck = merged.filter(c => !c.ephemeral);
   player.hand = [];
   player.discard = [];
   player.pendingDraws = [];
@@ -284,9 +288,11 @@ export function newBattle(player: PlayerState, enemies: EnemyState[], floor: num
 
   // 附魔战斗起始 buff
   if (player.weaponEnchant === "ec_runic") {
-    // 符文护盾：每场首次受击免疫 + dot 免疫
+    // 符文护盾：每场首次受击免疫（所有等级）；DOT 免疫只在 Lv5 才挂上（之前所有等级都送太强）
     player.statuses.push({ id: "enc_runic_immune", name: "符文护盾", stacks: 1, duration: -1 });
-    player.statuses.push({ id: "enc_dot_immune",   name: "圣化",     stacks: 1, duration: -1 });
+    if ((player.weaponEnchantLevel ?? 1) >= 5) {
+      player.statuses.push({ id: "enc_dot_immune", name: "圣化", stacks: 1, duration: -1 });
+    }
   }
 
   return {
@@ -904,15 +910,16 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
   }
 
   // 复读机：本场战斗每出非攻击牌后，复制 1 份到手牌（不复制复读机自己，避免无限链）
+  // 克隆标记 ephemeral：回合结束时（enemyTurnSteps 开头）从 hand/discard/pendingDraws 全部清除，不进牌库
   if (state.player.statuses.find(s => s.id === "echo") && card.defId !== "it_echo") {
-    const clone = { ...card, uid: `${card.uid}_echo_${Math.random().toString(36).slice(2, 6)}` };
+    const clone: CardInstance = { ...card, uid: `${card.uid}_echo_${Math.random().toString(36).slice(2, 6)}`, ephemeral: true };
     if (state.player.hand.length < HAND_LIMIT) {
       state.player.hand.push(clone);
-      log(`复读机：复制了一份 ${CARD_DB[card.defId].name} 回手牌。`, "player");
+      log(`复读机：复制了一份 ${CARD_DB[card.defId].name} 回手牌（回合末消失）。`, "player");
     } else {
       if (!state.player.pendingDraws) state.player.pendingDraws = [];
       state.player.pendingDraws.push(clone);
-      log(`复读机：${CARD_DB[card.defId].name} 待手动弃牌后入手。`, "player");
+      log(`复读机：${CARD_DB[card.defId].name} 待手动弃牌后入手（回合末消失）。`, "player");
     }
   }
 
@@ -1159,6 +1166,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   // ★ 闪避优先级 0：影子杀手（本回合 100% 闪避）
   if (state.player.statuses.find(s => s.id === "dodge_full_round")) {
     log("★♦ 影子杀手：本回合闪避！", "player");
+    if (typeof console !== "undefined") console.log("[MISS-DBG] source=dodge_full_round (♦ T3 大招)");
     state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
     return;
   }
@@ -1167,6 +1175,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   if (guarantee) {
     state.player.statuses = state.player.statuses.filter(s => s.id !== "guaranteed_dodge");
     log("★ 风步：必定闪避！", "player");
+    if (typeof console !== "undefined") console.log("[MISS-DBG] source=guaranteed_dodge (sk_step 风步)");
     onDodgeTriggered(state, undefined, log);
     state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
     return;
@@ -1177,6 +1186,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   const activeSuitD = getActiveSpecialty(state);
   if (dodgeChance > 0 && Math.random() * 100 < dodgeChance) {
     log(`★ 闪避！（${dodgeChance}%）`, "player");
+    if (typeof console !== "undefined") console.log(`[MISS-DBG] source=dodgeChance roll, chance=${dodgeChance}%`);
     onDodgeTriggered(state, attackerEnemy, log);
     state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
     return;
@@ -1189,6 +1199,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     const reductionPct = getEnchantParam(state.player, 1);
     if (reductionPct >= 100) {
       log("★ 符文护盾：本场首次受击完全免疫！", "player");
+      if (typeof console !== "undefined") console.log("[MISS-DBG] source=enc_runic_immune 100% (ec_runic Lv3+)");
       state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
       return;
     } else {
@@ -1237,14 +1248,21 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   }
   // ♣ T1 魔法庇护：受击 -3（T2 已改为反应装甲，不再叠 -3）
   if (activeSuitD === "club" && suitTier(state, "club") >= 1) {
+    const before = dmg;
     dmg = Math.max(0, dmg - 3);
+    if (before > dmg) log(`♣ 魔法庇护：${before}→${dmg}。`, "player");
   }
 
   // 防具 onTakeDamage
   if (state.player.armors.length > 0) {
     const aDef = CARD_DB[state.player.armors[0].defId];
     const aEff = aDef.equipEffects![Math.min(state.player.armors.length, 4) - 1];
-    if (aEff.onTakeDamage) dmg = aEff.onTakeDamage(ctx, dmg);
+    if (aEff.onTakeDamage) {
+      const before = dmg;
+      dmg = aEff.onTakeDamage(ctx, dmg);
+      // 防具自己 log 的（如生命之冠 / 反伤甲）就不再覆盖；纯 -N 静默防具补 log
+      if (before > dmg) log(`${aDef.name}：受击 ${before}→${dmg}。`, "player");
+    }
   }
 
   // 特性 onTakeDamage（单一 effect，按 stacks 缩放）
@@ -1255,7 +1273,11 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     const pDef = CARD_DB[inst.defId];
     const cnt = state.player.perks.filter(p => p.defId === inst.defId).length;
     const eff = pDef.perkEffect;
-    if (eff?.onTakeDamage) dmg = eff.onTakeDamage(ctx, dmg, cnt);
+    if (eff?.onTakeDamage) {
+      const before = dmg;
+      dmg = eff.onTakeDamage(ctx, dmg, cnt);
+      if (before > dmg) log(`特性 ${pDef.name}：受击 ${before}→${dmg}。`, "player");
+    }
   }
 
   // 闪避姿态：伤害 ×0.7（原 ×0.5 = 减半 → 现 -30%）
@@ -1268,7 +1290,19 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   // 没在这里取整的话，下面 shield 吸收会把浮点累积进 shield.stacks → 0.7000004 这种鬼数字
   dmg = Math.max(0, Math.floor(dmg));
 
-  // 护盾吸收
+  // 重铠护盾优先消耗（1 层独立护盾，吸收完即移除，不衰减）
+  const fpShield = state.player.statuses.find(s => s.id === "fullplate_shield");
+  if (fpShield && dmg > 0) {
+    const absorbed = Math.min(fpShield.stacks, dmg);
+    dmg -= absorbed;
+    fpShield.stacks -= absorbed;
+    log(`♣ 重铠护盾吸收 ${absorbed}。`, "player");
+    if (fpShield.stacks <= 0) {
+      state.player.statuses = state.player.statuses.filter(s => s.id !== "fullplate_shield");
+    }
+  }
+
+  // 护盾吸收（镇守 / sk_aegis / 其他来源）
   const shield = state.player.statuses.find(s => s.id === "shield_block");
   if (shield && dmg > 0) {
     const absorbed = Math.min(shield.stacks, dmg);
@@ -1293,7 +1327,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   // 完全格挡反馈：base 攻击 > 0 但 dmg 被减到 0，玩家应该看到"挡住了"，否则 banner 显示但 UI 没反应像 bug
   if (base > 0 && dmg === 0) {
     log(`✦ 完全格挡（${base} 伤被减伤 / 护盾全吸收）。`, "player");
-    state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;  // 复用 dodge 动效信号（先简化，后续可加专门的 block 视觉）
+    state.pendingBlockFx = (state.pendingBlockFx ?? 0) + 1;  // 触发盾牌闪光动效
   }
 
   if (dmg > 0) {
@@ -1639,8 +1673,30 @@ function executeBuffIntent(
 //   2. 每次 executeIntent 后 yield 一次（看清多动每一击）
 // UI 调用 endPlayerTurnAnimated 在每个 yield 之间 render + sleep；
 // 简单 sync 调用走 enemyTurn() 一次跑完（用于 simulator 等无 UI 场景）
+// 清理标记为 ephemeral 的卡（复读机克隆等）— 从 hand / discard / pendingDraws 全部移除，不进牌库
+function cleanupEphemeralCards(state: BattleState, log: (m: string, k?: LogKind) => void): void {
+  const removed: string[] = [];
+  const filter = (arr: CardInstance[]) => arr.filter(c => {
+    if (c.ephemeral) {
+      removed.push(CARD_DB[c.defId]?.name ?? c.defId);
+      return false;
+    }
+    return true;
+  });
+  state.player.hand = filter(state.player.hand);
+  state.player.discard = filter(state.player.discard);
+  if (state.player.pendingDraws && state.player.pendingDraws.length > 0) {
+    state.player.pendingDraws = filter(state.player.pendingDraws);
+  }
+  if (removed.length > 0) {
+    log(`回合结束：复读机克隆 ×${removed.length} 消散（${removed.join("、")}）。`, "system");
+  }
+}
+
 function* enemyTurnSteps(state: BattleState, log: (m: string, k?: LogKind) => void): Generator<void, void, void> {
   log("── 敌人回合 ──", "enemy");
+  // 短期复刻牌清理（复读机克隆等）：回合结束即消失，不进弃牌堆/牌库
+  cleanupEphemeralCards(state, log);
   const skipActions = !!state.player.statuses.find(s => s.id === "time_stop");
   if (skipActions) log("时停：敌人无法行动！", "player");
 
@@ -1824,6 +1880,22 @@ function startNewPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) =>
     state.player.statuses = state.player.statuses.filter(s => s.id !== "draining_charge");
   }
 
+  // 重铠（♣ rare+ 防具）：fullplate_pending → fullplate_shield（独立 1 层，不衰减不增长）
+  //   如果上回合的 fullplate_shield 还在（未被消耗）→ pending 丢弃，不重复生成（维持最多 1 层）
+  //   注：只检查 pending 是否存在，不再检查当前 armors[0] 是不是 full_plate —
+  //     避免 Epic 防具占位 / 换装备时把上一回合受击的反震蓄势卡死不释放
+  const pending = state.player.statuses.find(s => s.id === "fullplate_pending");
+  if (pending) {
+    const existing = state.player.statuses.find(s => s.id === "fullplate_shield");
+    if (existing) {
+      log(`♣ 重铠：上回合护盾未消耗，跳过本次反震生成（保持 1 层上限）。`, "player");
+    } else {
+      state.player.statuses.push({ id: "fullplate_shield", name: "重铠护盾", stacks: 1, duration: -1 });
+      log(`♣ 重铠：反震 → 1 层重铠护盾（不衰减）。`, "player");
+    }
+    state.player.statuses = state.player.statuses.filter(s => s.id !== "fullplate_pending");
+  }
+
   // 反伤甲：清掉 thorn_chain 连击计数（每回合从 1 开始算）
   state.player.statuses = state.player.statuses.filter(s => s.id !== "thorn_chain");
 
@@ -1964,16 +2036,16 @@ function awardFragments(state: BattleState, log: (m: string, k?: LogKind) => voi
           enchant.onKill(ctx, e);
         }
       }
-      // 精英额外掉落：随机一张 SR 卡，进入牌库（不含 Boss，Boss 走 epic 保底）
+      // 精英额外掉落：随机一张 SR 卡进 buffer，战斗胜利后玩家手动选接受/弃掉（不含 Boss，Boss 走 epic 保底）
       if (e.tier === "elite") {
         const srPool = getEliteSRDropPool(state.floor);
         if (srPool.length > 0) {
           const pickedId = srPool[Math.floor(Math.random() * srPool.length)];
           const inst = makeInstance(pickedId, undefined, state.floor);
-          state.player.deck.push(inst);
-          shuffleArr(state.player.deck);
+          if (!state.player.pendingEliteDropsBuffer) state.player.pendingEliteDropsBuffer = [];
+          state.player.pendingEliteDropsBuffer.push(inst);
           const name = CARD_DB[pickedId]?.name ?? pickedId;
-          log(`★ 精英掉落：${name}（SR）进入牌库。`, "win");
+          log(`★ 精英掉落：${name}（SR）— 战斗胜利后选择是否接受。`, "win");
         }
       }
     }

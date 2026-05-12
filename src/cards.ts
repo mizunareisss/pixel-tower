@@ -803,37 +803,30 @@ const FULL_PLATE: CardDef = {
   id: "full_plate",
   name: "重铠",
   category: "equipment",
-  desc: "装备：受击 -5 / -7 / -9 / -12（叠加）。每次受击后累积反震护盾，下回合开始时释放为临时护盾。",
+  desc: "装备：受击 -5 / -7 / -9 / -12（叠加）。每回合**第一次**受击形成 1 层反震蓄势，下回合开局变临时护盾。叠加不增加蓄势层数，只加深护甲值。",
   equipKind: "armor",
   equipSuit: "club",
   baseReduce: 5,
   equipEffects: [
-    { desc: "-5 受击 + 反震 +2 护盾 / 受击。", stat: "-5 受击 反震+2",
-      onTakeDamage: (c, d) => {
-        const ex = c.player.statuses.find(s => s.id === "shield_block");
-        if (ex) ex.stacks += 2; else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 2, duration: 1 });
-        return Math.max(0, d - 5);
-      } },
-    { desc: "-7 受击 + 反震 +3 护盾 / 受击。", stat: "-7 受击 反震+3",
-      onTakeDamage: (c, d) => {
-        const ex = c.player.statuses.find(s => s.id === "shield_block");
-        if (ex) ex.stacks += 3; else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 3, duration: 1 });
-        return Math.max(0, d - 7);
-      } },
-    { desc: "-9 受击 + 反震 +4 护盾 / 受击。", stat: "-9 受击 反震+4",
-      onTakeDamage: (c, d) => {
-        const ex = c.player.statuses.find(s => s.id === "shield_block");
-        if (ex) ex.stacks += 4; else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 4, duration: 1 });
-        return Math.max(0, d - 9);
-      } },
-    { desc: "-12 受击 + 反震 +5 护盾 / 受击。", stat: "-12 受击 反震+5",
-      onTakeDamage: (c, d) => {
-        const ex = c.player.statuses.find(s => s.id === "shield_block");
-        if (ex) ex.stacks += 5; else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 5, duration: 1 });
-        return Math.max(0, d - 12);
-      } },
+    // 反震：每回合仅第一次受击形成 1 层 fullplate_pending；后续受击不再增加；下回合开始转 shield_block
+    // 重铠 stack 只决定护甲值（受击减伤），不影响反震蓄势量
+    { desc: "-5 受击 + 每回合首次受击 +1 反震蓄势（下回合开局变护盾）。", stat: "-5 受击 反震+1",
+      onTakeDamage: (c, d) => { addFullplatePending(c); return Math.max(0, d - 5); } },
+    { desc: "-7 受击 + 每回合首次受击 +1 反震蓄势。", stat: "-7 受击 反震+1",
+      onTakeDamage: (c, d) => { addFullplatePending(c); return Math.max(0, d - 7); } },
+    { desc: "-9 受击 + 每回合首次受击 +1 反震蓄势。", stat: "-9 受击 反震+1",
+      onTakeDamage: (c, d) => { addFullplatePending(c); return Math.max(0, d - 9); } },
+    { desc: "-12 受击 + 每回合首次受击 +1 反震蓄势。", stat: "-12 受击 反震+1",
+      onTakeDamage: (c, d) => { addFullplatePending(c); return Math.max(0, d - 12); } },
   ],
 };
+
+// 反震蓄势辅助函数：每回合首次受击才挂上，后续受击不叠加
+function addFullplatePending(c: BattleContext): void {
+  const ex = c.player.statuses.find(s => s.id === "fullplate_pending");
+  if (ex) return;  // 本回合已经有蓄势，不再添加（防止多 hit 累积）
+  c.player.statuses.push({ id: "fullplate_pending", name: "反震蓄势", stacks: 1, duration: -1 });
+}
 
 const SCALE_MAIL: CardDef = {
   id: "scale_mail",
@@ -1037,12 +1030,11 @@ const SK_COUNTER_STANCE: CardDef = {
 
 const SK_BLAST: CardDef = {
   id: "sk_blast", name: "爆裂术", category: "skill", target: "single",
-  desc: "自损 5% 生命上限（永久扣除当前血量和上限），对目标造成其当前 HP 20% 的直接伤害。",
+  desc: "自损 5% 生命上限的血量（不降低生命上限），对目标造成其当前 HP 20% 的直接伤害。",
   onPlay: (c) => {
     const cut = Math.max(1, Math.round(c.player.vitaMax * 0.05));
-    c.player.vitaMax = Math.max(1, c.player.vitaMax - cut);  // 永久 -maxHP
-    c.player.vita = Math.max(0, Math.min(c.player.vita - cut, c.player.vitaMax));  // 当前 HP 同步降
-    c.log(`爆裂术：永久自损 ${cut} maxHP（当前 + 上限同时扣）。`, "player");
+    c.player.vita = Math.max(0, c.player.vita - cut);  // 只扣当前 HP，maxHP 不变
+    c.log(`爆裂术：自损 ${cut} HP（maxHP 不变）。`, "player");
     const enemyDmg = Math.max(1, Math.round(c.target.hp * 0.20));
     dealDirectDamage(c, c.target, enemyDmg);
   },
@@ -1284,7 +1276,7 @@ const IT_PURIFY: CardDef = {
   desc: "清除自身所有负面状态。",
   onPlay: (c) => {
     // 保留正向 buff / shield / 武器 buff，其他全清
-    const KEEP = new Set(["battle_cry", "double_strike", "evasive", "shield_block", "reflect", "busi_triggered", "weapon_buff", "sharpened", "shadow_double", "counter_stance", "frenzy", "charged", "knight_charge", "combat_rhythm", "time_stop", "smoke_dodge", "guaranteed_dodge", "pierce_next", "phantom_charge", "echo", "dodge_full_round", "triple_strike", "phalanx_dr", "swift_dodge_temp", "enc_runic_immune", "enc_dot_immune", "warblood_perm_atk", "blood_pact", "arcane_burst", "brew_regen", "pierce_bonus", "pierce_perm", "calc_charge", "blood_pact_charge", "next_atk_apply_poison", "next_atk_apply_bleed"]);
+    const KEEP = new Set(["battle_cry", "double_strike", "evasive", "shield_block", "reflect", "busi_triggered", "weapon_buff", "sharpened", "shadow_double", "counter_stance", "frenzy", "charged", "knight_charge", "combat_rhythm", "time_stop", "smoke_dodge", "guaranteed_dodge", "pierce_next", "phantom_charge", "echo", "dodge_full_round", "triple_strike", "phalanx_dr", "swift_dodge_temp", "enc_runic_immune", "enc_dot_immune", "warblood_perm_atk", "blood_pact", "arcane_burst", "brew_regen", "pierce_bonus", "pierce_perm", "calc_charge", "blood_pact_charge", "next_atk_apply_poison", "next_atk_apply_bleed", "fullplate_pending", "fullplate_shield"]);
     const before = c.player.statuses.length;
     c.player.statuses = c.player.statuses.filter(s => KEEP.has(s.id));
     if (c.player.statuses.length < before) c.log(`净化药水：清除 ${before - c.player.statuses.length} 个负面状态。`, "player");

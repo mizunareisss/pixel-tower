@@ -69,6 +69,17 @@ export function playDodgeMiss(targetEl: HTMLElement): void {
   spawn(targetEl, "fx fx-miss-text", 700, el => { el.textContent = "MISS"; });
 }
 
+// ── 完全格挡：盾牌图标闪现 + 金属反光圈 ────────────────────────
+// 由 ♠ 黑盾 / ♣ 镇守 keyword / shield_block 完全吸收触发
+export function playShieldBlock(targetEl: HTMLElement): void {
+  // 盾牌主体（SVG 形状放大闪现）
+  spawn(targetEl, "fx fx-shield-icon", 600);
+  // 反光圈：从盾牌中心扩散
+  spawn(targetEl, "fx fx-shield-ring", 700);
+  // "BLOCK" 文字浮起
+  spawn(targetEl, "fx fx-block-text", 800, el => { el.textContent = "BLOCK"; });
+}
+
 // ── 装备进槽：黄色光环 ────────────────────────────────
 export function playEquip(targetEl: HTMLElement): void {
   spawn(targetEl, "fx fx-burst fx-yellow", 400);

@@ -2,7 +2,7 @@ import "./style.css";
 import { getCardIcon } from "./icons.ts";
 import {
   playSlashHit, playSkillBurst, playDebuffApply, playBuffApply,
-  playHealSparkle, playAoeWave, playPlayerHit, playEquip, playDodgeMiss,
+  playHealSparkle, playAoeWave, playPlayerHit, playEquip, playDodgeMiss, playShieldBlock,
 } from "./animations.ts";
 import {
   newGame,
@@ -40,6 +40,8 @@ import {
   chestOpen,
   discardHandCards,
   confirmForceDiscard,
+  acceptEliteDrop,
+  discardEliteDrop,
   enterMapNode,
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
@@ -212,6 +214,7 @@ function render() {
   else if (state.phase === "battle") renderBattle();
   else if (state.phase === "suit_pick") renderSuitPick();
   else if (state.phase === "battle_victory") renderBattleVictory();
+  else if (state.phase === "elite_drop_choice") renderEliteDropChoice();
   else if (state.phase === "reward_card") renderRewardCard();
   else if (state.phase === "reward_perk") renderRewardPerk();
   else if (state.phase === "discard") renderDiscard();
@@ -257,6 +260,13 @@ function render() {
     const playerArea = document.querySelector("#player-card") as HTMLElement | null;
     if (playerArea) playDodgeMiss(playerArea);
     state.battle.pendingDodgeFx = 0;
+  }
+
+  // 完全格挡动效信号（battle.ts 设置 pendingBlockFx，盾牌闪光 + BLOCK 文字）
+  if (state.battle?.pendingBlockFx && state.battle.pendingBlockFx > 0) {
+    const playerArea = document.querySelector("#player-card") as HTMLElement | null;
+    if (playerArea) playShieldBlock(playerArea);
+    state.battle.pendingBlockFx = 0;
   }
 
   // Enemy HP changes → enemy float
@@ -730,6 +740,7 @@ function phaseLabel(p: GameState["phase"]) {
     starter_perk_picks: `起手选特性（剩 ${state.picksRemaining}）`,
     battle: state.battle ? `第 ${state.floor} 关 · ${state.battleIndex + 1}/${FIGHTS_PER_FLOOR} · 回合 ${state.battle.turn}` : "战斗中",
     battle_victory: "★ 战斗胜利",
+    elite_drop_choice: "精英掉落 · 接受 / 弃掉",
     suit_pick: "选择花色",
     reward_card: "战利品 · 选 1 张牌",
     reward_perk: "通关 · 选 1 张特性",
@@ -1500,7 +1511,7 @@ const STATUS_ICONS: Record<string, string> = {
   burn: "🔥", rend: "🪓", frozen: "❄", silenced: "🤐", bleed: "🩸",
   fear: "😱",
   // 新增附魔状态
-  phalanx_dr: "🛡", swift_dodge_temp: "💨", enc_runic_immune: "🔰",
+  phalanx_dr: "🛡", swift_dodge_temp: "💨", enc_runic_immune: "🔰", fullplate_pending: "⚙", fullplate_shield: "🛡",
   enc_dot_immune: "🕊", warblood_perm_atk: "🩸",
   blood_pact: "💉", arcane_burst: "🔮", brew_regen: "🌿",
   no_skill: "🔒", pierce_bonus: "🎯", pierce_perm: "🛢",
@@ -1893,6 +1904,48 @@ function renderSuitPick() {
         render();
       },
     });
+  });
+}
+
+// 精英 SR 掉落：玩家逐张选择接受 / 弃掉，队列空后进 reward_card
+function renderEliteDropChoice() {
+  const queue = state.pendingEliteDrops ?? [];
+  if (queue.length === 0) {
+    stageEl.innerHTML = `<p class="hint">无掉落，进入战利品选择...</p>`;
+    return;
+  }
+  const inst = queue[0];
+  const def = CARD_DB[inst.defId];
+  const remaining = queue.length;
+  const rarity = def.rarity ?? "common";
+  const suit = def.attackSuit ?? def.equipSuit ?? def.defaultSuit;
+  const suitTag = suit
+    ? `<span class="card-suit-corner${isRedSuit(suit) ? " red" : ""}">${SUIT_SYMBOLS[suit]}</span>`
+    : "";
+
+  stageEl.innerHTML = `
+    <p class="hint">★ 精英掉落（剩 ${remaining} 张）：可选择**接受**进牌库，或**弃掉**避免污染卡组。</p>
+    <div class="elite-drop-wrap">
+      <div class="card choice cat-${def.category} rarity-${rarity} elite-drop-card" data-uid="${inst.uid}">
+        ${suitTag}
+        <div class="card-icon">${getCardIcon(def.id, def.category)}</div>
+        <div class="card-name">${escapeHTML(def.name)}</div>
+        <div class="card-desc">${escapeHTML(def.desc)}</div>
+        <div class="card-meta">${rarityLabel(rarity)} · ${categoryLabel(def.category)}</div>
+      </div>
+      <div class="elite-drop-actions">
+        <button class="elite-drop-discard">弃掉</button>
+        <button class="elite-drop-accept">接受（进牌库）</button>
+      </div>
+    </div>
+  `;
+  stageEl.querySelector(".elite-drop-accept")!.addEventListener("click", () => {
+    acceptEliteDrop(state);
+    render();
+  });
+  stageEl.querySelector(".elite-drop-discard")!.addEventListener("click", () => {
+    discardEliteDrop(state);
+    render();
   });
 }
 
@@ -2921,18 +2974,25 @@ function showLoadoutModal(): void {
       <div class="loadout-label">🎴 花色亲和</div>
       <div class="loadout-content loadout-suits">
         ${SUITS.map(suit => {
-          // 计算与 battle.ts/getSuitAffinity 一致的亲和度（地图阶段也准确显示）
+          // 与 battle.ts/getSuitAffinity 一致：1.3/件（Epic 不计）+ 0.8/特性 + 0.3/出牌（cap 100）；总 cap 30，扣大招消耗
           let aff = 0;
-          for (const w of player.weapons) if (CARD_DB[w.defId]?.equipSuit === suit) aff += 1.5;
-          for (const a of player.armors) if (CARD_DB[a.defId]?.equipSuit === suit) aff += 1.5;
-          for (const p of player.perks) if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 1;
-          const played = Math.min(30, player.suitPlayedTotal?.[suit] ?? 0);
-          aff += played * 0.2;
-          aff = Math.max(0, Math.min(20, aff));
+          for (const w of player.weapons) {
+            const wDef = CARD_DB[w.defId];
+            if (wDef?.equipSuit === suit && wDef.rarity !== "epic") aff += 1.3;
+          }
+          for (const a of player.armors) {
+            const aDef = CARD_DB[a.defId];
+            if (aDef?.equipSuit === suit && aDef.rarity !== "epic") aff += 1.3;
+          }
+          for (const p of player.perks) if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 0.8;
+          const played = Math.min(100, player.suitPlayedTotal?.[suit] ?? 0);
+          aff += played * 0.3;
+          aff -= player.suitConsumedTotal?.[suit] ?? 0;
+          aff = Math.max(0, Math.min(30, aff));
           const isRed = suit === "heart" || suit === "diamond";
           const tier = aff >= 15 ? 3 : aff >= 10 ? 2 : aff >= 5 ? 1 : 0;
           const tierLabel = tier > 0 ? `T${tier}` : "—";
-          return `<span class="loadout-suit-pill${isRed ? " red" : ""}${tier > 0 ? " lit" : ""}" title="装备 +1.5/件 · 特性 +1/张 · 出牌累积 ${played}/30">${SUIT_SYMBOLS[suit]} ${aff.toFixed(1)} <em>${tierLabel}</em></span>`;
+          return `<span class="loadout-suit-pill${isRed ? " red" : ""}${tier > 0 ? " lit" : ""}" title="装备 +1.3/件（Epic 不计） · 特性 +0.8/张 · 出牌累积 ${played}/100 × 0.3">${SUIT_SYMBOLS[suit]} ${aff.toFixed(1)} <em>${tierLabel}</em></span>`;
         }).join("")}
       </div>
     </div>
@@ -3299,8 +3359,14 @@ function showEventResultModal(): void {
     const def = CARD_DB[er.cardId];
     if (def) {
       const rarity = def.rarity ?? "common";
+      // 花色角标：跟手牌 / 战利品 modal 一致 — attack→attackSuit, equipment→equipSuit, perk→defaultSuit
+      const suit = def.attackSuit ?? def.equipSuit ?? def.defaultSuit;
+      const suitTag = suit
+        ? `<span class="card-suit-corner${isRedSuit(suit) ? " red" : ""}">${SUIT_SYMBOLS[suit]}</span>`
+        : "";
       cardHtml = `
-        <div class="er-card-preview cat-${def.category} rarity-${rarity}">
+        <div class="er-card-preview cat-${def.category} rarity-${rarity}"${suit ? ` data-suit="${SUIT_SYMBOLS[suit]}"` : ""}>
+          ${suitTag}
           <div class="er-card-action">${er.cardChange === "gained" ? "+ 加入牌库" : "- 失去"}</div>
           <div class="er-card-name">${escapeHTML(def.name)}</div>
           <div class="er-card-cat">${categoryLabel(def.category)} · ${rarityLabel(rarity)}</div>

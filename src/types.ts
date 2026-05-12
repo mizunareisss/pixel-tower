@@ -166,9 +166,11 @@ export const STATUS_META: Record<string, StatusMeta> = {
 
   // ── 附魔触发的 status ─────────────────────────────────────
   phalanx_dr:        { name: "重甲列阵", desc: "本回合每张攻击牌使受击 -stacks（cap 按 Lv）。\n来源：附魔 ec_phalanx「重甲列阵」。", kind: "buff" },
+  fullplate_pending: { name: "反震蓄势", desc: "每回合**首次**受击形成 1 层蓄势（后续受击不叠加）；下回合开始时转 fullplate_shield。\n来源：装备 full_plate「重铠」受击触发。", kind: "buff" },
+  fullplate_shield:  { name: "重铠护盾", desc: "1 层独立护盾，**不衰减**也**不增长**，受击时优先于 shield_block 被消耗。\n如果未消耗时上一回合的反震蓄势准备释放，会被丢弃（维持最多 1 层）。\n来源：装备 full_plate「重铠」反震蓄势在下回合开局释放。", kind: "buff" },
   swift_dodge_temp:  { name: "风行余势", desc: "本回合内闪避概率 +stacks%（cap 按 Lv）。\n来源：附魔 ec_swift「风行步」闪避后触发。", kind: "buff" },
   enc_runic_immune:  { name: "符文护盾", desc: "本场战斗第 1 次受击免疫（Lv1-2 -50%，Lv3+ 完全免疫）。\n来源：附魔 ec_runic「符文护盾」（newBattle 时挂上）。", kind: "buff" },
-  enc_dot_immune:    { name: "圣化", desc: "中毒 / 燃烧 / 出血对你无效。\n来源：附魔 ec_runic「符文护盾」（newBattle 时挂上）。", kind: "buff" },
+  enc_dot_immune:    { name: "圣化", desc: "中毒 / 燃烧 / 出血对你无效。\n来源：附魔 ec_runic「符文护盾」**Lv5** 才挂上（Lv1-4 不带 DOT 免疫）。", kind: "buff" },
   warblood_perm_atk: { name: "血誓积累 / 斩魂蓄势", desc: "永久攻击 +stacks（cap 按附魔 Lv 或装备 stack）。\n来源：附魔 ec_warblood「战狂血誓」每损 10% maxHP 触发 / 装备 soulreaver_plate「斩魂铠」受击触发。", kind: "buff" },
 
   // ── 装备触发的 status ─────────────────────────────────────
@@ -276,7 +278,7 @@ export const ENCHANT_DESCS: Record<EnchantId, string> = {
   ec_lifesteal: "攻击吸血额外 +8%；HP 满时攻击 +10%。",
   ec_resilient: "受击 -2；HP > 80% 时受击再 -2；每回合开始 +1 HP。",
   ec_arcane:    "每出 1 张非攻击牌额外摸 1 张（每回合 cap 3）；持咒/染色 buff 在场时首次攻击 +30%。",
-  ec_runic:     "受击 -3；每场战斗第 1 次受击免疫；中毒/燃烧/出血对你无效。",
+  ec_runic:     "受击 -3；每场战斗第 1 次受击免疫；DOT 免疫需 Lv5 解锁。",
 };
 
 // 附魔配方
@@ -371,7 +373,7 @@ export function getEnchantDescAt(id: EnchantId, level: number): string {
     case "ec_lifesteal": return `攻击吸血额外 +${p[0]}%；HP 满时攻击 +${p[1]}%。`;
     case "ec_resilient": return `受击 -${p[0]}；HP > 80% 时受击再 -${p[1]}；每回合开始 +${p[2]} HP。`;
     case "ec_arcane":    return `每出 1 张非攻击牌额外摸 1（每回合 cap 3）；持咒/染色 buff 在场时首次攻击 +${p[0]}%。`;
-    case "ec_runic":     return `受击 -${p[0]}；每场首次受击 ${p[1] >= 100 ? "完全免疫" : "-" + p[1] + "%"}；中毒/燃烧/出血对你无效。`;
+    case "ec_runic":     return `受击 -${p[0]}；每场首次受击 ${p[1] >= 100 ? "完全免疫" : "-" + p[1] + "%"}；${lv >= 5 ? "中毒/燃烧/出血对你无效。" : "（Lv5 解锁 DOT 免疫）"}`;
   }
 }
 
@@ -473,6 +475,8 @@ export interface CardInstance {
   attackSuitOverride?: Suit;
   // 史诗卡使用次数限制（每场战斗 3 次；用尽后回到牌库，需要重新抽起）
   usesRemaining?: number;
+  // 短期复刻牌（复读机克隆等）：回合结束直接消失，不进弃牌堆/牌库
+  ephemeral?: boolean;
 }
 
 // ── 玩家状态 ──────────────────────────────────────────────
@@ -526,6 +530,10 @@ export interface PlayerState {
   // UI 弹出强制弃牌 modal：玩家从 hand 选 K 张弃掉，K = pendingDraws.length
   // 选完后 pendingDraws → hand，被弃的牌 → discard
   pendingDraws?: CardInstance[];
+
+  // 精英怪击杀 SR 掉落临时队列：战斗内击杀 elite 时入队，onBattleWon 处理（player → state.pendingEliteDrops）
+  // 用 player 字段是因为 battle.ts 的 awardFragments 只访问 BattleState，没法直接写 GameState
+  pendingEliteDropsBuffer?: CardInstance[];
 }
 
 // ── 敌人 ──────────────────────────────────────────────────
@@ -626,6 +634,7 @@ export interface BattleState {
   pendingSuitPick?: string;     // 等待玩家手选花色的动作 ("dye" | "resonance")
   floor: number;                // 当前楼层（calcAttackDamage 里的 sharp 附魔需要）
   pendingDodgeFx?: number;      // 待播放的闪避动效次数（main.ts 渲染时消费）
+  pendingBlockFx?: number;      // 待播放的完全格挡动效次数（盾牌闪光）
 
   // 战斗开始时的骰子先手机制：roll 1d6，单数玩家先手 / 双数敌人先手
   // diceRoll 由 game.ts startNodeBattle 设置；main.ts 渲染时显示骰子动画
@@ -650,6 +659,7 @@ export type GamePhase =
   | "battle"
   | "suit_pick"           // 手选花色（染色术 / 共鸣咒）
   | "battle_victory"
+  | "elite_drop_choice"    // 精英 SR 掉落选择（接受 / 弃掉）
   | "reward_card"          // 战利品（1 张卡进牌库）
   | "reward_perk"          // 通关额外特性
   | "floor_event"          // 触发某事件（从 map node 进入）
@@ -709,6 +719,9 @@ export interface GameState {
   activeEventId?: string;
   // 商人事件的子界面状态（由 main.ts 渲染时使用）
   merchantStock?: CardInstance[];
+
+  // 精英怪掉落的 SR 待处理队列：玩家击杀 elite 时入队，战斗胜利后弹 modal 让玩家选接受/弃掉
+  pendingEliteDrops?: CardInstance[];
 
   // 楼层地图（floor_map 阶段时由 map.ts 设置）
   floorMap?: FloorMap;

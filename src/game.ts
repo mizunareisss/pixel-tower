@@ -414,6 +414,18 @@ function onBattleWon(state: GameState) {
     state.player.discard.push(...state.player.pendingDraws);
     state.player.pendingDraws = [];
   }
+  // ★ 战斗胜利时把 hand / discard / pendingDraws 里残留的 ephemeral 克隆全部清除
+  //   （cleanupEphemeralCards 只在敌方回合开头跑，玩家击杀最后敌人后那一回合不触发，会让克隆漏进 deck）
+  state.player.hand = state.player.hand.filter(c => !c.ephemeral);
+  state.player.discard = state.player.discard.filter(c => !c.ephemeral);
+  if (state.player.pendingDraws) {
+    state.player.pendingDraws = state.player.pendingDraws.filter(c => !c.ephemeral);
+  }
+  // 把精英 SR 掉落 buffer 转到 GameState 上的 pendingEliteDrops 队列
+  if (state.player.pendingEliteDropsBuffer && state.player.pendingEliteDropsBuffer.length > 0) {
+    state.pendingEliteDrops = (state.pendingEliteDrops ?? []).concat(state.player.pendingEliteDropsBuffer);
+    state.player.pendingEliteDropsBuffer = [];
+  }
   // 关卡末节点（boss 或非 boss 关末的 elite）= 关卡完成
   if (state.floorMap) {
     const cur = getNode(state.floorMap, state.floorMap.currentNodeId);
@@ -424,8 +436,43 @@ function onBattleWon(state: GameState) {
       state.pendingFloorClear = true;
     }
   }
-  // 直接进入选牌界面（取消"领取战利品"中转按钮）
-  enterRewardCard(state);
+  // 如果有精英 SR 掉落待处理，先弹选择 modal；否则直接进选牌界面
+  if (state.pendingEliteDrops && state.pendingEliteDrops.length > 0) {
+    state.phase = "elite_drop_choice";
+    pushLog(state, `精英掉落待处理：${state.pendingEliteDrops.length} 张 SR 等你选择接受 / 弃掉。`, "system");
+  } else {
+    enterRewardCard(state);
+  }
+}
+
+// 精英 SR 掉落：接受 → 进牌库；弃掉 → 丢弃。处理完队列空时进入 reward_card
+export function acceptEliteDrop(state: GameState): boolean {
+  if (state.phase !== "elite_drop_choice") return false;
+  if (!state.pendingEliteDrops || state.pendingEliteDrops.length === 0) return false;
+  const inst = state.pendingEliteDrops.shift()!;
+  state.player.deck.push(inst);
+  const name = CARD_DB[inst.defId]?.name ?? inst.defId;
+  pushLog(state, `★ 接受精英掉落：${name} 进入牌库。`, "win");
+  advanceEliteDropQueue(state);
+  return true;
+}
+
+export function discardEliteDrop(state: GameState): boolean {
+  if (state.phase !== "elite_drop_choice") return false;
+  if (!state.pendingEliteDrops || state.pendingEliteDrops.length === 0) return false;
+  const inst = state.pendingEliteDrops.shift()!;
+  const name = CARD_DB[inst.defId]?.name ?? inst.defId;
+  pushLog(state, `弃掉精英掉落：${name}。`, "system");
+  advanceEliteDropQueue(state);
+  return true;
+}
+
+function advanceEliteDropQueue(state: GameState) {
+  // 队列空 → 走 reward_card 正常流程
+  if (!state.pendingEliteDrops || state.pendingEliteDrops.length === 0) {
+    state.pendingEliteDrops = undefined;
+    enterRewardCard(state);
+  }
 }
 
 // 内部：roll 奖励候选 + 进 reward_card 阶段
