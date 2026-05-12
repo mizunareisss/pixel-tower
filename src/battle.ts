@@ -284,9 +284,11 @@ export function newBattle(player: PlayerState, enemies: EnemyState[], floor: num
 
   // 附魔战斗起始 buff
   if (player.weaponEnchant === "ec_runic") {
-    // 符文护盾：每场首次受击免疫 + dot 免疫
+    // 符文护盾：每场首次受击免疫（所有等级）；DOT 免疫只在 Lv5 才挂上（之前所有等级都送太强）
     player.statuses.push({ id: "enc_runic_immune", name: "符文护盾", stacks: 1, duration: -1 });
-    player.statuses.push({ id: "enc_dot_immune",   name: "圣化",     stacks: 1, duration: -1 });
+    if ((player.weaponEnchantLevel ?? 1) >= 5) {
+      player.statuses.push({ id: "enc_dot_immune", name: "圣化", stacks: 1, duration: -1 });
+    }
   }
 
   return {

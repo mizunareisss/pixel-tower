@@ -169,7 +169,7 @@ export const STATUS_META: Record<string, StatusMeta> = {
   fullplate_pending: { name: "反震蓄势", desc: "敌人回合内每受一击累积 +N（N 按重铠 stack）；下回合开始时全部释放为 shield_block 持续护盾。\n来源：装备 full_plate「重铠」受击触发。", kind: "buff" },
   swift_dodge_temp:  { name: "风行余势", desc: "本回合内闪避概率 +stacks%（cap 按 Lv）。\n来源：附魔 ec_swift「风行步」闪避后触发。", kind: "buff" },
   enc_runic_immune:  { name: "符文护盾", desc: "本场战斗第 1 次受击免疫（Lv1-2 -50%，Lv3+ 完全免疫）。\n来源：附魔 ec_runic「符文护盾」（newBattle 时挂上）。", kind: "buff" },
-  enc_dot_immune:    { name: "圣化", desc: "中毒 / 燃烧 / 出血对你无效。\n来源：附魔 ec_runic「符文护盾」（newBattle 时挂上）。", kind: "buff" },
+  enc_dot_immune:    { name: "圣化", desc: "中毒 / 燃烧 / 出血对你无效。\n来源：附魔 ec_runic「符文护盾」**Lv5** 才挂上（Lv1-4 不带 DOT 免疫）。", kind: "buff" },
   warblood_perm_atk: { name: "血誓积累 / 斩魂蓄势", desc: "永久攻击 +stacks（cap 按附魔 Lv 或装备 stack）。\n来源：附魔 ec_warblood「战狂血誓」每损 10% maxHP 触发 / 装备 soulreaver_plate「斩魂铠」受击触发。", kind: "buff" },
 
   // ── 装备触发的 status ─────────────────────────────────────
@@ -277,7 +277,7 @@ export const ENCHANT_DESCS: Record<EnchantId, string> = {
   ec_lifesteal: "攻击吸血额外 +8%；HP 满时攻击 +10%。",
   ec_resilient: "受击 -2；HP > 80% 时受击再 -2；每回合开始 +1 HP。",
   ec_arcane:    "每出 1 张非攻击牌额外摸 1 张（每回合 cap 3）；持咒/染色 buff 在场时首次攻击 +30%。",
-  ec_runic:     "受击 -3；每场战斗第 1 次受击免疫；中毒/燃烧/出血对你无效。",
+  ec_runic:     "受击 -3；每场战斗第 1 次受击免疫；DOT 免疫需 Lv5 解锁。",
 };
 
 // 附魔配方
@@ -372,7 +372,7 @@ export function getEnchantDescAt(id: EnchantId, level: number): string {
     case "ec_lifesteal": return `攻击吸血额外 +${p[0]}%；HP 满时攻击 +${p[1]}%。`;
     case "ec_resilient": return `受击 -${p[0]}；HP > 80% 时受击再 -${p[1]}；每回合开始 +${p[2]} HP。`;
     case "ec_arcane":    return `每出 1 张非攻击牌额外摸 1（每回合 cap 3）；持咒/染色 buff 在场时首次攻击 +${p[0]}%。`;
-    case "ec_runic":     return `受击 -${p[0]}；每场首次受击 ${p[1] >= 100 ? "完全免疫" : "-" + p[1] + "%"}；中毒/燃烧/出血对你无效。`;
+    case "ec_runic":     return `受击 -${p[0]}；每场首次受击 ${p[1] >= 100 ? "完全免疫" : "-" + p[1] + "%"}；${lv >= 5 ? "中毒/燃烧/出血对你无效。" : "（Lv5 解锁 DOT 免疫）"}`;
   }
 }
 
