@@ -1882,18 +1882,18 @@ function startNewPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) =>
 
   // 重铠（♣ rare+ 防具）：fullplate_pending → fullplate_shield（独立 1 层，不衰减不增长）
   //   如果上回合的 fullplate_shield 还在（未被消耗）→ pending 丢弃，不重复生成（维持最多 1 层）
-  if (state.player.armors[0]?.defId === "full_plate") {
-    const pending = state.player.statuses.find(s => s.id === "fullplate_pending");
-    if (pending) {
-      const existing = state.player.statuses.find(s => s.id === "fullplate_shield");
-      if (existing) {
-        log(`♣ 重铠：上回合护盾未消耗，跳过本次反震生成（保持 1 层上限）。`, "system");
-      } else {
-        state.player.statuses.push({ id: "fullplate_shield", name: "重铠护盾", stacks: 1, duration: -1 });
-        log(`♣ 重铠：反震 → 1 层重铠护盾（不衰减）。`, "player");
-      }
-      state.player.statuses = state.player.statuses.filter(s => s.id !== "fullplate_pending");
+  //   注：只检查 pending 是否存在，不再检查当前 armors[0] 是不是 full_plate —
+  //     避免 Epic 防具占位 / 换装备时把上一回合受击的反震蓄势卡死不释放
+  const pending = state.player.statuses.find(s => s.id === "fullplate_pending");
+  if (pending) {
+    const existing = state.player.statuses.find(s => s.id === "fullplate_shield");
+    if (existing) {
+      log(`♣ 重铠：上回合护盾未消耗，跳过本次反震生成（保持 1 层上限）。`, "player");
+    } else {
+      state.player.statuses.push({ id: "fullplate_shield", name: "重铠护盾", stacks: 1, duration: -1 });
+      log(`♣ 重铠：反震 → 1 层重铠护盾（不衰减）。`, "player");
     }
+    state.player.statuses = state.player.statuses.filter(s => s.id !== "fullplate_pending");
   }
 
   // 反伤甲：清掉 thorn_chain 连击计数（每回合从 1 开始算）
