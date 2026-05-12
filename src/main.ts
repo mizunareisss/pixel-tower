@@ -3390,7 +3390,7 @@ function renderChoiceCardEl(inst: CardInstance, onClick: () => void): HTMLElemen
 }
 
 function rarityLabel(r: string): string {
-  return ({ common: "普通", rare: "稀有", super_rare: "超稀有", epic: "史诗" } as Record<string,string>)[r] ?? r;
+  return ({ common: "普通", rare: "稀有", rare_plus: "稀有+", super_rare: "超稀有", epic: "史诗" } as Record<string,string>)[r] ?? r;
 }
 
 // ─────────────────────────────────────────────────────────

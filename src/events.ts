@@ -55,6 +55,7 @@ export function rollFloorEvent(): EventId | null {
 export const MERCHANT_PRICES: Record<CardRarity, number> = {
   common: 5,
   rare: 7,
+  rare_plus: 8,
   super_rare: 10,
   epic: 30,
 };
@@ -63,6 +64,7 @@ export const MERCHANT_PRICES: Record<CardRarity, number> = {
 export const MERCHANT_SELL_PRICES: Record<CardRarity, number> = {
   common: 1,
   rare: 2,
+  rare_plus: 3,
   super_rare: 4,
   epic: 7,
 };

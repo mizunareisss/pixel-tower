@@ -42,7 +42,7 @@ const war_bow = icf(`
   <polygon points="24,18 20,15 20,21" fill="currentColor" stroke="none"/>
 `);
 
-const twin_blades = ic(`
+const katana = ic(`
   <line x1="8" y1="28" x2="20" y2="16"/>
   <line x1="16" y1="28" x2="28" y2="16"/>
   <line x1="12" y1="20" x2="6" y2="26"/>
@@ -51,7 +51,7 @@ const twin_blades = ic(`
   <circle cx="30" cy="30" r="2" fill="currentColor" stroke="none"/>
 `);
 
-const warhammer = icf(`
+const giant_hammer = icf(`
   <rect x="12" y="5" width="12" height="11" rx="2"/>
   <line x1="18" y1="16" x2="18" y2="31"/>
   <line x1="14" y1="31" x2="22" y2="31"/>
@@ -65,7 +65,7 @@ const battle_staff = icf(`
   <circle cx="18" cy="9" r="2" fill="currentColor" stroke="none"/>
 `);
 
-const chain_whip = icf(`
+const chain_blade = icf(`
   <path d="M8 8 C14 10 12 20 18 22 C24 24 24 28 28 28" stroke-width="2.2"/>
   <circle cx="8" cy="8" r="3" fill="currentColor" stroke="none"/>
   <circle cx="28" cy="28" r="3" fill="currentColor" stroke="none"/>
@@ -77,7 +77,7 @@ const berserker_blade = ic(`
   <polyline points="10,32 12,24 8,18 14,16 10,10 16,12 18,6 22,12 28,8 24,16 30,18 24,22 26,28 20,26 18,32"/>
 `);
 
-const wizard_staff = icf(`
+const arcane_scepter = icf(`
   <line x1="18" y1="16" x2="18" y2="32"/>
   <line x1="12" y1="32" x2="24" y2="32"/>
   <circle cx="18" cy="10" r="7" stroke-width="2"/>
@@ -132,7 +132,7 @@ const blood_blade = icf(`
 // ── 流派资源补全 v2（9 张）icons ──
 
 // 飞镖 (♦ common 武器)：4 把小飞刀分散
-const flying_darts = icf(`
+const dual_blades = icf(`
   <line x1="5" y1="5" x2="14" y2="14" stroke-width="1.8"/>
   <line x1="31" y1="5" x2="22" y2="14" stroke-width="1.8"/>
   <line x1="5" y1="31" x2="14" y2="22" stroke-width="1.8"/>
@@ -270,7 +270,7 @@ const leather_armor = ic(`
   <line x1="18" y1="5" x2="18" y2="21"/>
 `);
 
-const spike_armor = icf(`
+const thorn_armor = icf(`
   <path d="M10 30 L10 16 Q10 7 18 5 Q26 7 26 16 L26 30 Z" stroke-width="2"/>
   <line x1="13" y1="8" x2="11" y2="2"/>
   <line x1="18" y1="5" x2="18" y2="0"/>
@@ -718,17 +718,17 @@ const CAT_ICONS: Record<string, string> = {
 
 const CARD_ICONS: Record<string, string> = {
   // 武器
-  short_sword, long_sword, dagger, war_bow, twin_blades, warhammer,
-  battle_staff, chain_whip, berserker_blade, wizard_staff, repeating_bow,
+  short_sword, long_sword, dagger, war_bow, katana, giant_hammer,
+  battle_staff, chain_blade, berserker_blade, arcane_scepter, repeating_bow,
   // 新加武器 + EPIC 武器（之前漏 → 回退到通用 equipment 盾牌图标）
   raider, blood_blade, excalibur, divine_blade,
   // 流派资源补全 4 张
   vampire_fang, lifebloom_staff, knight_plate,
   // 流派资源补全 v2 (10 张)
-  flying_darts, shield_staff, wind_blade, everlast_fang, forbidden_scepter,
+  dual_blades, shield_staff, wind_blade, everlast_fang, forbidden_scepter,
   combat_belt, soulreaver_plate, immortal_plate, life_pouch, phantom_cloak,
   // 防具
-  round_shield, leather_armor, spike_armor, heavy_armor, mage_robe,
+  round_shield, leather_armor, thorn_armor, heavy_armor, mage_robe,
   cloak, full_plate, scale_mail, mind_armor,
   // EPIC 防具
   undying_heart,

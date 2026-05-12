@@ -187,6 +187,8 @@ export const STATUS_META: Record<string, StatusMeta> = {
   // ── 玩家「下次攻击命中附加 debuff」标记 ────────────────────
   next_atk_apply_poison: { name: "箭毒预备", desc: "下次攻击命中时给目标 +stacks 中毒。\n来源：道具 it_poison_dart「箭毒蛙」。", kind: "buff" },
   next_atk_apply_bleed:  { name: "抗凝血预备", desc: "下次攻击命中时给目标 +stacks 出血（持续 2 回合）。\n来源：道具 it_anticoag「抗凝血」。", kind: "buff" },
+  // ── 吸血盾蓄势 ──
+  draining_charge:   { name: "吸血盾蓄势", desc: "已累积 stacks 点延迟回血，下回合开始时全部回给玩家。\n来源：装备「吸血盾」受击触发。", kind: "buff" },
   // ── 敌人 buff intent 触发的 status（v6 buff dispatch 系统）──
   temp_armor:        { name: "临时护甲", desc: "本回合敌人护甲临时 +stacks。\n来源：敌人 buff intent self_armor（兽 血怒 / 巨怪 硬化）或 team_armor（人型 结阵）。", kind: "buff" },
   enemy_atk_buff:    { name: "强化", desc: "下次攻击 +stacks 伤害（一次性）。\n来源：敌人 buff intent next_attack_3（兽 嚎叫 / 人型 战吼 / 暗影 暗影遁）。", kind: "buff" },
@@ -379,14 +381,15 @@ export function isRareRace(race: EnemyRace): boolean {
   return race === "giant" || race === "dark";
 }
 
-// 卡牌稀有度 4 档：抽卡先 roll 稀有度，再从该档卡池里抽具体卡
-// common 普通 / rare 稀有 / super_rare 超稀有 / epic 史诗
-export type CardRarity = "common" | "rare" | "super_rare" | "epic";
+// 卡牌稀有度 5 档：common 起始牌库专属，rare+ / rare / SR / epic 进奖励池
+// common 普通 / rare 稀有 / rare_plus 稀有+（≈ 旧版"带钩子的 common"）/ super_rare 超稀有 / epic 史诗
+export type CardRarity = "common" | "rare" | "rare_plus" | "super_rare" | "epic";
 
-// 每档稀有度的中文显示名 + 颜色 token
+// 每档稀有度的中文显示名
 export const RARITY_NAMES: Record<CardRarity, string> = {
   common: "普通",
   rare: "稀有",
+  rare_plus: "稀有+",
   super_rare: "超稀有",
   epic: "史诗",
 };

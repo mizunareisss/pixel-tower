@@ -471,7 +471,7 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
   const charge = player.statuses.find(s => s.id === "calc_charge");
   if (charge && charge.stacks > 0) {
     let mul = 0;
-    if (player.weapons[0]?.defId === "wizard_staff") mul += 3;
+    if (player.weapons[0]?.defId === "arcane_scepter") mul += 3;
     // e_strategist / ec_focus：每非攻击牌 +N 伤，N 由 Lv 决定
     if (player.weaponEnchant === "e_strategist") mul += getEnchantParam(player, 0);
     if (player.weaponEnchant === "ec_focus")     mul += getEnchantParam(player, 0);
@@ -796,7 +796,7 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
     }
 
     // 链刃：对其他存活敌人溅射，叠加值按 stack 升级 3/4/5/6
-    if (weaponId === "chain_whip") {
+    if (weaponId === "chain_blade") {
       const splashByStack = [3, 4, 5, 6];
       const splash = splashByStack[Math.min(state.player.weapons.length, 4) - 1] ?? 3;
       for (const e of state.enemies) {
@@ -967,7 +967,7 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
 
 // 累积"非攻击牌已出张数"——为法师杖 / 算计 / 凝神 提供 buff stacks
 function accumulateCalcCharge(state: BattleState, _log: (m: string, k?: LogKind) => void) {
-  const hasWizardStaff = state.player.weapons[0]?.defId === "wizard_staff";
+  const hasWizardStaff = state.player.weapons[0]?.defId === "arcane_scepter";
   const e = state.player.weaponEnchant;
   const hasEnchantCharge = e === "e_strategist" || e === "ec_focus";
   if (!hasWizardStaff && !hasEnchantCharge) return;
@@ -1771,14 +1771,37 @@ function startNewPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) =>
     log(`守护契：+${heal} HP。`, "player");
   }
 
-  // 生命囊（♥ super_rare 防具）：每回合开始 +3/4/5/6 HP（与 leather_armor 叠加）
+  // 生命囊（♥ super_rare 防具）：每回合 +3% maxHP × stack（XLSX v6 改 % maxHP）
   if (state.player.armors[0]?.defId === "life_pouch" && state.player.vita < state.player.vitaMax) {
     const stack = Math.min(state.player.armors.length, 4);
-    const healByStack = [3, 4, 5, 6];
-    const heal = healByStack[stack - 1] ?? 3;
+    const heal = Math.max(1, Math.ceil(state.player.vitaMax * 0.03 * stack));
     const before = state.player.vita;
     state.player.vita = Math.min(state.player.vitaMax, state.player.vita + heal);
-    if (state.player.vita > before) log(`♥ 生命囊：+${state.player.vita - before} HP。`, "player");
+    if (state.player.vita > before) log(`♥ 生命囊：+${state.player.vita - before} HP（${stack * 3}% maxHP）。`, "player");
+  }
+
+  // 吸血盾（♥ rare+ 防具）：上回合累积的 draining_charge 在本回合开始全部回血
+  const drainCharge = state.player.statuses.find(s => s.id === "draining_charge");
+  if (drainCharge && drainCharge.stacks > 0 && state.player.vita < state.player.vitaMax) {
+    const heal = drainCharge.stacks;
+    const before = state.player.vita;
+    state.player.vita = Math.min(state.player.vitaMax, state.player.vita + heal);
+    if (state.player.vita > before) log(`吸血盾：延迟回血 +${state.player.vita - before} HP。`, "player");
+    state.player.statuses = state.player.statuses.filter(s => s.id !== "draining_charge");
+  }
+
+  // 重甲（♣ rare 防具）：每回合 30% 概率随机去 1 debuff
+  if (state.player.armors[0]?.defId === "heavy_armor" && Math.random() < 0.30) {
+    const debuffIds = ["poison", "burn", "bleed", "weak", "vulnerable", "silenced", "fear", "frozen"];
+    for (const id of debuffIds) {
+      const idx = state.player.statuses.findIndex(s => s.id === id);
+      if (idx >= 0) {
+        const removed = state.player.statuses[idx];
+        state.player.statuses.splice(idx, 1);
+        log(`重甲：清除「${removed.name}」（30% 触发）。`, "player");
+        break;
+      }
+    }
   }
 
   // 战狂血誓：每损 10% maxHP +M 永久攻击（cap +K）
