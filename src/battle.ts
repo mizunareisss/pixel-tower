@@ -1159,6 +1159,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   // ★ 闪避优先级 0：影子杀手（本回合 100% 闪避）
   if (state.player.statuses.find(s => s.id === "dodge_full_round")) {
     log("★♦ 影子杀手：本回合闪避！", "player");
+    if (typeof console !== "undefined") console.log("[MISS-DBG] source=dodge_full_round (♦ T3 大招)");
     state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
     return;
   }
@@ -1167,6 +1168,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   if (guarantee) {
     state.player.statuses = state.player.statuses.filter(s => s.id !== "guaranteed_dodge");
     log("★ 风步：必定闪避！", "player");
+    if (typeof console !== "undefined") console.log("[MISS-DBG] source=guaranteed_dodge (sk_step 风步)");
     onDodgeTriggered(state, undefined, log);
     state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
     return;
@@ -1177,6 +1179,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   const activeSuitD = getActiveSpecialty(state);
   if (dodgeChance > 0 && Math.random() * 100 < dodgeChance) {
     log(`★ 闪避！（${dodgeChance}%）`, "player");
+    if (typeof console !== "undefined") console.log(`[MISS-DBG] source=dodgeChance roll, chance=${dodgeChance}%`);
     onDodgeTriggered(state, attackerEnemy, log);
     state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
     return;
@@ -1189,6 +1192,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     const reductionPct = getEnchantParam(state.player, 1);
     if (reductionPct >= 100) {
       log("★ 符文护盾：本场首次受击完全免疫！", "player");
+      if (typeof console !== "undefined") console.log("[MISS-DBG] source=enc_runic_immune 100% (ec_runic Lv3+)");
       state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
       return;
     } else {
