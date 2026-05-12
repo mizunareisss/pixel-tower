@@ -6,19 +6,13 @@
 
 ---
 
-## ♠ 黑桃 / 莽夫流（攻击）（共 18 张）
+## ♠ 黑桃 / 莽夫流（攻击）（共 17 张）
 
 ### 攻击牌（1）
 
 | ID | 名称 | 稀有度 | 描述 |
 |---|---|---|---|
 | `atk_spade` | 攻击 ♠ | common | 打出武器一击（♠）。 |
-
-### 技能牌（1）
-
-| ID | 名称 | 稀有度 | 目标 | 描述 |
-|---|---|---|---|---|
-| `sk_pierce_strike` | 穿甲斩 | rare | self | 本回合下张攻击额外 +(3 + 楼层/3) pierce（楼层缩放）。 |
 
 ### 装备（11）
 
@@ -46,19 +40,13 @@
 | `p_insight` | 洞察 | 破甲 +1（每张） | spade |
 | `p_armor_break` | 破甲专家 | 破甲 +1（每张，pierce 总线） | spade |
 
-## ♦ 方块 / 暗影流（闪避 / 多段）（共 16 张）
+## ♦ 方块 / 暗影流（闪避 / 多段）（共 15 张）
 
 ### 攻击牌（1）
 
 | ID | 名称 | 稀有度 | 描述 |
 |---|---|---|---|
 | `atk_diamond` | 攻击 ♦ | common | 打出武器一击（♦）。 |
-
-### 技能牌（1）
-
-| ID | 名称 | 稀有度 | 目标 | 描述 |
-|---|---|---|---|---|
-| `sk_evasion_burst` | 灵巧爆发 | rare | self | 本回合闪避概率 +20%。 |
 
 ### 装备（10）
 
@@ -84,21 +72,13 @@
 | `p_overload` | 过载 | 每回合额外摸 1 张（每张，cap 4） | diamond |
 | `p_swift_strike` | 疾风斩 | 本场战斗第 1 回合首次攻击 +10%（每张） | diamond |
 
-## ♥ 红心 / 生机流（吸血 / 续航）（共 17 张）
+## ♥ 红心 / 生机流（吸血 / 续航）（共 14 张）
 
 ### 攻击牌（1）
 
 | ID | 名称 | 稀有度 | 描述 |
 |---|---|---|---|
 | `atk_heart` | 攻击 ♥ | common | 打出武器一击（♥）。 |
-
-### 技能牌（3）
-
-| ID | 名称 | 稀有度 | 目标 | 描述 |
-|---|---|---|---|---|
-| `sk_blood_pact` | 血契 | rare | self | 消耗 5 HP，本回合内所有攻击吸血 +20%。 |
-| `sk_drain_strike` | 汲血斩 | super_rare | single | 对目标造成其当前 HP 25% 的真实伤害（无视护甲），伤害全部转为你的 HP；下两回合无法出攻击牌。 |
-| `sk_drain_wave` | 吸血潮 | super_rare | all | 对全体敌人造 5% 各自 HP 上限 的直伤（向上取整），伤害总和转为你的 HP。 |
 
 ### 装备（9）
 
@@ -123,21 +103,13 @@
 | `p_resonance` | 同花共鸣 | 同花攻击 +5%（每张） | heart |
 | `p_blood_pact` | 血誓 | 受到伤害的 5% 转化为下次攻击 +X 伤（cap +6 / 张） | heart |
 
-## ♣ 梅花 / 法术流（护盾 / 控制）（共 17 张）
+## ♣ 梅花 / 法术流（护盾 / 控制）（共 14 张）
 
 ### 攻击牌（1）
 
 | ID | 名称 | 稀有度 | 描述 |
 |---|---|---|---|
 | `atk_club` | 攻击 ♣ | common | 打出武器一击（♣）。 |
-
-### 技能牌（3）
-
-| ID | 名称 | 稀有度 | 目标 | 描述 |
-|---|---|---|---|---|
-| `sk_arcane_burst` | 奥术爆裂 | rare | self | 本回合内每打出 1 张非攻击牌，下张攻击额外 +3 伤害。 |
-| `sk_mind_blade` | 心刃 | rare | single | 对目标造成本回合已出非攻击牌数 ×4 的直接伤害（最少 1）。 |
-| `sk_fear` | 恐惧术 | rare | single | 目标恐惧（下回合攻击伤害 -50%），持续 1 回合。 |
 
 ### 装备（9）
 
@@ -162,45 +134,52 @@
 | `p_lifetap` | 生命汲取 | 每回合 -3% 最大 HP，伤敌 = 最大 HP × 5%（每张） | club |
 | `p_coldblood` | 冷血 | 无 debuff 时攻击 +3%（每张） | club |
 
-## 无花色 / 通用（共 45 张）
+## 无花色 / 通用（共 52 张）
 
-### 技能牌（34）
+### 技能牌（41）
 
 | ID | 名称 | 稀有度 | 目标 | 描述 |
 |---|---|---|---|---|
-| `sk_poison_blade` | 毒刃 | common | single | 目标 +6 层中毒：每回合扣等同层数 HP（合计 21 伤害），每回合自动 -1 层。可叠加施放。 |
+| `sk_poison_blade` | 毒刃 | common | single | 目标 +3 层中毒：每回合扣 maxHP × 1% × 层数，每回合自动 -1 层。可叠加施放。 |
 | `sk_battle_cry` | 战吼 | common | self | 本回合所有攻击 +3 伤。 |
-| `sk_frenzy` | 激奋 | super_rare | self | 激活激奋：4 回合内每打出一张攻击牌后层数 +1，下次攻击额外 +2 × 层数伤害。 |
-| `sk_evasive` | 屏息 | common | self | 本回合受到的伤害 -50%（与闪避概率不同：屏息减半，闪避跳过整次）。 |
+| `sk_frenzy` | 激奋 | super_rare | self | 激活激奋：3 回合内每打出一张攻击牌后层数 +1，下次攻击额外 +2 × 层数伤害。 |
+| `sk_evasive` | 屏息 | common | self | 本回合受到的伤害 -30%。 |
 | `sk_silence` | 沉默 | common | single | 目标下回合的 buff / 技能类招式被跳过（保留攻击）。 |
-| `sk_freeze` | 冰冻 | common | single | 目标接下来 2 回合伤害 -50%。 |
+| `sk_freeze` | 冰冻 | rare | single | 目标接下来 2 回合伤害 -20%，多动时仅能 1 动。 |
 | `sk_rend` | 撕裂 | common | single | 永久降低目标 2 点护甲（直接扣层数，扣到 0 为止）。 |
-| `sk_focus` | 聚气 | common | self | 立刻摸 2 张牌。 |
-| `sk_aegis` | 铁壁 | common | self | 本回合获得护盾 (8 + 楼层) 吸收下次受到的伤害。 |
-| `sk_weakening_bolt` | 虚弱箭 | common | single | 目标虚弱（攻击 -3）持续 2 回合。 |
+| `sk_focus` | 聚气 | common | self | 立刻摸 1 张牌。 |
+| `sk_aegis` | 铁壁 | common | self | 本回合获得护盾 (2 + 楼层) 吸收下次受到的伤害。 |
+| `sk_weakening_bolt` | 虚弱箭 | common | single | 目标虚弱（攻击 -30%）持续 2 回合。 |
 | `sk_shadow_strike` | 影袭 | rare | self | 下一张攻击连击 2 次。 |
-| `sk_quick_draw` | 快摸 | common | self | 立刻摸 4 张牌。 |
+| `sk_quick_draw` | 快摸 | rare | self | 立刻摸 2 张牌。 |
 | `sk_counter_stance` | 反击姿态 | common | self | 本回合受击时反弹 50% 伤害给攻击者。 |
-| `sk_blast` | 爆裂术 | rare | single | 自损 5% 生命上限，对目标造成其当前 HP 20% 的直接伤害。 |
-| `sk_dbl_pummel` | 双重打击 | common | single | 对目标造成 (4 + 楼层) 直伤，并使其易伤 2 回合（受伤 +50%）。 |
+| `sk_blast` | 爆裂术 | rare | single | 自损 5% 生命上限（永久扣除当前血量和上限），对目标造成其当前 HP 20% 的直接伤害。 |
+| `sk_dbl_pummel` | 双重打击 | common | single | 对目标造成 (4 + 楼层) 直伤，并使其易伤 2 回合（受伤 +30%）。 |
 | `sk_dye` | 染色术 | rare | self | 本回合内所有攻击牌的花色视为你选定的花色。 |
-| `sk_chant` | 持咒 | super_rare | self | 本场战斗内所有攻击牌的花色永久视为你选定的花色（直到战斗结束）。 |
+| `sk_chant` | 持咒 | epic | self | 本场战斗内所有攻击牌的花色永久视为你选定的花色（直到战斗结束）。 |
 | `sk_attune` | 共鸣咒 | rare | single | 目标敌人花色变为你选定的花色，持续 4 回合后回归原色。 |
 | `sk_recolor` | 变色 | common | single | 目标花色变为你当前激活的花色（用来对位 ♦ 闪避反弹 / ♥ 吸血克制等机制）。 |
 | `sk_curse_blood` | 流血咒 | super_rare | single | 目标每回合开始扣当前 HP 的 5%（叠加），持续 5 回合。 |
 | `sk_rhythm` | 战斗节奏 | super_rare | self | 本回合内每打出 1 张牌额外摸 1 张（含技能/道具/装备）。 |
 | `sk_time_stop` | 时停 | super_rare | self | 敌人下一回合无法行动（中毒/燃烧/出血等持续效果仍结算）。 |
 | `sk_chain_bolt` | 链电 | rare | all | 对所有敌人造成各自 HP 上限 4% 的直伤（向上取整，下限 1）。 |
-| `sk_fire_wall` | 火墙 | rare | all | 所有敌人 +3 燃烧（每回合 -3，持续 3 回合）。 |
+| `sk_fire_wall` | 火墙 | rare | all | 所有敌人 +3 燃烧（每回合 -2% maxHP × 层数，持续 3 回合）。 |
 | `sk_shockwave` | 震荡波 | rare | all | 对所有敌人造成 (5 + 楼层) 点伤害。 |
 | `sk_group_curse` | 群体诅咒 | rare | all | 所有敌人下次伤害减半。 |
-| `sk_sonic` | 音波 | rare | all | 对所有敌人造成 (6 + 楼层) 点伤害。 |
-| `sk_mass_weak` | 群体虚弱 | rare | all | 所有敌人虚弱（攻击 -3）持续 2 回合。 |
-| `sk_lightning` | 闪电链 | rare | all | 随机对存活敌人造成 4 次 3 点伤害（每轮不重复，存活数 < 4 时下一轮重洗）。 |
-| `sk_curse_vortex` | 诅咒漩涡 | super_rare | all | 所有敌人 +(2 + 楼层/3) 中毒 + 易伤 2 回合。 |
+| `sk_mass_weak` | 群体虚弱 | rare | all | 所有敌人虚弱（攻击 -30%）持续 2 回合。 |
+| `sk_lightning` | 闪电链 | rare | all | 随机对存活敌人造成 4 次 3% maxHP 伤害（向上取整，下限 1；每轮不重复，存活数 < 4 时下一轮重洗）。 |
+| `sk_curse_vortex` | 诅咒漩涡 | epic | all | 所有敌人 +(2 + 楼层/3) 中毒 + 易伤 2 回合。 |
 | `sk_chroma_wave` | 混色波 | super_rare | all | 所有存活敌人花色随机重置（不会保持原花色）。 |
 | `sk_step` | 风步 | super_rare | self | 下一次受到伤害时必定闪避（一次性）。 |
 | `sk_pierce_shot` | 穿甲射 | rare | self | 下一次攻击牌无视目标全部护甲（一次性）。 |
+| `sk_blood_pact` | 血契 | rare | self | 消耗 5 HP，本回合内所有攻击吸血 +20%。 |
+| `sk_drain_strike` | 汲血斩 | super_rare | single | 对目标造成其当前 HP 25% 的真实伤害（无视护甲），伤害全部转为你的 HP；下两回合无法出攻击牌。 |
+| `sk_arcane_burst` | 奥术爆裂 | rare | self | 本回合内每打出 1 张非攻击牌，下张攻击额外 +3 伤害。 |
+| `sk_mind_blade` | 心刃 | rare | single | 对目标造成本回合已出非攻击牌数 ×4 的直接伤害（最少 1）。 |
+| `sk_pierce_strike` | 穿甲斩 | rare | self | 本回合下张攻击额外 +(3 + 楼层/3) pierce（楼层缩放）。 |
+| `sk_evasion_burst` | 灵巧爆发 | rare | self | 本回合闪避概率 +20%。 |
+| `sk_fear` | 恐惧术 | super_rare | single | 目标恐惧（下回合攻击伤害 -50%、+易伤、仅能 1 动），持续 1 回合。 |
+| `sk_drain_wave` | 吸血潮 | super_rare | all | 对全体敌人造 5% 各自 HP 上限 的直伤（向上取整），伤害总和转为你的 HP。 |
 | `sk_wrath` | 众神之怒 | epic | all | 所有存活敌人受到当前 HP 30% 直伤。 |
 
 ### 道具牌（11）

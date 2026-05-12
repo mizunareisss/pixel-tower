@@ -899,8 +899,8 @@ function removeOneDebuff(c: BattleContext) {
 
 const SK_POISON_BLADE: CardDef = {
   id: "sk_poison_blade", name: "毒刃", category: "skill", target: "single",
-  desc: "目标 +6 层中毒：每回合扣等同层数 HP（合计 21 伤害），每回合自动 -1 层。可叠加施放。",
-  onPlay: (c) => { addStatus(c.target, "poison", "中毒", 6); c.log(`${c.target.name} 中毒 +6。`, "player"); },
+  desc: "目标 +3 层中毒：每回合扣 maxHP × 1% × 层数，每回合自动 -1 层。可叠加施放。",
+  onPlay: (c) => { addStatus(c.target, "poison", "中毒", 3); c.log(`${c.target.name} 中毒 +3。`, "player"); },
 };
 
 const SK_BATTLE_CRY: CardDef = {
@@ -911,11 +911,11 @@ const SK_BATTLE_CRY: CardDef = {
 
 const SK_FRENZY: CardDef = {
   id: "sk_frenzy", name: "激奋", category: "skill", target: "self",
-  desc: "激活激奋：4 回合内每打出一张攻击牌后层数 +1，下次攻击额外 +2 × 层数伤害。",
+  desc: "激活激奋：3 回合内每打出一张攻击牌后层数 +1，下次攻击额外 +2 × 层数伤害。",
   onPlay: (c) => {
     if (!c.player.statuses.find(s => s.id === "frenzy")) {
-      addStatus(c.player, "frenzy", "激奋", 1, 4);  // duration 4 回合
-      c.log("激奋激活！下张攻击 +2（持续 4 回合）。", "player");
+      addStatus(c.player, "frenzy", "激奋", 1, 3);  // duration 3 回合
+      c.log("激奋激活！下张攻击 +2（持续 3 回合）。", "player");
     } else {
       c.log("激奋已激活，重复使用无效。", "system");
     }
@@ -924,8 +924,8 @@ const SK_FRENZY: CardDef = {
 
 const SK_EVASIVE: CardDef = {
   id: "sk_evasive", name: "屏息", category: "skill", target: "self",
-  desc: "本回合受到的伤害 -50%（与闪避概率不同：屏息减半，闪避跳过整次）。",
-  onPlay: (c) => { addStatus(c.player, "evasive", "屏息", 1, 1); c.log("屏息：本回合伤害减半。", "player"); },
+  desc: "本回合受到的伤害 -30%。",
+  onPlay: (c) => { addStatus(c.player, "evasive", "屏息", 1, 1); c.log("屏息：本回合伤害 -30%。", "player"); },
 };
 
 const SK_SILENCE: CardDef = {
@@ -936,8 +936,8 @@ const SK_SILENCE: CardDef = {
 
 const SK_FREEZE: CardDef = {
   id: "sk_freeze", name: "冰冻", category: "skill", target: "single",
-  desc: "目标接下来 2 回合伤害 -50%。",
-  onPlay: (c) => { addStatus(c.target, "frozen", "冰冻", 1, 2); c.log(`${c.target.name} 被冰冻 2 回合。`, "player"); },
+  desc: "目标接下来 2 回合伤害 -20%，多动时仅能 1 动。",
+  onPlay: (c) => { addStatus(c.target, "frozen", "冰冻", 1, 2); c.log(`${c.target.name} 被冰冻 2 回合（伤害 -20%、限 1 动）。`, "player"); },
 };
 
 const SK_REND: CardDef = {
@@ -954,17 +954,17 @@ const SK_REND: CardDef = {
 
 const SK_FOCUS: CardDef = {
   id: "sk_focus", name: "聚气", category: "skill", target: "self",
-  desc: "立刻摸 2 张牌。",
-  onPlay: (c) => { (c as any)._drawN = ((c as any)._drawN ?? 0) + 2; c.log("聚气：摸 2 张。", "player"); },
+  desc: "立刻摸 1 张牌。",
+  onPlay: (c) => { (c as any)._drawN = ((c as any)._drawN ?? 0) + 1; c.log("聚气：摸 1 张。", "player"); },
 };
 
 // 新增单体技能（凑 16 张单体）
 
 const SK_AEGIS: CardDef = {
   id: "sk_aegis", name: "铁壁", category: "skill", target: "self",
-  desc: "本回合获得护盾 (8 + 楼层) 吸收下次受到的伤害。",
+  desc: "本回合获得护盾 (2 + 楼层) 吸收下次受到的伤害。",
   onPlay: (c) => {
-    const shield = 8 + c.floor;
+    const shield = 2 + c.floor;
     addStatus(c.player, "shield_block", "护盾", shield);
     c.log(`铁壁：+${shield} 护盾。`, "player");
   },
@@ -974,8 +974,8 @@ const SK_AEGIS: CardDef = {
 
 const SK_WEAKENING_BOLT: CardDef = {
   id: "sk_weakening_bolt", name: "虚弱箭", category: "skill", target: "single",
-  desc: "目标虚弱（攻击 -3）持续 2 回合。",
-  onPlay: (c) => { addStatus(c.target, "weak", "虚弱", 3, 2); c.log(`${c.target.name} 虚弱 -3。`, "player"); },
+  desc: "目标虚弱（攻击 -30%）持续 2 回合。",
+  onPlay: (c) => { addStatus(c.target, "weak", "虚弱", 1, 2); c.log(`${c.target.name} 虚弱 -30%（2 回合）。`, "player"); },
 };
 
 const SK_SHADOW_STRIKE: CardDef = {
@@ -986,8 +986,8 @@ const SK_SHADOW_STRIKE: CardDef = {
 
 const SK_QUICK_DRAW: CardDef = {
   id: "sk_quick_draw", name: "快摸", category: "skill", target: "self",
-  desc: "立刻摸 4 张牌。",
-  onPlay: (c) => { (c as any)._drawN = ((c as any)._drawN ?? 0) + 4; c.log("快摸：摸 4 张。", "player"); },
+  desc: "立刻摸 2 张牌。",
+  onPlay: (c) => { (c as any)._drawN = ((c as any)._drawN ?? 0) + 2; c.log("快摸：摸 2 张。", "player"); },
 };
 
 const SK_COUNTER_STANCE: CardDef = {
@@ -998,19 +998,20 @@ const SK_COUNTER_STANCE: CardDef = {
 
 const SK_BLAST: CardDef = {
   id: "sk_blast", name: "爆裂术", category: "skill", target: "single",
-  desc: "自损 5% 生命上限，对目标造成其当前 HP 20% 的直接伤害。",
+  desc: "自损 5% 生命上限（永久扣除当前血量和上限），对目标造成其当前 HP 20% 的直接伤害。",
   onPlay: (c) => {
-    const selfDmg = Math.max(1, Math.round(c.player.vitaMax * 0.05));
-    c.player.vita = Math.max(0, c.player.vita - selfDmg);
-    c.log(`爆裂术：自损 ${selfDmg} HP（5% 上限）。`, "player");
-    const enemyDmg = Math.max(1, Math.round(c.target.hp * 0.20));  // v5 nerf：30% → 20%
+    const cut = Math.max(1, Math.round(c.player.vitaMax * 0.05));
+    c.player.vitaMax = Math.max(1, c.player.vitaMax - cut);  // 永久 -maxHP
+    c.player.vita = Math.max(0, Math.min(c.player.vita - cut, c.player.vitaMax));  // 当前 HP 同步降
+    c.log(`爆裂术：永久自损 ${cut} maxHP（当前 + 上限同时扣）。`, "player");
+    const enemyDmg = Math.max(1, Math.round(c.target.hp * 0.20));
     dealDirectDamage(c, c.target, enemyDmg);
   },
 };
 
 const SK_DBL_PUMMEL: CardDef = {
   id: "sk_dbl_pummel", name: "双重打击", category: "skill", target: "single",
-  desc: "对目标造成 (4 + 楼层) 直伤，并使其易伤 2 回合（受伤 +50%）。",
+  desc: "对目标造成 (4 + 楼层) 直伤，并使其易伤 2 回合（受伤 +30%）。",
   onPlay: (c) => {
     const dmg = 4 + c.floor;
     dealDirectDamage(c, c.target, dmg);
@@ -1116,7 +1117,7 @@ const SK_CHAIN_BOLT: CardDef = {
 
 const SK_FIRE_WALL: CardDef = {
   id: "sk_fire_wall", name: "火墙", category: "skill", target: "all",
-  desc: "所有敌人 +3 燃烧（每回合 -3，持续 3 回合）。",
+  desc: "所有敌人 +3 燃烧（每回合 -2% maxHP × 层数，持续 3 回合）。",
   onPlay: (c) => { for (const e of c.enemies) if (e.alive) addStatus(e, "burn", "燃烧", 3, 3); c.log("火墙：全体燃烧 +3。", "player"); },
 };
 
@@ -1137,27 +1138,20 @@ const SK_GROUP_CURSE: CardDef = {
 
 // 新增群攻技能（凑 8 张群攻）
 
-const SK_SONIC: CardDef = {
-  id: "sk_sonic", name: "音波", category: "skill", target: "all",
-  desc: "对所有敌人造成 (6 + 楼层) 点伤害。",
-  onPlay: (c) => {
-    const dmg = 6 + c.floor;
-    for (const e of c.enemies) if (e.alive) dealDirectDamage(c, e, dmg);
-  },
-};
+// sk_sonic 音波 — 已删除（用户决定）
 
 const SK_MASS_WEAK: CardDef = {
   id: "sk_mass_weak", name: "群体虚弱", category: "skill", target: "all",
-  desc: "所有敌人虚弱（攻击 -3）持续 2 回合。",
+  desc: "所有敌人虚弱（攻击 -30%）持续 2 回合。",
   onPlay: (c) => {
-    for (const e of c.enemies) if (e.alive) addStatus(e, "weak", "虚弱", 3, 2);
-    c.log("全体虚弱。", "player");
+    for (const e of c.enemies) if (e.alive) addStatus(e, "weak", "虚弱", 1, 2);
+    c.log("全体虚弱 -30%（2 回合）。", "player");
   },
 };
 
 const SK_LIGHTNING: CardDef = {
   id: "sk_lightning", name: "闪电链", category: "skill", target: "all",
-  desc: "随机对存活敌人造成 4 次 3 点伤害（每轮不重复，存活数 < 4 时下一轮重洗）。",
+  desc: "随机对存活敌人造成 4 次 3% maxHP 伤害（向上取整，下限 1；每轮不重复，存活数 < 4 时下一轮重洗）。",
   onPlay: (c) => {
     let pool: any[] = [];
     for (let i = 0; i < 4; i++) {
@@ -1171,7 +1165,10 @@ const SK_LIGHTNING: CardDef = {
       }
       if (pool.length === 0) break;
       const t = pool.shift()!;
-      if (t.alive) dealDirectDamage(c, t, 3);
+      if (t.alive) {
+        const dmg = Math.max(1, Math.ceil(t.maxHp * 0.03));
+        dealDirectDamage(c, t, dmg);
+      }
     }
   },
 };
@@ -1288,7 +1285,6 @@ const SK_PIERCE_SHOT: CardDef = {
 const SK_BLOOD_PACT: CardDef = {
   id: "sk_blood_pact", name: "血契", category: "skill", target: "self",
   desc: "消耗 5 HP，本回合内所有攻击吸血 +20%。",
-  attackSuit: undefined, defaultSuit: "heart",
   onPlay: (c) => {
     const cost = Math.min(5, c.player.vita - 1);
     if (cost <= 0) { c.log("血契：HP 不足。", "system"); return; }
@@ -1302,7 +1298,6 @@ const SK_BLOOD_PACT: CardDef = {
 const SK_DRAIN_STRIKE: CardDef = {
   id: "sk_drain_strike", name: "汲血斩", category: "skill", target: "single",
   desc: "对目标造成其当前 HP 25% 的真实伤害（无视护甲），伤害全部转为你的 HP；下两回合无法出攻击牌。",
-  defaultSuit: "heart",
   onPlay: (c) => {
     // nerf：35% → 25% 真伤；下回合不能攻击 → 下两回合（cost ↑↑）
     const dmg = Math.max(1, Math.floor(c.target.hp * 0.25));
@@ -1320,7 +1315,6 @@ const SK_DRAIN_STRIKE: CardDef = {
 const SK_ARCANE_BURST: CardDef = {
   id: "sk_arcane_burst", name: "奥术爆裂", category: "skill", target: "self",
   desc: "本回合内每打出 1 张非攻击牌，下张攻击额外 +3 伤害。",
-  defaultSuit: "club",
   onPlay: (c) => {
     addStatus(c.player, "arcane_burst", "奥术爆裂", 1, 1);
     c.log("奥术爆裂：本回合非攻击牌加成。", "player");
@@ -1331,7 +1325,6 @@ const SK_ARCANE_BURST: CardDef = {
 const SK_MIND_BLADE: CardDef = {
   id: "sk_mind_blade", name: "心刃", category: "skill", target: "single",
   desc: "对目标造成本回合已出非攻击牌数 ×4 的直接伤害（最少 1）。",
-  defaultSuit: "club",
   onPlay: (c) => {
     const charge = c.player.statuses.find(s => s.id === "calc_charge");
     const stacks = charge?.stacks ?? 0;
@@ -1365,7 +1358,6 @@ const IT_BREW: CardDef = {
 const SK_PIERCE_STRIKE: CardDef = {
   id: "sk_pierce_strike", name: "穿甲斩", category: "skill", target: "self",
   desc: "本回合下张攻击额外 +(3 + 楼层/3) pierce（楼层缩放）。",
-  defaultSuit: "spade",
   onPlay: (c) => {
     const bonus = 3 + Math.floor(c.floor / 3);
     addStatus(c.player, "pierce_bonus", "穿甲斩", bonus, 1);
@@ -1377,21 +1369,20 @@ const SK_PIERCE_STRIKE: CardDef = {
 const SK_EVASION_BURST: CardDef = {
   id: "sk_evasion_burst", name: "灵巧爆发", category: "skill", target: "self",
   desc: "本回合闪避概率 +20%。",
-  defaultSuit: "diamond",
   onPlay: (c) => {
     addStatus(c.player, "smoke_dodge", "烟雾", 20, 1);  // 复用烟雾闪避 status
     c.log("灵巧爆发：闪避 +20%。", "player");
   },
 };
 
-// ♣ 恐惧术：目标下回合攻击伤害 -50%
+// 恐惧术：目标下回合攻击 -50% + 易伤 + 限多动 1 动
 const SK_FEAR: CardDef = {
   id: "sk_fear", name: "恐惧术", category: "skill", target: "single",
-  desc: "目标恐惧（下回合攻击伤害 -50%），持续 1 回合。",
-  defaultSuit: "club",
+  desc: "目标恐惧（下回合攻击伤害 -50%、+易伤、仅能 1 动），持续 1 回合。",
   onPlay: (c) => {
     addStatus(c.target, "fear", "恐惧", 1, 1);
-    c.log(`${c.target.name} 陷入恐惧。`, "player");
+    addStatus(c.target, "vulnerable", "易伤", 1, 1);
+    c.log(`${c.target.name} 陷入恐惧（伤害减半 + 易伤 + 限 1 动）。`, "player");
   },
 };
 
@@ -1399,7 +1390,6 @@ const SK_FEAR: CardDef = {
 const SK_DRAIN_WAVE: CardDef = {
   id: "sk_drain_wave", name: "吸血潮", category: "skill", target: "all",
   desc: "对全体敌人造 5% 各自 HP 上限 的直伤（向上取整），伤害总和转为你的 HP。",
-  defaultSuit: "heart",
   onPlay: (c) => {
     let totalHeal = 0;
     for (const e of c.enemies) {
@@ -1896,7 +1886,6 @@ export const CARD_DB: Record<string, CardDef> = {
   sk_fire_wall: SK_FIRE_WALL,
   sk_shockwave: SK_SHOCKWAVE,
   sk_group_curse: SK_GROUP_CURSE,
-  sk_sonic: SK_SONIC,
   sk_mass_weak: SK_MASS_WEAK,
   sk_lightning: SK_LIGHTNING,
   sk_curse_vortex: SK_CURSE_VORTEX,
@@ -1966,22 +1955,26 @@ const _RARITY: Record<string, "rare" | "super_rare" | "epic"> = {
   life_pouch: "super_rare", phantom_cloak: "epic",  // ♥ super_rare / ♦ epic 防具
   spike_armor: "rare", scale_mail: "rare", full_plate: "rare",
   crown_of_vitality: "rare",
-  sk_blast: "rare", sk_shadow_strike: "rare", sk_dye: "rare", sk_attune: "rare", sk_chant: "super_rare",
+  sk_blast: "rare", sk_shadow_strike: "rare", sk_dye: "rare", sk_attune: "rare",
   sk_pierce_shot: "rare", sk_frenzy: "super_rare",
   it_regroup: "rare", it_elixir: "rare", it_smoke: "rare",
   sk_chain_bolt: "rare", sk_fire_wall: "rare", sk_shockwave: "rare",
-  sk_group_curse: "rare", sk_sonic: "rare", sk_mass_weak: "rare", sk_lightning: "rare",
+  sk_group_curse: "rare", sk_mass_weak: "rare", sk_lightning: "rare",
+  // 用户调整：sk_freeze / sk_quick_draw 升 rare；sk_fear 升 super_rare；sk_chant / sk_curse_vortex 升 epic
+  sk_freeze: "rare", sk_quick_draw: "rare",
+  sk_fear: "super_rare",
+  sk_chant: "epic", sk_curse_vortex: "epic",
   // 新增 11 张 rare/SR + 1 perk（PERK_POOL 也加）
   sk_blood_pact: "rare", sk_arcane_burst: "rare", sk_mind_blade: "rare",
   it_quick_draw: "rare", it_brew: "rare",
   sk_pierce_strike: "rare", sk_evasion_burst: "rare",
-  sk_fear: "rare", sk_drain_wave: "super_rare",
+  sk_drain_wave: "super_rare",
   it_pierce_oil: "rare",
   // ── Super Rare（强力 build 核心 / 大招）─────────────────
   berserker_blade: "super_rare", wizard_staff: "super_rare", repeating_bow: "super_rare",
   mage_robe: "super_rare", mind_armor: "super_rare",
   sk_curse_blood: "super_rare", sk_rhythm: "super_rare", sk_time_stop: "super_rare",
-  sk_curse_vortex: "super_rare", sk_chroma_wave: "super_rare",
+  sk_chroma_wave: "super_rare",
   sk_step: "super_rare",
   sk_drain_strike: "super_rare",
   // ── Epic（极稀有，一卡逆转乾坤）────────────────────────
@@ -2089,7 +2082,7 @@ export const REWARD_CARD_POOL_BASE = [
 // 第 3 关后追加的群攻技能（10 = 9 + 吸血潮）
 export const REWARD_CARD_POOL_AOE = [
   "sk_chain_bolt", "sk_fire_wall", "sk_shockwave", "sk_group_curse",
-  "sk_sonic", "sk_mass_weak", "sk_lightning", "sk_curse_vortex",
+  "sk_mass_weak", "sk_lightning", "sk_curse_vortex",
   "sk_chroma_wave",
   "sk_drain_wave",
 ];

@@ -433,11 +433,10 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     log("蓄力 ×2.5！", "player");
     player.statuses = player.statuses.filter(s => s.id !== "charged");
   }
-  // 玩家被虚弱：攻击伤害减少 stacks
-  const weak = player.statuses.find(s => s.id === "weak");
-  if (weak) {
-    dmg = Math.max(0, dmg - weak.stacks);
-    log(`虚弱 -${weak.stacks}。`, "enemy");
+  // 玩家被虚弱：攻击 ×0.7（-30%，固定，stacks 只决定 duration）
+  if (player.statuses.find(s => s.id === "weak")) {
+    dmg = Math.floor(dmg * 0.7);
+    log(`虚弱 -30%。`, "enemy");
   }
 
   // 特性 onDealDamage（单一 effect，按 stacks 缩放）
@@ -458,10 +457,10 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     if (aEff.postAttack) dmg = aEff.postAttack(ctx, dmg);
   }
 
-  // 敌人易伤：受击 ×1.5
+  // 敌人易伤：受击 ×1.3（-30%→+30% 受伤，stacks 只决定 duration）
   if (ctx.target.statuses.find(s => s.id === "vulnerable")) {
-    dmg = dmg * 1.5;
-    log(`${ctx.target.name} 易伤 ×1.5。`, "player");
+    dmg = dmg * 1.3;
+    log(`${ctx.target.name} 易伤 ×1.3。`, "player");
   }
 
   // 楼层倍率（武器 instance）
@@ -1191,10 +1190,10 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   let dmg = base;
   const ctx = getCtx(state, log);
 
-  // 易伤：受到伤害 ×1.5
+  // 易伤：受到伤害 ×1.3（系统级削弱：原 ×1.5）
   if (state.player.statuses.find(s => s.id === "vulnerable")) {
-    dmg = Math.floor(dmg * 1.5);
-    log("易伤：伤害 ×1.5。", "enemy");
+    dmg = Math.floor(dmg * 1.3);
+    log("易伤：伤害 ×1.3。", "enemy");
   }
 
   // 附魔减伤：守护契 / 重甲列阵 / 符文护盾
@@ -1250,10 +1249,10 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     if (eff?.onTakeDamage) dmg = eff.onTakeDamage(ctx, dmg, cnt);
   }
 
-  // 闪避姿态
+  // 闪避姿态：伤害 ×0.7（原 ×0.5 = 减半 → 现 -30%）
   if (state.player.statuses.find(s => s.id === "evasive")) {
-    dmg = Math.floor(dmg * 0.5);
-    log("闪避姿态：伤害减半。", "player");
+    dmg = Math.floor(dmg * 0.7);
+    log("闪避姿态：伤害 -30%。", "player");
   }
 
   // 护盾吸收
@@ -1373,17 +1372,19 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
 
     // DoT 结算（time_stop 也走，因为是定时伤害）
     // 敌方中毒
+    // 敌方中毒：每回合扣 maxHP × 1% × stacks（系统级改：原 stacks 固定值）
     const poison = enemy.statuses.find(s => s.id === "poison");
     if (poison && poison.stacks > 0) {
-      const dmg = poison.stacks;
-      damageEnemy(enemy, dmg, log, `${enemy.name} 中毒 -${dmg}。`);
+      const dmg = Math.max(1, Math.ceil(enemy.maxHp * 0.01 * poison.stacks));
+      damageEnemy(enemy, dmg, log, `${enemy.name} 中毒 -${dmg}（${poison.stacks}× 1% maxHP）。`);
       poison.stacks--;
       if (poison.stacks <= 0) enemy.statuses = enemy.statuses.filter(s => s.id !== "poison");
     }
-    // 敌方燃烧
+    // 敌方燃烧：每回合扣 maxHP × 2% × stacks（系统级改：原 stacks 固定值）
     const burn = enemy.statuses.find(s => s.id === "burn");
     if (burn && burn.stacks > 0 && burn.duration > 0) {
-      damageEnemy(enemy, burn.stacks, log, `${enemy.name} 燃烧 -${burn.stacks}。`);
+      const dmg = Math.max(1, Math.ceil(enemy.maxHp * 0.02 * burn.stacks));
+      damageEnemy(enemy, dmg, log, `${enemy.name} 燃烧 -${dmg}（${burn.stacks}× 2% maxHP）。`);
     }
     // 敌方出血（按当前 HP 百分比）
     const bleed = enemy.statuses.find(s => s.id === "bleed");
@@ -1433,19 +1434,19 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
     if (intent.type === "attack") {
       let value = intent.value;
       if (enemy.statuses.find(s => s.id === "frozen")) {
-        value = Math.floor(value * 0.5);
-        log(`${enemy.name} 被冰冻，伤害减半。`, "player");
+        value = Math.floor(value * 0.8);
+        log(`${enemy.name} 被冰冻，伤害 -20%。`, "player");
+        // 多动系统实装后：frozen 时本回合最多 1 动（TODO 在 enemyTurn 外层循环里读 frozen）
       }
       // 恐惧：攻击伤害 -50%（duration 1 回合）
       if (enemy.statuses.find(s => s.id === "fear")) {
         value = Math.floor(value * 0.5);
         log(`${enemy.name} 陷入恐惧，伤害减半。`, "player");
       }
-      // 敌人虚弱：攻击 -stacks
-      const eWeak = enemy.statuses.find(s => s.id === "weak");
-      if (eWeak) {
-        value = Math.max(0, value - eWeak.stacks);
-        log(`${enemy.name} 虚弱 -${eWeak.stacks}。`, "player");
+      // 敌人虚弱：攻击 ×0.7（-30% 固定，stacks 决定 duration）
+      if (enemy.statuses.find(s => s.id === "weak")) {
+        value = Math.floor(value * 0.7);
+        log(`${enemy.name} 虚弱 ×0.7。`, "player");
       }
       // 特能修饰：嗜血（HP <50% 攻击 +30%）
       if (enemy.eliteAbility === "嗜血" && enemy.hp < enemy.maxHp * 0.5) {
@@ -1615,18 +1616,21 @@ export function endPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) 
     log(`药剂：+${heal} HP。`, "player");
   }
 
+  // 玩家中毒：每回合扣 maxVita × 1% × stacks
   const playerPoison = state.player.statuses.find(s => s.id === "poison");
   if (playerPoison && playerPoison.stacks > 0) {
-    state.player.vita = Math.max(0, state.player.vita - playerPoison.stacks);
-    log(`你中毒 -${playerPoison.stacks} HP（暴击 -${Math.min(30, playerPoison.stacks * 3)}%）。`, "enemy");
+    const dmg = Math.max(1, Math.ceil(state.player.vitaMax * 0.01 * playerPoison.stacks));
+    state.player.vita = Math.max(0, state.player.vita - dmg);
+    log(`你中毒 -${dmg} HP（${playerPoison.stacks}× 1% maxHP；暴击 -${Math.min(30, playerPoison.stacks * 3)}%）。`, "enemy");
     playerPoison.stacks--;
     if (playerPoison.stacks <= 0) state.player.statuses = state.player.statuses.filter(s => s.id !== "poison");
   }
-  // 燃烧：扣 stacks，duration-1（纯扣血，无副作用）
+  // 玩家燃烧：每回合扣 maxVita × 2% × stacks
   const playerBurn = state.player.statuses.find(s => s.id === "burn");
   if (playerBurn && playerBurn.stacks > 0 && playerBurn.duration !== 0) {
-    state.player.vita = Math.max(0, state.player.vita - playerBurn.stacks);
-    log(`你燃烧 -${playerBurn.stacks} HP。`, "enemy");
+    const dmg = Math.max(1, Math.ceil(state.player.vitaMax * 0.02 * playerBurn.stacks));
+    state.player.vita = Math.max(0, state.player.vita - dmg);
+    log(`你燃烧 -${dmg} HP（${playerBurn.stacks}× 2% maxHP）。`, "enemy");
   }
   // 出血：扣 当前HP × 5% × stacks，duration-1；副作用：玩家闪避率 -stacks × 5%
   const playerBleed = state.player.statuses.find(s => s.id === "bleed");
