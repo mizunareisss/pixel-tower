@@ -344,13 +344,17 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
     else if (opts.floor === 11) ai = "cold_hunter"; // F11 精英复合「冷血猎手」
     else ai = "necro_hunter";                      // F12+ 精英复合「死灵猎手」
   } else if (tier === "boss") {
-    // F3/F6 普通 boss：基础 AI（每场随机一种，避免单调）
-    if (opts.floor <= 3) {
-      ai = ["berserker", "hunter", "builder"][Math.floor(Math.random() * 3)] as import("./types.ts").BossAIId;
-    } else if (opts.floor <= 6) {
+    // v6 节奏：boss 从 F6 起每关末必出，所以无 F3 boss
+    // F6-F8: 基础 AI（4 种随机）
+    // F10-F11 / F13+ 普通 boss: 复合 AI 池
+    // F9 / F12 由 buildFixedBoss 单独覆写
+    if (opts.floor <= 8) {
       ai = ["berserker", "hunter", "builder", "healer"][Math.floor(Math.random() * 4)] as import("./types.ts").BossAIId;
+    } else {
+      // F10+ 非固定 boss：选 5 基础 + 2 复合
+      ai = ["berserker", "hunter", "builder", "healer", "reactor", "dual_berserk", "fake_builder"]
+        [Math.floor(Math.random() * 7)] as import("./types.ts").BossAIId;
     }
-    // F9 / F12 boss 由 buildFixedBoss 单独覆写
   }
 
   // 暴击 / 闪避（按 tier × floor 线性，F12 达 cap）
@@ -492,7 +496,8 @@ export function buildFixedBoss(floor: number): EnemyState | null {
 }
 
 export function makeEnemyGroupsForFloor(floor: number): EnemyState[][] {
-  const isBossFloor = floor % 3 === 0;
+  // F6 起每关末场是 Boss（v6 节奏改革）
+  const isBossFloor = floor >= 6;
   const groups: EnemyState[][] = [];
 
   // 第 1 场：普通（偶尔多人小怪 — 40% 概率，让群伤技能更有用武之地）

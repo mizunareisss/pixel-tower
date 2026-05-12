@@ -152,7 +152,9 @@ export function generateFloorMap(floor: number): FloorMap {
   const theme = getFloorTheme(floor);
   const midLayers = getMidLayerCount(floor);
   const totalLayers = midLayers + 2;  // start + mid + last
-  const isBossFloor = floor % 3 === 0;
+  // F6 起每关末节点都是 Boss（之前每 3 关一个 boss，节奏太散）
+  // F1-5 关末仍是精英（热身期）
+  const isBossFloor = floor >= 6;
 
   // 1. 创建所有节点
   const nodes: MapNode[] = [];

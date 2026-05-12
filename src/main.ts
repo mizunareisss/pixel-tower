@@ -2010,8 +2010,17 @@ function renderMerchant(parent: HTMLElement) {
       const rarity = def.rarity ?? "common";
       const price = MERCHANT_PRICES[rarity];
       const cardEl = document.createElement("div");
-      cardEl.className = `merchant-card rarity-${rarity}`;
+      cardEl.className = `merchant-card rarity-${rarity} cat-${def.category}`;
+      // 花色：attack / equipment / perk 都可能带花色（skill / item 已取消花色）
+      const suit = def.attackSuit ?? def.equipSuit ?? def.defaultSuit;
+      if (suit) {
+        cardEl.setAttribute("data-suit", SUIT_SYMBOLS[suit]);
+      }
+      const suitTag = suit
+        ? `<span class="merchant-card-suit${isRedSuit(suit) ? " red" : ""}">${SUIT_SYMBOLS[suit]}</span>`
+        : "";
       cardEl.innerHTML = `
+        ${suitTag}
         <div class="merchant-card-name">${escapeHTML(def.name)}</div>
         <div class="merchant-card-rarity">${rarityLabel(rarity)}</div>
         <div class="merchant-card-desc">${escapeHTML(def.desc)}</div>
