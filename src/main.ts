@@ -9,8 +9,8 @@ import {
   pickStarterPerk,
   gamePlayCard,
   gameSelectTarget,
-  gameEndTurn,
-  gameEnemyFirstStrike,
+  gameEndTurnAnimated,
+  gameEnemyFirstStrikeAnimated,
   gameDiscardWeapons,
   gameDiscardArmors,
   pickRewardCard,
@@ -330,12 +330,16 @@ function showDiceRoll(finalRoll: number): void {
           if (r) r.style.display = "flex";
         }, 200);
         // 750ms 淡出 + 触发敌人先手（如果是双数）
-        setTimeout(() => {
+        setTimeout(async () => {
           overlay.classList.add("fade-out");
           handle.dispose();
           setTimeout(() => overlay.remove(), 240);
           if (enemyFirst) {
-            gameEnemyFirstStrike(state);
+            // 骰子双数敌人先手 — 用动画版本，让多动 boss 一击一击演给玩家看
+            await gameEnemyFirstStrikeAnimated(state, async () => {
+              render();
+              await sleep(900);
+            });
             render();
           }
         }, 750);
@@ -932,12 +936,16 @@ async function handleEndTurn() {
   await sleep(600);
   banner.remove();
 
-  // Apply actions; render triggers damage float animations
-  gameEndTurn(state);
+  // 应用敌人回合 — 多动 / DoT 之间间隔 900ms，让玩家看清每一击
+  // onStep 在每个敌人 step（DoT 段 / 每次行动）之后调用
+  await gameEndTurnAnimated(state, async () => {
+    render();
+    await sleep(900);
+  });
   render();
 
-  // Hold 900 ms so damage floats complete before "你的回合" flash
-  await sleep(900);
+  // Hold 700 ms so damage floats complete before "你的回合" flash
+  await sleep(700);
 
   handEl.classList.remove("is-processing");
   if (state.phase === "battle") {

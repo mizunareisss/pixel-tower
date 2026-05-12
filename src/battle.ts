@@ -1599,7 +1599,13 @@ function executeBuffIntent(
   }
 }
 
-function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
+// 敌人回合（生成器版本）— 每次 yield 表示一个"逻辑步"
+// 步划分：
+//   1. 每个敌人 DoT 结算后 yield 一次（让玩家看到 DoT 伤害）
+//   2. 每次 executeIntent 后 yield 一次（看清多动每一击）
+// UI 调用 endPlayerTurnAnimated 在每个 yield 之间 render + sleep；
+// 简单 sync 调用走 enemyTurn() 一次跑完（用于 simulator 等无 UI 场景）
+function* enemyTurnSteps(state: BattleState, log: (m: string, k?: LogKind) => void): Generator<void, void, void> {
   log("── 敌人回合 ──", "enemy");
   const skipActions = !!state.player.statuses.find(s => s.id === "time_stop");
   if (skipActions) log("时停：敌人无法行动！", "player");
@@ -1607,66 +1613,62 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
   for (const enemy of state.enemies) {
     if (!enemy.alive) continue;
 
-    // DoT 结算（time_stop 也走，因为是定时伤害）
-    // 敌方中毒
-    // 敌方中毒：每回合扣 maxHP × 1% × stacks（系统级改：原 stacks 固定值）
+    // DoT 结算（time_stop 也走）
+    let didDot = false;
     const poison = enemy.statuses.find(s => s.id === "poison");
     if (poison && poison.stacks > 0) {
       const dmg = Math.max(1, Math.ceil(enemy.maxHp * 0.01 * poison.stacks));
       damageEnemy(enemy, dmg, log, `${enemy.name} 中毒 -${dmg}（${poison.stacks}× 1% maxHP）。`);
       poison.stacks--;
       if (poison.stacks <= 0) enemy.statuses = enemy.statuses.filter(s => s.id !== "poison");
+      didDot = true;
     }
-    // 敌方燃烧：每回合扣 maxHP × 2% × stacks（系统级改：原 stacks 固定值）
     const burn = enemy.statuses.find(s => s.id === "burn");
     if (burn && burn.stacks > 0 && burn.duration > 0) {
       const dmg = Math.max(1, Math.ceil(enemy.maxHp * 0.02 * burn.stacks));
       damageEnemy(enemy, dmg, log, `${enemy.name} 燃烧 -${dmg}（${burn.stacks}× 2% maxHP）。`);
+      didDot = true;
     }
-    // 敌方出血（按当前 HP 百分比）
     const bleed = enemy.statuses.find(s => s.id === "bleed");
     if (bleed && bleed.stacks > 0 && bleed.duration > 0 && enemy.alive) {
       const dmg = Math.max(1, Math.floor(enemy.hp * 0.05 * bleed.stacks));
       damageEnemy(enemy, dmg, log, `${enemy.name} 出血 -${dmg}。`);
+      didDot = true;
     }
+    // 有 DoT 才插一个 step（让玩家先看到 DoT 伤害再看招式）
+    if (didDot) yield;
 
     if (!enemy.alive) continue;
-
-    // intent 行动（time_stop 跳过）
     if (skipActions) continue;
 
-    // 多动 AP：frozen / fear 限 1 动
     let maxActions = enemy.actionsPerTurn ?? 1;
     if (enemy.statuses.find(s => s.id === "frozen") || enemy.statuses.find(s => s.id === "fear")) {
       maxActions = Math.min(1, maxActions);
     }
 
-    const usedIndices: number[] = [];  // 本回合已选过的 intent idx（传给 AI 避免立即重复）
+    const usedIndices: number[] = [];
     for (let actionNum = 1; actionNum <= maxActions; actionNum++) {
       if (!enemy.alive) break;
 
-      // 选 intent
       const intentIdx = chooseEnemyIntentIdx(enemy, state, usedIndices);
       usedIndices.push(intentIdx);
       enemy.intentIndex = intentIdx;
       const intent = enemy.intents[intentIdx];
-      // 跟踪玩家已见过的招式（AI 敌人 info modal 只显示见过的）
       const seen = (enemy as any)._seenIntents as number[] ?? [];
       if (!seen.includes(intentIdx)) {
         seen.push(intentIdx);
         (enemy as any)._seenIntents = seen;
       }
 
-      // 多动 log 前缀（仅 maxActions > 1 时显示）
       const prefix = maxActions > 1 ? `[${actionNum}/${maxActions}] ` : "";
-
       executeIntent(state, enemy, intent, log, prefix);
 
+      yield;  // ★ 每次行动后 yield，UI 在此 render + 1s 延迟
       if (state.player.vita <= 0) break;
     }
   }
 
-  // ec_phalanx：本回合未受伤 → 下回合开局护盾 +K（K = idx 2；Lv1-5: 3/4/5/6/7）
+  // ec_phalanx：本回合未受伤 → 下回合开局护盾 +K
   if (state.player.weaponEnchant === "ec_phalanx" && !state.player.statuses.find(s => s.id === "took_damage_turn")) {
     const shieldGain = getEnchantParam(state.player, 2);
     const sh = state.player.statuses.find(s => s.id === "shield_block");
@@ -1674,7 +1676,6 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
     else state.player.statuses.push({ id: "shield_block", name: "护盾", stacks: shieldGain, duration: -1 });
     log(`重甲列阵：本回合未受伤，下回合开局护盾 +${shieldGain}。`, "player");
   }
-  // 清理"受伤"标记（duration=-1，需要手动清）
   state.player.statuses = state.player.statuses.filter(s => s.id !== "took_damage_turn");
 
   // 状态衰减
@@ -1682,7 +1683,6 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
     enemy.statuses = enemy.statuses
       .map(s => s.duration > 0 ? { ...s, duration: s.duration - 1 } : s)
       .filter(s => {
-        // 共鸣咒到期：恢复敌人原花色
         if (s.id === "attuned" && s.duration === 0 && enemy.originalSuit !== undefined) {
           enemy.suit = enemy.originalSuit;
           enemy.originalSuit = undefined;
@@ -1696,14 +1696,40 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
     .filter(s => s.duration !== 0);
 }
 
+// 同步运行 enemyTurnSteps（一次性跑完所有 yield）— 用于无 UI 场景（simulator 等）
+function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
+  const gen = enemyTurnSteps(state, log);
+  while (!gen.next().done) {}
+}
+
 // ─────────────────────────────────────────────────────────
 // 结束玩家回合
 // ─────────────────────────────────────────────────────────
 
 export function endPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
   if (state.phase !== "playerTurn") return;
-
   enemyTurn(state, log);
+  startNewPlayerTurn(state, log);
+}
+
+// UI 动画版本：每个敌人 step 后调 onStep（render + sleep），让玩家看清多动每一击
+export async function endPlayerTurnAnimated(
+  state: BattleState,
+  log: (m: string, k?: LogKind) => void,
+  onStep: () => Promise<void>,
+): Promise<void> {
+  if (state.phase !== "playerTurn") return;
+  const gen = enemyTurnSteps(state, log);
+  let res = gen.next();
+  while (!res.done) {
+    await onStep();
+    res = gen.next();
+  }
+  startNewPlayerTurn(state, log);
+}
+
+// 敌人回合结束 → 玩家新回合开始的所有副作用（共享给 sync + async 两种调用）
+function startNewPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) => void): void {
   if (checkBattleEnd(state, log)) return;
 
   // 新回合

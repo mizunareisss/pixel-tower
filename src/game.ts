@@ -38,6 +38,7 @@ import {
   newBattle,
   playCard,
   endPlayerTurn,
+  endPlayerTurnAnimated,
   selectTarget,
   drawCards,
   discardWeapons,
@@ -343,6 +344,17 @@ export function gameEndTurn(state: GameState) {
   }
 }
 
+// 动画版本：每个敌人 step 之间 await onStep（用于 UI 渲染 + 间隔）
+export async function gameEndTurnAnimated(state: GameState, onStep: () => Promise<void>): Promise<void> {
+  if (state.phase !== "battle" || !state.battle) return;
+  await endPlayerTurnAnimated(state.battle, logFn(state), onStep);
+  if (state.battle.phase === "won") onBattleWon(state);
+  else if (state.battle.phase === "lost") {
+    state.phase = "game_over";
+    pushLog(state, `第 ${state.floor} 关倒下。`, "lose");
+  }
+}
+
 // 骰子先手敌人 — 战斗开始骰子翻出双数时调用：敌人先打一击，但不推进 turn 计数
 // 实现：直接走 enemyTurn 但不增 turn / 不进 endPlayerTurn 的"摸牌" 流程
 export function gameEnemyFirstStrike(state: GameState) {
@@ -353,6 +365,19 @@ export function gameEnemyFirstStrike(state: GameState) {
   // turn 会变 2，但 log 里清楚是"敌人先手已结算"
   endPlayerTurn(state.battle, log);
   // 防止 enemyFirst 重复触发
+  state.battle.enemyFirst = false;
+  if (state.battle.phase === "lost") {
+    state.phase = "game_over";
+    pushLog(state, `第 ${state.floor} 关倒下。`, "lose");
+  }
+}
+
+// 骰子先手敌人 — 动画版本（含 step 间隔）
+export async function gameEnemyFirstStrikeAnimated(state: GameState, onStep: () => Promise<void>): Promise<void> {
+  if (state.phase !== "battle" || !state.battle) return;
+  if (!state.battle.enemyFirst) return;
+  const log = logFn(state);
+  await endPlayerTurnAnimated(state.battle, log, onStep);
   state.battle.enemyFirst = false;
   if (state.battle.phase === "lost") {
     state.phase = "game_over";
