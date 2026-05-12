@@ -179,6 +179,9 @@ export const STATUS_META: Record<string, StatusMeta> = {
   scepter_clubs:     { name: "禁忌权杖蓄势", desc: "本回合已出 ♣ 牌数（攻击/技能/道具/装备均计入）。本回合内攻击伤害 += stacks × (N 由禁忌权杖 stack 决定，1/2/2/3)。", kind: "buff" },
   took_damage_turn:  { name: "本回合受伤", desc: "（内部状态，玩家无需关注）本回合受到过伤害，用于附魔机制末段判断。", kind: "neutral" },
   calc_charge:       { name: "法术蓄能", desc: "本回合已出非攻击牌数。配合法师杖 / 算计附魔 / 凝神附魔 / 奥术爆裂 → 下次攻击 +X 直伤。", kind: "buff" },
+  // ── 玩家"下次攻击命中时附加 debuff"标记（箭毒蛙 / 抗凝血触发）──
+  next_atk_apply_poison: { name: "箭毒预备", desc: "下次攻击命中时给目标 +stacks 中毒。", kind: "buff" },
+  next_atk_apply_bleed:  { name: "抗凝血预备", desc: "下次攻击命中时给目标 +stacks 出血（持续 2 回合）。", kind: "buff" },
   // ── 敌人 buff intent 相关（v6）──
   temp_armor:        { name: "临时护甲", desc: "本回合敌人护甲临时 +stacks（自身或全队 buff 触发）。", kind: "buff" },
   enemy_atk_buff:    { name: "强化", desc: "下次攻击 +stacks 伤害（敌人 buff intent 蓄势）。", kind: "buff" },

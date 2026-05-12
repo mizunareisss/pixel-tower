@@ -134,13 +134,13 @@
 | `p_lifetap` | 生命汲取 | 每回合 -2% 最大 HP（固定），伤敌 = 最大 HP × 5%（每张） | club |
 | `p_coldblood` | 冷血 | 无 debuff 时攻击 +8%（每张） | club |
 
-## 无花色 / 通用（共 54 张）
+## 无花色 / 通用（共 59 张）
 
-### 技能牌（41）
+### 技能牌（44）
 
 | ID | 名称 | 稀有度 | 目标 | 描述 |
 |---|---|---|---|---|
-| `sk_poison_blade` | 毒刃 | common | single | 目标 +3 层中毒：每回合扣 maxHP × 1% × 层数，每回合自动 -1 层。可叠加施放。 |
+| `sk_poison_blade` | 毒刃 | common | single | 目标 +2 层中毒：每回合扣 maxHP × 1% × 层数，每回合自动 -1 层。可叠加施放。 |
 | `sk_battle_cry` | 战吼 | common | self | 本回合所有攻击 +3 伤。 |
 | `sk_frenzy` | 激奋 | super_rare | self | 激活激奋：3 回合内每打出一张攻击牌后层数 +1，下次攻击额外 +2 × 层数伤害。 |
 | `sk_evasive` | 屏息 | common | self | 本回合受到的伤害 -30%。 |
@@ -180,9 +180,12 @@
 | `sk_evasion_burst` | 灵巧爆发 | rare | self | 本回合闪避概率 +20%。 |
 | `sk_fear` | 恐惧术 | super_rare | single | 目标恐惧（下回合攻击伤害 -50%、+易伤、仅能 1 动），持续 1 回合。 |
 | `sk_drain_wave` | 吸血潮 | super_rare | all | 对全体敌人造 5% 各自 HP 上限 的直伤（向上取整），伤害总和转为你的 HP。 |
+| `sk_blade_slash` | 利刃 | common | single | 目标 +2 层出血（持续 2 回合，每回合扣当前 HP × 5% × 层数）。 |
+| `sk_toxic_blood` | 毒血 | super_rare | all | 全体敌人 +3 层中毒（每回合扣 maxHP × 1% × 层数）。 |
+| `sk_phantom_edge` | 神锋无影 | super_rare | all | 全体敌人 +3 层出血（持续 3 回合，每回合扣当前 HP × 5% × 层数）。 |
 | `sk_wrath` | 众神之怒 | epic | all | 所有存活敌人受到当前 HP 30% 直伤。 |
 
-### 道具牌（13）
+### 道具牌（15）
 
 | ID | 名称 | 稀有度 | 目标 | 描述 |
 |---|---|---|---|---|
@@ -199,6 +202,8 @@
 | `it_echo` | 复读机 | epic | self | 本回合内，每出 1 张非攻击牌，复制一份回手牌，回合结束后失效。 |
 | `it_antidote` | 解毒剂 | common | self | 清除自身中毒状态。 |
 | `it_energy` | 活力剂 | common | self | 清除自身易伤、虚弱状态。 |
+| `it_poison_dart` | 箭毒蛙 | rare | self | 使用后下一次攻击命中时，给敌人 +2 中毒（持续 2 回合）。 |
+| `it_anticoag` | 抗凝血 | rare | self | 使用后下一次攻击命中时，给敌人 +2 出血（持续 2 回合）。 |
 
 ---
 

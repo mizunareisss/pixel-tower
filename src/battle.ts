@@ -747,6 +747,25 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
       target.alive = false;
       log(`★ 击败 ${target.name}！`, "win");
     }
+    // 箭毒蛙 / 抗凝血：第一次命中时附加 debuff，然后消耗 marker
+    const poisonMark = state.player.statuses.find(s => s.id === "next_atk_apply_poison");
+    if (poisonMark) {
+      const stk = poisonMark.stacks;
+      const ex = target.statuses.find(s => s.id === "poison");
+      if (ex) ex.stacks += stk;
+      else target.statuses.push({ id: "poison", name: "中毒", stacks: stk, duration: -1 });
+      state.player.statuses = state.player.statuses.filter(s => s.id !== "next_atk_apply_poison");
+      log(`🐸 箭毒蛙触发：${target.name} +${stk} 中毒。`, "player");
+    }
+    const bleedMark = state.player.statuses.find(s => s.id === "next_atk_apply_bleed");
+    if (bleedMark) {
+      const stk = bleedMark.stacks;
+      const ex = target.statuses.find(s => s.id === "bleed");
+      if (ex) { ex.stacks += stk; ex.duration = Math.max(ex.duration, 2); }
+      else target.statuses.push({ id: "bleed", name: "出血", stacks: stk, duration: 2 });
+      state.player.statuses = state.player.statuses.filter(s => s.id !== "next_atk_apply_bleed");
+      log(`💧 抗凝血触发：${target.name} +${stk} 出血（2 回合）。`, "player");
+    }
 
     // 血契 buff：本回合内攻击吸血额外 +20%（独立于 p_vampire）
     if (dmg > 0 && state.player.statuses.find(s => s.id === "blood_pact")) {

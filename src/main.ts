@@ -1294,6 +1294,8 @@ const STATUS_ICONS: Record<string, string> = {
   no_skill: "🔒", pierce_bonus: "🎯", pierce_perm: "🛢",
   // 控制 / 累积
   calc_charge: "🧮", "blood_pact_charge": "💢",
+  // 箭毒蛙 / 抗凝血标记
+  next_atk_apply_poison: "🐸", next_atk_apply_bleed: "💧",
 };
 
 // 防御类大芯片（HP 行右侧）— 把分散的护盾/闪避/免疫值统一展示

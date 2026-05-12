@@ -899,8 +899,8 @@ function removeOneDebuff(c: BattleContext) {
 
 const SK_POISON_BLADE: CardDef = {
   id: "sk_poison_blade", name: "毒刃", category: "skill", target: "single",
-  desc: "目标 +3 层中毒：每回合扣 maxHP × 1% × 层数，每回合自动 -1 层。可叠加施放。",
-  onPlay: (c) => { addStatus(c.target, "poison", "中毒", 3); c.log(`${c.target.name} 中毒 +3。`, "player"); },
+  desc: "目标 +2 层中毒：每回合扣 maxHP × 1% × 层数，每回合自动 -1 层。可叠加施放。",
+  onPlay: (c) => { addStatus(c.target, "poison", "中毒", 2); c.log(`${c.target.name} 中毒 +2。`, "player"); },
 };
 
 const SK_BATTLE_CRY: CardDef = {
@@ -1082,6 +1082,16 @@ const SK_CURSE_BLOOD: CardDef = {
   },
 };
 
+// 利刃（common）：目标 +2 层出血，持续 2 回合
+const SK_BLADE_SLASH: CardDef = {
+  id: "sk_blade_slash", name: "利刃", category: "skill", target: "single",
+  desc: "目标 +2 层出血（持续 2 回合，每回合扣当前 HP × 5% × 层数）。",
+  onPlay: (c) => {
+    addStatus(c.target, "bleed", "出血", 2, 2);
+    c.log(`${c.target.name} +2 出血。`, "player");
+  },
+};
+
 // 战斗节奏：本回合内每打 1 张牌额外摸 1 张
 const SK_RHYTHM: CardDef = {
   id: "sk_rhythm", name: "战斗节奏", category: "skill", target: "self",
@@ -1186,6 +1196,26 @@ const SK_CURSE_VORTEX: CardDef = {
   },
 };
 
+// 毒血（SR）：全体 +3 中毒
+const SK_TOXIC_BLOOD: CardDef = {
+  id: "sk_toxic_blood", name: "毒血", category: "skill", target: "all",
+  desc: "全体敌人 +3 层中毒（每回合扣 maxHP × 1% × 层数）。",
+  onPlay: (c) => {
+    for (const e of c.enemies) if (e.alive) addStatus(e, "poison", "中毒", 3);
+    c.log("毒血：全体 +3 中毒。", "player");
+  },
+};
+
+// 神锋无影（SR）：全体 +3 出血，持续 3 回合
+const SK_PHANTOM_EDGE: CardDef = {
+  id: "sk_phantom_edge", name: "神锋无影", category: "skill", target: "all",
+  desc: "全体敌人 +3 层出血（持续 3 回合，每回合扣当前 HP × 5% × 层数）。",
+  onPlay: (c) => {
+    for (const e of c.enemies) if (e.alive) addStatus(e, "bleed", "出血", 3, 3);
+    c.log("神锋无影：全体 +3 出血。", "player");
+  },
+};
+
 // 混色波：群体随机改色（多敌人战的洗牌神器）
 const SK_CHROMA_WAVE: CardDef = {
   id: "sk_chroma_wave", name: "混色波", category: "skill", target: "all",
@@ -1215,7 +1245,7 @@ const IT_PURIFY: CardDef = {
   desc: "清除自身所有负面状态。",
   onPlay: (c) => {
     // 保留正向 buff / shield / 武器 buff，其他全清
-    const KEEP = new Set(["battle_cry", "double_strike", "evasive", "shield_block", "reflect", "busi_triggered", "weapon_buff", "sharpened", "shadow_double", "counter_stance", "frenzy", "charged", "knight_charge", "scepter_clubs", "combat_rhythm", "time_stop", "smoke_dodge", "guaranteed_dodge", "pierce_next", "phantom_charge", "echo", "dodge_full_round", "triple_strike", "phalanx_dr", "swift_dodge_temp", "enc_runic_immune", "enc_dot_immune", "warblood_perm_atk", "blood_pact", "arcane_burst", "brew_regen", "pierce_bonus", "pierce_perm", "calc_charge", "blood_pact_charge", "battle_cry"]);
+    const KEEP = new Set(["battle_cry", "double_strike", "evasive", "shield_block", "reflect", "busi_triggered", "weapon_buff", "sharpened", "shadow_double", "counter_stance", "frenzy", "charged", "knight_charge", "scepter_clubs", "combat_rhythm", "time_stop", "smoke_dodge", "guaranteed_dodge", "pierce_next", "phantom_charge", "echo", "dodge_full_round", "triple_strike", "phalanx_dr", "swift_dodge_temp", "enc_runic_immune", "enc_dot_immune", "warblood_perm_atk", "blood_pact", "arcane_burst", "brew_regen", "pierce_bonus", "pierce_perm", "calc_charge", "blood_pact_charge", "next_atk_apply_poison", "next_atk_apply_bleed"]);
     const before = c.player.statuses.length;
     c.player.statuses = c.player.statuses.filter(s => KEEP.has(s.id));
     if (c.player.statuses.length < before) c.log(`净化药水：清除 ${before - c.player.statuses.length} 个负面状态。`, "player");
@@ -1405,6 +1435,26 @@ const SK_DRAIN_WAVE: CardDef = {
       c.player.vita = Math.min(c.player.vitaMax, c.player.vita + totalHeal);
       if (c.player.vita > before) c.log(`吸血潮：回 ${c.player.vita - before} HP。`, "player");
     }
+  },
+};
+
+// 道具：箭毒蛙 — 下次攻击命中给目标 +2 中毒
+const IT_POISON_DART: CardDef = {
+  id: "it_poison_dart", name: "箭毒蛙", category: "item", target: "self",
+  desc: "使用后下一次攻击命中时，给敌人 +2 中毒（持续 2 回合）。",
+  onPlay: (c) => {
+    addStatus(c.player, "next_atk_apply_poison", "箭毒预备", 2, -1);
+    c.log("箭毒蛙就绪：下次攻击附加中毒 +2。", "player");
+  },
+};
+
+// 道具：抗凝血 — 下次攻击命中给目标 +2 出血（持续 2 回合）
+const IT_ANTICOAG: CardDef = {
+  id: "it_anticoag", name: "抗凝血", category: "item", target: "self",
+  desc: "使用后下一次攻击命中时，给敌人 +2 出血（持续 2 回合）。",
+  onPlay: (c) => {
+    addStatus(c.player, "next_atk_apply_bleed", "抗凝血预备", 2, -1);
+    c.log("抗凝血就绪：下次攻击附加出血 +2。", "player");
   },
 };
 
@@ -1957,6 +2007,11 @@ export const CARD_DB: Record<string, CardDef> = {
   it_echo: IT_ECHO,
   it_antidote: IT_ANTIDOTE,
   it_energy: IT_ENERGY,
+  it_poison_dart: IT_POISON_DART,
+  it_anticoag: IT_ANTICOAG,
+  sk_blade_slash: SK_BLADE_SLASH,
+  sk_toxic_blood: SK_TOXIC_BLOOD,
+  sk_phantom_edge: SK_PHANTOM_EDGE,
   // Epic 卡（5 张）
   excalibur: EXCALIBUR,
   divine_blade: DIVINE_BLADE,
@@ -2003,8 +2058,12 @@ const _RARITY: Record<string, "rare" | "super_rare" | "epic"> = {
   sk_pierce_shot: "rare", sk_frenzy: "super_rare",
   it_regroup: "rare", it_elixir: "rare", it_smoke: "rare",
   // 用户调整：it_purify common→rare、it_bomb common→rare
-  // 新道具 it_antidote / it_energy 默认 common（不需要进 _RARITY）
+  // 新道具 it_antidote / it_energy / sk_blade_slash 默认 common（不需要进 _RARITY）
   it_purify: "rare", it_bomb: "rare",
+  // 新增 rare 道具：箭毒蛙 / 抗凝血
+  it_poison_dart: "rare", it_anticoag: "rare",
+  // 新增 SR 群体 DOT 技能：毒血 / 神锋无影
+  sk_toxic_blood: "super_rare", sk_phantom_edge: "super_rare",
   sk_chain_bolt: "rare", sk_fire_wall: "rare", sk_shockwave: "rare",
   sk_group_curse: "rare", sk_mass_weak: "rare", sk_lightning: "rare",
   // 用户调整：sk_freeze / sk_quick_draw 升 rare；sk_fear 升 super_rare；sk_chant / sk_curse_vortex 升 epic
@@ -2106,6 +2165,8 @@ export const REWARD_CARD_POOL_BASE = [
   "it_heal", "it_purify", "it_whetstone", "it_regroup", "it_bomb", "it_elixir", "it_smoke",
   "it_quick_draw", "it_brew", "it_pierce_oil",
   "it_antidote", "it_energy",
+  "it_poison_dart", "it_anticoag",
+  "sk_blade_slash",
   // 流派资源补全 v1（3 张）
   "vampire_fang",       // ♥ rare 武器
   "lifebloom_staff",    // ♥ super_rare 武器
@@ -2131,6 +2192,7 @@ export const REWARD_CARD_POOL_BASE = [
 export const REWARD_CARD_POOL_AOE = [
   "sk_chain_bolt", "sk_fire_wall", "sk_shockwave", "sk_group_curse",
   "sk_mass_weak", "sk_lightning", "sk_curse_vortex",
+  "sk_toxic_blood", "sk_phantom_edge",
   "sk_chroma_wave",
   "sk_drain_wave",
 ];

@@ -12,3 +12,5 @@ it_pierce_oil,穿甲油,,rare,self,3 回合内，武器 +3 pierce。
 it_echo,复读机,,epic,self,本回合内，每出 1 张非攻击牌，复制一份回手牌，回合结束后失效。
 it_antidote,解毒剂,,common,self,清除自身中毒状态。
 it_energy,活力剂,,common,self,清除自身易伤、虚弱状态。
+it_poison_dart,箭毒蛙,,rare,self,使用后下一次攻击命中时，给敌人 +2 中毒（持续 2 回合）。
+it_anticoag,抗凝血,,rare,self,使用后下一次攻击命中时，给敌人 +2 出血（持续 2 回合）。
