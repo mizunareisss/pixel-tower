@@ -90,18 +90,27 @@ python3 -m http.server 5180
 # http://localhost:5180/prototypes/scene-f1-outside.html
 ```
 
-## 部署
+## 部署（Netlify suitspire 站）
 
 **正常情况**：push 到 `main` → GitHub → Netlify 自动构建部署。
 
-**当前状态**：Netlify 账号 build credit 超额，自动部署会 fail。要发版改用 CLI 两步走：
+**当前状态**：Netlify 账号 build credit 超额，自动部署会 fail。要发版走 **两步走 + 用户手动 publish**：
+
 ```bash
+# Claude 做的：
 npm run build
-netlify deploy --dir=dist                                  # 上传 draft
-# 复制输出里的 deploy ID（形如 6a02e280...）
-netlify api restoreSiteDeploy --data='{"site_id":"35081b0a-9da8-4bde-8a10-36593411da69","deploy_id":"<deploy_id>"}'
-# Netlify CLI 需要先 netlify link --id 35081b0a-9da8-4bde-8a10-36593411da69
+netlify deploy --dir=dist  # 上传 draft，输出里会给一个 deploy 链接
 ```
+
+然后 **把 deploy 详情链接发给用户**，让用户**亲自**点一次 `Publish deploy` 按钮就上线：
+
+```
+https://app.netlify.com/projects/suitspire/deploys/<deploy_id>
+```
+
+⚠ **不要**用 `netlify api restoreSiteDeploy` 自己 promote。亲测会卡死整个 CLI 进程，还把 Netlify API 打成 429 rate limit。用户点一下 = 1 秒搞定，Claude 别自己折腾。
+
+CLI 首次跑前要 `netlify link --id 35081b0a-9da8-4bde-8a10-36593411da69`（一次性，已经做过）。
 
 prototypes 不会被 build，朋友改 prototype **不影响**线上游戏。
 
