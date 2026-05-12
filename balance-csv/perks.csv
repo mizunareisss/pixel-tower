@@ -1,0 +1,18 @@
+﻿id,name,default_suit,rarity,unit_desc,full_desc
+p_bleed,流血,spade,common,武器伤害 +5%（每张）,每张：武器伤害 +5%（叠加无上限）。
+p_dodge,闪避,diamond,common,闪避 +5%（每张，cap 50%）,每张：完全闪避概率 +5%（叠加上限 50%）。
+p_regen,再生,heart,common,每回合 +3% 最大 HP（每张）,每张：每回合回最大 HP × 3%（向下取整，最少 1）。
+p_crit,暴击,diamond,common,暴击率 +8%（每张，×2 暴击伤；中毒削减）,每张：暴击率 +8%（暴击伤害 ×2，可叠到 100%）。中毒会削减暴击率。
+p_tough,强壮,club,common,受击伤害 -3%（每张，cap 30%）,每张：受击 -3%（叠加 cap 30%）。
+p_vampire,吸血,heart,common,造伤的 5% 回血（每张）,每张：造伤回血 5%（向下取整）。
+p_thorns,荆棘,club,common,反伤 = 受到伤害的 10%（每张，cap 80%）,每张：反伤 = 受到伤害的 10%（上限 80%）。
+p_iron_will,钢铁意志,spade,common,HP ≤ 30% 时受击 -8%（每张）,每张：HP ≤ 30% 时受击 -8%。
+p_lifetap,生命汲取,club,common,每回合 -2% 最大 HP（固定），伤敌 = 最大 HP × 5%（每张）,每张：每回合自损 2% 最大 HP（固定，不随 stack 叠加），伤敌 = 玩家最大 HP × 5%（按 stack 叠加，皆最少 1）。
+p_overload,过载,diamond,common,每回合额外摸 1 张（每张，cap 4）,每张：每回合额外摸 1 张牌（上限每回合 4 张）。
+p_executioner,处刑,spade,common,"HP ≤ 30% 敌人攻击 +10%（每张, cap 30%）",每张：对 HP ≤ 30% 敌人攻击 +10%（cap 30%）。
+p_resonance,同花共鸣,heart,common,同花攻击 +8%（每张）,每张：同花攻击（攻击牌花色 == 敌人花色）伤害 +8%。
+p_coldblood,冷血,club,common,无 debuff 时攻击 +8%（每张）,每张：无负面状态时攻击 +8%。
+p_insight,力量,spade,common,"同色不同花 +8%（每张, cap 25%）",每张：攻击同色不同花的敌人 +8%（cap 25%）。
+p_swift_strike,疾风斩,diamond,common,本场战斗第 1 回合首次攻击 +20%（每张）,每张：本场战斗第 1 回合首次攻击 +20%。
+p_blood_pact,血誓,heart,common,受到伤害的 5% 转化为下次攻击 +X 伤（cap +6 / 张）,每张：受到伤害的 5% 转化为下次攻击 +X 伤（cap +6 / 张）。
+p_armor_break,破甲,spade,common,破甲 +1（每张，pierce 总线）,每张：所有攻击 +1 pierce。

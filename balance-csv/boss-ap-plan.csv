@@ -1,0 +1,10 @@
+﻿tier,floor_range,ap_per_turn,notes
+普通敌人,all,1,保持不变
+精英,F1-5,1,热身期
+精英,F6-10,2,中期施压
+精英,F11+,3,后期 3 动（用户决定）
+普通 Boss,F3,2,首个 boss，2 动入门
+普通 Boss,F6,2,
+固定 Boss,F9 亡灵之主,3,
+固定 Boss,F12 无相之主,4,★ 终末，4 动（最高）
+普通 Boss,F15+,3,后期通用 boss

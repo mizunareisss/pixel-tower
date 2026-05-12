@@ -43,14 +43,15 @@ import {
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
 import { ABILITY_DESCS } from "./enemies.ts";
-import { getCurrentDodgeChance, getSuitAffinity, suitTier, getActiveSpecialty, getDisplayedSpecialty, getTiedSpecialties } from "./battle.ts";
+import { getCurrentDodgeChance, getSuitAffinity, suitTier, getActiveSpecialty, getDisplayedSpecialty, getTiedSpecialties, getEnemyCritChance, getEnemyDodgeChance } from "./battle.ts";
 import {
   EVENT_META, MERCHANT_PRICES, MERCHANT_SELL_PRICES, GAMBLER_OPTIONS, SHRINE_OPTIONS, CHEST_TRAP_DESCS,
 } from "./events.ts";
 import type { EventId } from "./events.ts";
 import { NODE_TYPE_META, getReachableNodes } from "./map.ts";
 import { SUIT_SYMBOLS, SUITS, isRedSuit, FIGHTS_PER_FLOOR, STATUS_META, RACES, FRAGMENT_NAMES, FRAGMENT_ICONS,
-  ENCHANTS, ENCHANT_NAMES, ENCHANT_DESCS, ENCHANT_RECIPES, RACE_NAMES, isRareRace,
+  ENCHANTS, ENCHANT_NAMES, ENCHANT_RECIPES, RACE_NAMES, isRareRace,
+  ENCHANT_MAX_LEVEL, getEnchantDescAt,
   SUIT_TIER_NAMES, SUIT_TIER_DESCS, SUIT_THEMES } from "./types.ts";
 import type { EnemyRace, Suit, EnchantId } from "./types.ts";
 import type { GameState, CardInstance, EnemyState, StatusEffect } from "./types.ts";
@@ -113,35 +114,43 @@ const ONBOARDING_KEY = "pxtower_onboarding_done";
 const ONBOARDING_STEPS = [
   {
     title: "① 出牌攻击",
-    body: "每回合从手牌打出 1 张攻击牌（♠♦♥♣），配合武器造成伤害。技能牌和道具牌随时可用，回合内可打多张。",
+    body: "每回合从手牌打出 1 张攻击牌（♠♦♥♣）造成伤害；技能牌、道具牌不占攻击次数，回合内可多张。",
   },
   {
     title: "② 花色相性",
-    body: "攻击牌与敌人花色相同 → 伤害 +20%；同色（同为红色或黑色）→ 无加成；不同色 → 伤害 -20%。",
+    body: "攻击花色 = 敌人花色 → 伤害 ×1.2；同色（同红或同黑）→ ×1.0；不同色 → ×0.8。",
   },
   {
-    title: "③ 装备系统",
-    body: "装备牌打出后进入常驻武器/防具槽，同款最多叠 4 张，倍率逐渐提升。武器决定攻击力，防具每回合减伤。",
+    title: "③ 装备",
+    body: "装备牌打出后进常驻槽，武器 / 防具各 1 件。同款最多叠 4 张，每叠加 1 件倍率 +×0.4。武器决定攻击数值，防具每次受击减伤。",
   },
   {
     title: "④ 牌库与战利品",
-    body: "每场战斗起手摸 6 张牌。胜利可选 1 张新牌加入牌库；通关再选 1 个特性。",
+    body: "起手摸 6 张。每场战斗胜利选 1 张新牌入库；关末通关再选 1 个特性（被动）。卡的稀有度：common / rare / super_rare / epic。",
   },
   {
     title: "⑤ 花色专精",
-    body: "♠ 堆伤 / ♦ 闪避 / ♥ 续航 / ♣ 减伤——4 花色各有路线。装备、特性、染色 / 持咒 / 染坊和打出的攻击牌都会累积亲和度，达 5 / 10 / 15 解锁三档被动 + 大招。同一时间只激活一条最高花色。点 HP 条下方的花色芯片查看 4 花色对比面板。",
+    body: "装备同色 +1.3 / 件、特性同色 +0.8 / 张、打出同色攻击牌 +0.3 / 张（cap 30）。亲和度 ≥5 / 10 / 15 解锁 T1 / T2 / T3，最高的那个花色激活专精。每色一个 keyword（锐利 / 迅捷 / 贪婪 / 守序）。T3 可放大招——每场每色限 1 次，永久消耗 8 亲和（跨战不归零）。",
   },
   {
-    title: "⑥ 特性 · 碎片 · 附魔",
-    body: "特性是常驻被动，每关末获得 1 张。击败不同种族敌人掉灵魂碎片，去铁匠铺给武器附魔——单种族 ×3 或两种族 ×2+×2，搭配出 13 种附魔。",
+    title: "⑥ 碎片 / 附魔（5 档升级）",
+    body: "击败不同种族（兽 / 人型 / 不死 / 巨怪 / 暗影）掉对应碎片。每关至少有 1 个铁匠铺，用碎片附魔武器：单种族 ×3 / 复合 ×2+×2 共 13 种。同附魔重附升 Lv，最高 Lv 5；换不同附魔 Lv 重置 1。",
   },
   {
-    title: "⑦ 大地图 · 选择路线",
-    body: "每关一张分支地图，节点上的种族 emoji 提示战斗会掉哪种碎片——根据你想做的附魔 / build 主动选路线。事件、铁匠铺、商店都是节点。",
+    title: "⑦ 大地图选路",
+    body: "每关一张分支地图，节点种族 emoji 提示战斗会掉哪种碎片。事件 / 铁匠铺 / 商店都是节点，按你想做的 build 主动选路。",
   },
   {
     title: "⑧ 爬塔节奏",
-    body: "每关 3 场战斗，最后一场是精英或 Boss。通关后 HP 补满进下一关。第 3/6/9 关是 Boss 关。",
+    body: "F1-F5 关末是精英，F6 起每关末都是 Boss。F9 是固定 Boss（亡灵之主），F12 是终末 Boss（无相之主）。通关后 HP 补满进下一关。",
+  },
+  {
+    title: "⑨ 防御类数值",
+    body: "HP 行右侧实时显示所有防御芯片：🛡 临时护盾（吸收）/ 🪖 减伤 / 🌬 闪避姿态 / ✨ 100% 闪避 / 🌟 必闪 / 💨 烟幕 / 🪞 反击 50% / ⏸ 时停 / 🔰 首次免疫 / 🕊 DOT 免疫。点击芯片看详情。",
+  },
+  {
+    title: "⑩ 敌人威胁 + DOT",
+    body: "精英 F6+ 多动（F11+ 3 动），Boss F3+ 2 动、F9+ 3 动、F12 4 动。Boss / 精英有暴击（×1.5）和闪避（每 hit 单 roll）。中毒削敌人暴击 -5%/层、出血削闪避 -5%/层（cap -50%）。DOT 全部按 % maxHP / 当前 HP 缩放：中毒 1% maxHP × 层 / 燃烧 2% × 层 / 出血 5% 当前 HP × 层。",
   },
 ];
 
@@ -407,7 +416,8 @@ function showCharacterDetail(): void {
           <div class="cd-item-sub">
             <span class="cd-sub-label">⚒ 附魔</span>
             <b>${escapeHTML(ENCHANT_NAMES[enchant])}</b>
-            <div class="cd-item-desc">${escapeHTML(ENCHANT_DESCS[enchant])}</div>
+            <span class="forge-lv-badge">Lv ${state.player.weaponEnchantLevel ?? 1}/${ENCHANT_MAX_LEVEL}</span>
+            <div class="cd-item-desc">${escapeHTML(getEnchantDescAt(enchant, state.player.weaponEnchantLevel ?? 1))}</div>
           </div>
         ` : ""}
       </div>
@@ -544,8 +554,8 @@ function showChipDetail(type: "weapon" | "armor" | "perk") {
         <p class="status-info-desc">${escapeHTML(def.desc)}</p>
         <div class="status-info-stats"><span><b>当前效果：</b>${escapeHTML(eff?.stat ?? eff?.desc ?? "")}</span></div>
         ${enchant ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #333">
-          <p class="status-info-desc" style="color:var(--yellow);font-weight:900">⚒ 附魔：${escapeHTML(ENCHANT_NAMES[enchant])}</p>
-          <p class="status-info-desc" style="font-size:11px;color:var(--gray)">${escapeHTML(ENCHANT_DESCS[enchant])}</p>
+          <p class="status-info-desc" style="color:var(--yellow);font-weight:900">⚒ 附魔：${escapeHTML(ENCHANT_NAMES[enchant])} <span class="forge-lv-badge">Lv ${state.player.weaponEnchantLevel ?? 1}/${ENCHANT_MAX_LEVEL}</span></p>
+          <p class="status-info-desc" style="font-size:11px;color:var(--gray)">${escapeHTML(getEnchantDescAt(enchant, state.player.weaponEnchantLevel ?? 1))}</p>
         </div>` : ""}
       `;
     }
@@ -676,7 +686,7 @@ function showFragmentInfo(race: EnemyRace) {
   const enchantList = usedIn.map(eid => {
     const r = ENCHANT_RECIPES[eid];
     const allCost = Object.entries(r.cost).map(([rc, n]) => `${FRAGMENT_ICONS[rc as EnemyRace]}×${n}`).join(" + ");
-    return `<li><b>${ENCHANT_NAMES[eid]}</b> · 需 ${allCost}<br><span class="frag-info-enchant-desc">${escapeHTML(ENCHANT_DESCS[eid])}</span></li>`;
+    return `<li><b>${ENCHANT_NAMES[eid]}</b> · 需 ${allCost}<br><span class="frag-info-enchant-desc">Lv 1：${escapeHTML(getEnchantDescAt(eid, 1))}</span></li>`;
   }).join("");
   const rareTag = isRareRace(race) ? '<span class="frag-info-rare">★ 稀少种族</span>' : "";
 
@@ -773,6 +783,9 @@ function renderBattle() {
   const dodgeChip = dodgePct > 0
     ? `<span class="pcard-dodge-chip" title="闪避概率 ${dodgePct}%">🎯${dodgePct}%</span>`
     : "";
+  // 防御类数值芯片：HP 行右侧统一展示，避免分散到小状态 chip 里看不清
+  // 每个 chip 用 data-status-* 标记 → 复用现有 .status-tag 点击委托打开详情弹窗
+  const defChipsHtml = renderDefensiveChips(state.player.statuses);
   const hpLow = hpPct <= 30;
   // 专精方块（替代旧的 .pcard-suit-row 长芯片）
   const suitBlock = renderSuitBlock();
@@ -783,6 +796,7 @@ function renderBattle() {
         <div class="pcard-hp-row">
           <span class="pcard-hp-val">${state.player.vita} / ${state.player.vitaMax}</span>
           <div class="pcard-hp-bar"><div class="pcard-hp-fill" style="width:${hpPct}%"></div></div>
+          ${defChipsHtml}
           ${dodgeChip}
         </div>
         <button class="pcard-summary-btn" id="pcard-summary-btn"></button>
@@ -827,7 +841,7 @@ function renderBattle() {
       const descs = SUIT_TIER_DESCS[suit];
       showConfirm({
         title: `${SUIT_SYMBOLS[suit]} ${theme.name} · ${names.ult}`,
-        body: `${descs.ult}<br><br>消耗 <b>10 点</b>该花色亲和度。`,
+        body: `${descs.ult}<br><br>消耗 <b>8 点</b>该花色亲和度（永久扣减，本场每花色限 1 次）。`,
         confirmLabel: "释放！",
         onConfirm: () => {
           if (releaseSuitUltimate(state, suit)) render();
@@ -861,9 +875,13 @@ function renderBattle() {
   }
 
   // Player card — status row
-  // 隐藏内部状态：took_damage_turn / 类似 marker 玩家不关心的内部 flag
+  // 隐藏内部状态 + 已在 HP 行作为大芯片展示的防御类（避免重复显示）
   const HIDDEN_STATUSES = new Set([
     "took_damage_turn", "busi_triggered", "chanted_used",
+    // 防御类（提升到 HP 行右侧的大芯片）
+    "shield_block", "phalanx_dr", "evasive", "counter_stance",
+    "dodge_full_round", "guaranteed_dodge", "smoke_dodge", "swift_dodge_temp",
+    "enc_runic_immune", "enc_dot_immune", "time_stop",
   ]);
   const ps = $("pcard-statuses");
   const visibleStatuses = state.player.statuses.filter(s => !HIDDEN_STATUSES.has(s.id));
@@ -971,7 +989,7 @@ function renderSuitBlock(): string {
 
   // T3 大招按钮（悬浮在方块上方）
   const ultBtn = (tier >= 3 && isActive)
-    ? `<button class="suit-ult-floating" data-suit="${suit}" title="释放 ${theme.name} 大招（消耗 10 亲和）">⚡ ${escapeHTML(names.ult)}</button>`
+    ? `<button class="suit-ult-floating" data-suit="${suit}" title="释放 ${theme.name} 大招（消耗 8 亲和，永久；本场每色限 1 次）">⚡ ${escapeHTML(names.ult)}</button>`
     : "";
 
   // 并列指示器
@@ -1115,6 +1133,22 @@ function renderEnemy(e: EnemyState, idx: number): HTMLElement {
     ? `<span class="ec-equip" title="持有武器（攻击倍率 ×${e.weaponMult!.toFixed(1)}）">⚔×${e.weaponMult!.toFixed(1)}</span>` : "";
   const armorBadge = (e.armor ?? 0) > 0
     ? `<span class="ec-equip armor" title="护甲 ${e.armor}">🛡${e.armor}</span>` : "";
+  // 暴击 / 闪避徽章（当前值 = base - DOT 削减；0 不显示）
+  const critNow = getEnemyCritChance(e);
+  const critBase = e.critChance ?? 0;
+  const critBadge = critNow > 0
+    ? `<span class="ec-equip crit" title="暴击率 ${critNow}%（基础 ${critBase}% − 中毒削减 ${critBase - critNow}%）暴击伤害 ×1.5">★${critNow}%</span>`
+    : "";
+  const dodgeNow = getEnemyDodgeChance(e);
+  const dodgeBase = e.dodgeChance ?? 0;
+  const dodgeBadge = dodgeNow > 0
+    ? `<span class="ec-equip dodge" title="闪避率 ${dodgeNow}%（基础 ${dodgeBase}% − 出血削减 ${dodgeBase - dodgeNow}%）每 hit 单独 roll">🎯${dodgeNow}%</span>`
+    : "";
+  // AP 徽章：>1 才显示
+  const ap = e.actionsPerTurn ?? 1;
+  const apBadge = ap > 1
+    ? `<span class="ec-equip ap" title="每回合行动 ${ap} 次（多动）；frozen / fear 时限 1 动">⚡×${ap}</span>`
+    : "";
 
   // tier 缩写（左上角标右下角）— 像扑克牌左上 + 右下对角花色
   const tierMark = tier === "boss" ? "B" : tier === "elite" ? "E" : "";
@@ -1153,6 +1187,9 @@ function renderEnemy(e: EnemyState, idx: number): HTMLElement {
       <span class="ec-race" title="${RACE_NAMES[e.race]} · 击败掉 ${FRAGMENT_NAMES[e.race]} 1 枚">${FRAGMENT_ICONS[e.race]}${RACE_NAMES[e.race]}</span>
       ${weaponBadge}
       ${armorBadge}
+      ${apBadge}
+      ${critBadge}
+      ${dodgeBadge}
       ${e.eliteAbility ? `<span class="ec-ability" title="${escapeHTML(ABILITY_DESCS[e.eliteAbility] ?? "")}">★${escapeHTML(e.eliteAbility)}</span>` : ""}
     </div>
     ${hpBar}
@@ -1265,7 +1302,74 @@ const STATUS_ICONS: Record<string, string> = {
   no_skill: "🔒", pierce_bonus: "🎯", pierce_perm: "🛢",
   // 控制 / 累积
   calc_charge: "🧮", "blood_pact_charge": "💢",
+  // 箭毒蛙 / 抗凝血标记
+  next_atk_apply_poison: "🐸", next_atk_apply_bleed: "💧",
 };
+
+// 防御类大芯片（HP 行右侧）— 把分散的护盾/闪避/免疫值统一展示
+// 每个 chip 仍带 .status-tag 类 + data-status-* → 复用全局 click 委托打开详情
+type DefChipDef = {
+  id: string;             // status id
+  icon: string;           // emoji
+  variant: "shield" | "phalanx" | "dodge" | "counter" | "immune";
+  label: (s: StatusEffect) => string;     // chip 显示文字（不含 icon）
+  tooltip: (s: StatusEffect) => string;
+};
+const DEFENSIVE_CHIPS: DefChipDef[] = [
+  { id: "shield_block", icon: "🛡", variant: "shield",
+    label: s => `${s.stacks}`,
+    tooltip: s => `临时护盾 ${s.stacks}：吸收下次受击伤害（点击详情）` },
+  { id: "phalanx_dr", icon: "🪖", variant: "phalanx",
+    label: s => `-${s.stacks}`,
+    tooltip: s => `重甲列阵：本回合每次受击 -${s.stacks}（点击详情）` },
+  { id: "evasive", icon: "🌬", variant: "dodge",
+    label: () => "½",
+    tooltip: () => `闪避姿态：本回合受到的伤害减半（点击详情）` },
+  { id: "dodge_full_round", icon: "✨", variant: "dodge",
+    label: () => "100%",
+    tooltip: () => `影舞步：本回合敌人攻击全闪避（点击详情）` },
+  { id: "guaranteed_dodge", icon: "🌟", variant: "dodge",
+    label: () => "",
+    tooltip: () => `必闪：下次受击 100% 闪避（一次性）` },
+  { id: "smoke_dodge", icon: "💨", variant: "dodge",
+    label: () => "",
+    tooltip: () => `烟幕闪避：下次受击 100% 闪避（一次性）` },
+  { id: "swift_dodge_temp", icon: "💨", variant: "dodge",
+    label: s => `+${s.stacks}%`,
+    tooltip: s => `风行余势：本回合闪避率 +${s.stacks}%` },
+  { id: "counter_stance", icon: "🪞", variant: "counter",
+    label: () => "50%",
+    tooltip: () => `反击姿态：受击向攻击者反弹 50% 伤害` },
+  { id: "time_stop", icon: "⏸", variant: "counter",
+    label: () => "",
+    tooltip: () => `时停：敌人下回合不行动` },
+  { id: "enc_runic_immune", icon: "🔰", variant: "immune",
+    label: () => "",
+    tooltip: () => `符文护盾：本场首次受击免疫（一次性）` },
+  { id: "enc_dot_immune", icon: "🕊", variant: "immune",
+    label: () => "",
+    tooltip: () => `圣化：免疫中毒 / 燃烧 / 出血伤害` },
+];
+
+function renderDefensiveChips(statuses: StatusEffect[]): string {
+  const parts: string[] = [];
+  for (const def of DEFENSIVE_CHIPS) {
+    const s = statuses.find(x => x.id === def.id);
+    if (!s || s.stacks <= 0) continue;
+    const labelText = def.label(s);
+    parts.push(
+      `<span class="pcard-def-chip ${def.variant} status-tag" `
+      + `data-status-id="${escapeHTML(def.id)}" `
+      + `data-status-stacks="${s.stacks}" `
+      + `data-status-duration="${s.duration}" `
+      + `title="${escapeHTML(def.tooltip(s))}">`
+      + `<span class="pcard-def-icon">${def.icon}</span>`
+      + (labelText ? `<span class="pcard-def-val">${labelText}</span>` : "")
+      + `</span>`
+    );
+  }
+  return parts.join("");
+}
 
 // 紧凑状态 chip（icon-only + stacks）— 用于玩家面板状态栏
 function renderStatusTag(s: StatusEffect): string {
@@ -1639,6 +1743,7 @@ function renderDiscardCardEl(inst: CardInstance): HTMLElement {
 
 function renderForge() {
   const cur = state.player.weaponEnchant;
+  const curLevel = state.player.weaponEnchantLevel ?? 1;
   const curWeapon = state.player.weapons[0] ? CARD_DB[state.player.weapons[0].defId].name : "（无武器）";
   const recolorUsed = state.forgeRecolorUsed === true;
   const totalFragments = Object.values(state.player.fragments).reduce((a, b) => a + b, 0);
@@ -1650,79 +1755,126 @@ function renderForge() {
   const discountBanner = state.forgeDiscountThisVisit
     ? `<div id="forge-discount-banner">★ 5 折特惠：本次访问所有附魔配方碎片消耗减半（向上取整）</div>`
     : "";
+
+  // 当前附魔所在花色：默认展开
+  const curBranch = cur ? ENCHANT_RECIPES[cur].branch : null;
+  const curDescNow = cur ? getEnchantDescAt(cur, curLevel) : "";
+  const curLine = cur
+    ? `<b>${escapeHTML(ENCHANT_NAMES[cur])}</b> <span class="forge-lv-badge">Lv ${curLevel}/${ENCHANT_MAX_LEVEL}</span><br><span class="forge-current-desc">${escapeHTML(curDescNow)}</span>`
+    : "<b>（无）</b>";
+
+  // 跳过按钮放在顶部和底部各一个 — 玩家不用滚到底
   stageEl.innerHTML = `
-    <p class="hint">用灵魂碎片为武器附魔。普通附魔（单种族 ×3）/ 复合附魔（2 种族 ×2+×2）。换附魔会覆盖旧的。</p>
+    <div class="forge-top-bar">
+      <button id="forge-skip-btn-top" class="forge-skip-top">离开铁匠铺 →</button>
+    </div>
+    <p class="hint">同一附魔重附 → 升级 Lv（消耗相同配方）；换不同附魔会重置为 Lv 1。Lv 5 满级。</p>
     ${discountBanner}
-    <div id="forge-current">当前武器：<b>${escapeHTML(curWeapon)}</b>　|　当前附魔：<b>${cur ? escapeHTML(ENCHANT_NAMES[cur]) : "（无）"}</b></div>
+    <div id="forge-current">当前武器：<b>${escapeHTML(curWeapon)}</b>　|　当前附魔：${curLine}</div>
     <div id="forge-recolor-section">
       <div class="forge-recolor-title">🎨 染坊（每次铁匠铺仅可使用 1 次）</div>
       <div class="forge-recolor-desc">用任意 3 个灵魂碎片，把牌库里的 1 张攻击牌永久变成你选的花色。</div>
       ${recolorBtn}
     </div>
-    <div id="forge-section-single">
-      <div class="forge-section-title">🔹 普通附魔（单种族 ×3 碎片）</div>
-      <div class="forge-grid" id="forge-list-single"></div>
-    </div>
-    <div id="forge-section-composite">
-      <div class="forge-section-title">🔸 复合附魔（2 种族 ×2 + ×2 碎片）<span class="forge-section-sub">含巨怪/暗影 = 强档；双稀少 = 究极</span></div>
-      <div class="forge-grid" id="forge-list-composite"></div>
-    </div>
-    <button id="forge-skip-btn" class="big-btn">跳过铁匠铺</button>
+    <div id="forge-suit-sections"></div>
+    <button id="forge-skip-btn" class="big-btn">离开铁匠铺</button>
   `;
-  // 染色按钮绑定
   const rb = stageEl.querySelector(".forge-recolor-btn") as HTMLButtonElement | null;
   if (rb && !recolorUsed && totalFragments >= 3) {
     rb.addEventListener("click", () => showForgeRecolorWizard());
   }
-  const listSingle = $("forge-list-single");
-  const listComposite = $("forge-list-composite");
-  const discount = state.forgeDiscountThisVisit === true;
-  for (const eid of ENCHANTS) {
-    const recipe = ENCHANT_RECIPES[eid];
-    // 实际消耗：5 折时减半（向上取整）
-    const costEntries = (Object.entries(recipe.cost) as [import("./types.ts").EnemyRace, number][])
-      .map(([r, n]) => [r, discount ? Math.ceil(n / 2) : n] as [import("./types.ts").EnemyRace, number]);
-    const enough = costEntries.every(([r, n]) => (state.player.fragments[r] ?? 0) >= (n ?? 0));
-    const isCurrent = cur === eid;
-    const branchSym = SUIT_SYMBOLS[recipe.branch];
-    const branchTheme = SUIT_THEMES[recipe.branch];
-    const variantBadge = recipe.variant === "specialize"
-      ? `<span class="forge-tag forge-tag-spec">特化</span>`
-      : `<span class="forge-tag forge-tag-comp">互补</span>`;
-    const tierBadge = recipe.doubleRare
-      ? `<span class="forge-tag forge-tag-ultimate">究极</span>`
-      : recipe.hasRare
-        ? `<span class="forge-tag forge-tag-rare">强档</span>`
-        : `<span class="forge-tag forge-tag-base">普通</span>`;
-    const costHtml = costEntries.map(([r, n]) => {
-      const have = state.player.fragments[r] ?? 0;
-      const ok = have >= n;
-      const rare = isRareRace(r);
-      return `<span class="forge-cost-pill${ok ? " ok" : " miss"}${rare ? " rare" : ""}">${FRAGMENT_ICONS[r]} ${FRAGMENT_NAMES[r]} ${have}/${n}</span>`;
-    }).join("");
 
-    const card = document.createElement("div");
-    card.className = `forge-card v2${enough ? " ok" : " disabled"}${isCurrent ? " current" : ""}${recipe.doubleRare ? " ultimate" : recipe.hasRare ? " rare" : ""}`;
-    card.innerHTML = `
-      <div class="forge-card-head">
-        <span class="forge-branch" style="color:${branchTheme.color}">${branchSym} ${branchTheme.name}</span>
-        ${variantBadge}${tierBadge}
-      </div>
-      <div class="forge-name">${escapeHTML(ENCHANT_NAMES[eid])}${isCurrent ? "（已装备）" : ""}</div>
-      <div class="forge-desc">${escapeHTML(ENCHANT_DESCS[eid])}</div>
-      <div class="forge-cost-row">${costHtml}</div>
-      <button class="forge-btn" ${enough ? "" : "disabled"}>${enough ? (isCurrent ? "重新附魔" : "应用") : "碎片不足"}</button>
+  // 按 4 花色分组（折叠）— 顺序：当前装备花色优先，其它按 SUITS 顺序
+  const sectionsRoot = $("forge-suit-sections");
+  const discount = state.forgeDiscountThisVisit === true;
+  const sortedSuits: Suit[] = [];
+  if (curBranch) sortedSuits.push(curBranch);
+  for (const s of SUITS) if (s !== curBranch) sortedSuits.push(s);
+
+  for (const suit of sortedSuits) {
+    const enchantsInSuit = ENCHANTS.filter(eid => ENCHANT_RECIPES[eid].branch === suit);
+    if (enchantsInSuit.length === 0) continue;
+    const sym = SUIT_SYMBOLS[suit];
+    const theme = SUIT_THEMES[suit];
+    const isOpen = suit === curBranch;  // 当前花色默认展开，其它折叠
+    const section = document.createElement("div");
+    section.className = `forge-suit-section${isOpen ? " open" : ""}`;
+    section.innerHTML = `
+      <button class="forge-suit-head" data-suit="${suit}" style="--suit-color:${theme.color}">
+        <span class="forge-suit-sym">${sym}</span>
+        <span class="forge-suit-name">${escapeHTML(theme.name)} · ${enchantsInSuit.length} 款附魔</span>
+        <span class="forge-suit-arrow">${isOpen ? "▼" : "▶"}</span>
+      </button>
+      <div class="forge-suit-body" ${isOpen ? "" : "hidden"}></div>
     `;
-    if (enough) {
-      card.querySelector("button")!.addEventListener("click", () => {
-        applyEnchant(state, eid);
-        render();
-      });
+    const body = section.querySelector(".forge-suit-body") as HTMLElement;
+    for (const eid of enchantsInSuit) {
+      const recipe = ENCHANT_RECIPES[eid];
+      const costEntries = (Object.entries(recipe.cost) as [import("./types.ts").EnemyRace, number][])
+        .map(([r, n]) => [r, discount ? Math.ceil(n / 2) : n] as [import("./types.ts").EnemyRace, number]);
+      const enough = costEntries.every(([r, n]) => (state.player.fragments[r] ?? 0) >= (n ?? 0));
+      const isCurrent = cur === eid;
+      const isMaxed = isCurrent && curLevel >= ENCHANT_MAX_LEVEL;
+      const nextLv = isCurrent ? Math.min(ENCHANT_MAX_LEVEL, curLevel + 1) : 1;
+      const descAtNext = getEnchantDescAt(eid, nextLv);
+      const variantBadge = recipe.variant === "specialize"
+        ? `<span class="forge-tag forge-tag-spec">特化</span>`
+        : `<span class="forge-tag forge-tag-comp">互补</span>`;
+      const tierBadge = recipe.doubleRare
+        ? `<span class="forge-tag forge-tag-ultimate">究极</span>`
+        : recipe.hasRare
+          ? `<span class="forge-tag forge-tag-rare">强档</span>`
+          : `<span class="forge-tag forge-tag-base">普通</span>`;
+      const kindBadge = recipe.kind === "single"
+        ? `<span class="forge-tag forge-tag-kind">单×3</span>`
+        : `<span class="forge-tag forge-tag-kind">2+2</span>`;
+      const lvBadge = isCurrent
+        ? `<span class="forge-lv-badge">Lv ${curLevel}${isMaxed ? "（满）" : `→${nextLv}`}</span>`
+        : "";
+      const costHtml = costEntries.map(([r, n]) => {
+        const have = state.player.fragments[r] ?? 0;
+        const ok = have >= n;
+        const rare = isRareRace(r);
+        return `<span class="forge-cost-pill${ok ? " ok" : " miss"}${rare ? " rare" : ""}">${FRAGMENT_ICONS[r]} ${FRAGMENT_NAMES[r]} ${have}/${n}</span>`;
+      }).join("");
+
+      const btnText = isMaxed ? "已满级"
+        : !enough ? "碎片不足"
+        : isCurrent ? `升级到 Lv ${nextLv}`
+        : `应用（Lv 1）`;
+      const btnDisabled = isMaxed || !enough;
+
+      const card = document.createElement("div");
+      card.className = `forge-card v2${enough ? " ok" : " disabled"}${isCurrent ? " current" : ""}${isMaxed ? " maxed" : ""}${recipe.doubleRare ? " ultimate" : recipe.hasRare ? " rare" : ""}`;
+      card.innerHTML = `
+        <div class="forge-card-head">
+          ${variantBadge}${tierBadge}${kindBadge}${lvBadge}
+        </div>
+        <div class="forge-name">${escapeHTML(ENCHANT_NAMES[eid])}${isCurrent ? "（已装备）" : ""}</div>
+        <div class="forge-desc">${escapeHTML(descAtNext)}</div>
+        <div class="forge-cost-row">${costHtml}</div>
+        <button class="forge-btn" ${btnDisabled ? "disabled" : ""}>${btnText}</button>
+      `;
+      if (!btnDisabled) {
+        card.querySelector("button")!.addEventListener("click", () => {
+          applyEnchant(state, eid);
+          render();
+        });
+      }
+      body.appendChild(card);
     }
-    if (recipe.kind === "single") listSingle.appendChild(card);
-    else listComposite.appendChild(card);
+    // 点击 head 折叠/展开
+    const head = section.querySelector(".forge-suit-head") as HTMLButtonElement;
+    head.addEventListener("click", () => {
+      const opened = section.classList.toggle("open");
+      body.hidden = !opened;
+      head.querySelector(".forge-suit-arrow")!.textContent = opened ? "▼" : "▶";
+    });
+    sectionsRoot.appendChild(section);
   }
-  $("forge-skip-btn").addEventListener("click", () => { skipForge(state); render(); });
+  const skipFn = () => { skipForge(state); render(); };
+  $("forge-skip-btn").addEventListener("click", skipFn);
+  $("forge-skip-btn-top").addEventListener("click", skipFn);
 }
 
 // 染色向导：选攻击牌 → 选目标花色 → 自动从最高库存种族扣 3 碎片
@@ -1868,8 +2020,17 @@ function renderMerchant(parent: HTMLElement) {
       const rarity = def.rarity ?? "common";
       const price = MERCHANT_PRICES[rarity];
       const cardEl = document.createElement("div");
-      cardEl.className = `merchant-card rarity-${rarity}`;
+      cardEl.className = `merchant-card rarity-${rarity} cat-${def.category}`;
+      // 花色：attack / equipment / perk 都可能带花色（skill / item 已取消花色）
+      const suit = def.attackSuit ?? def.equipSuit ?? def.defaultSuit;
+      if (suit) {
+        cardEl.setAttribute("data-suit", SUIT_SYMBOLS[suit]);
+      }
+      const suitTag = suit
+        ? `<span class="merchant-card-suit${isRedSuit(suit) ? " red" : ""}">${SUIT_SYMBOLS[suit]}</span>`
+        : "";
       cardEl.innerHTML = `
+        ${suitTag}
         <div class="merchant-card-name">${escapeHTML(def.name)}</div>
         <div class="merchant-card-rarity">${rarityLabel(rarity)}</div>
         <div class="merchant-card-desc">${escapeHTML(def.desc)}</div>
@@ -2461,8 +2622,8 @@ function showLoadoutModal(): void {
     <div class="loadout-row">
       <div class="loadout-label">⚒ 附魔</div>
       <div class="loadout-content">
-        <div class="loadout-name">${escapeHTML(ENCHANT_NAMES[enc])}</div>
-        <div class="loadout-desc">${escapeHTML(ENCHANT_DESCS[enc])}</div>
+        <div class="loadout-name">${escapeHTML(ENCHANT_NAMES[enc])} <span class="forge-lv-badge">Lv ${player.weaponEnchantLevel ?? 1}/${ENCHANT_MAX_LEVEL}</span></div>
+        <div class="loadout-desc">${escapeHTML(getEnchantDescAt(enc, player.weaponEnchantLevel ?? 1))}</div>
       </div>
     </div>
   ` : `<div class="loadout-row"><div class="loadout-label">⚒ 附魔</div><div class="loadout-content loadout-empty">无</div></div>`;
@@ -3326,14 +3487,18 @@ function openCodex() {
           .map(([rc, n]) => `${FRAGMENT_ICONS[rc as EnemyRace]}${FRAGMENT_NAMES[rc as EnemyRace]} ×${n}`)
           .join(" + ");
         const tierClass = r.doubleRare ? " codex-enchant-ultimate" : r.hasRare ? " codex-enchant-rare" : "";
+        // 5 档展示：Lv 1 / 3 / 5
+        const tierLines = [1, 3, 5].map(lv =>
+          `<div class="codex-enchant-tier">Lv ${lv}：${escapeHTML(getEnchantDescAt(eid, lv))}</div>`
+        ).join("");
         return `
           <div class="codex-card codex-enchant${tierClass}">
             <div class="codex-card-head">
               <span class="codex-card-name">${ENCHANT_NAMES[eid]}</span>
               <span class="codex-cat">${kindLabel} · ${variant}${tier === "普通" ? "" : ` · ${tier}`}</span>
             </div>
-            <div class="codex-card-desc">${escapeHTML(ENCHANT_DESCS[eid])}</div>
-            <div class="codex-card-cost">配方：${costStr}</div>
+            ${tierLines}
+            <div class="codex-card-cost">配方：${costStr}（同附魔重附升 Lv，最高 Lv 5）</div>
           </div>
         `;
       };

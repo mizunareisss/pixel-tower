@@ -152,7 +152,9 @@ export function generateFloorMap(floor: number): FloorMap {
   const theme = getFloorTheme(floor);
   const midLayers = getMidLayerCount(floor);
   const totalLayers = midLayers + 2;  // start + mid + last
-  const isBossFloor = floor % 3 === 0;
+  // F6 起每关末节点都是 Boss（之前每 3 关一个 boss，节奏太散）
+  // F1-5 关末仍是精英（热身期）
+  const isBossFloor = floor >= 6;
 
   // 1. 创建所有节点
   const nodes: MapNode[] = [];
@@ -197,6 +199,28 @@ export function generateFloorMap(floor: number): FloorMap {
       nodes.push(node);
     }
     layerNodes.push(layerArr);
+  }
+
+  // 1.5. 保证每关至少有 1 个铁匠铺（floor >= 2）
+  // 之前 forge 权重 7 → 经常一整关都不出，玩家 build 节奏被打乱
+  // 改为：若本次生成完后 counts.forge === 0，挑一个 battle 节点改成 forge
+  if (floor >= 2 && counts.forge === 0) {
+    // 候选：所有中间层的 battle 节点（不动 start / boss / elite）
+    const battleCands: MapNode[] = [];
+    for (let layer = 1; layer < totalLayers - 1; layer++) {
+      for (const n of layerNodes[layer]) {
+        if (n.type === "battle") battleCands.push(n);
+      }
+    }
+    if (battleCands.length > 0) {
+      const pick = battleCands[Math.floor(Math.random() * battleCands.length)];
+      pick.type = "forge";
+      counts.battle = Math.max(0, counts.battle - 1);
+      counts.forge++;
+      // 清掉旧的 battle payload（preRollPayload 不会冲突，因为 forge 不需要 payload）
+      pick.enemies = undefined;
+      pick.eventId = undefined;
+    }
   }
 
   // 2. 计算坐标（normalized 0-1）

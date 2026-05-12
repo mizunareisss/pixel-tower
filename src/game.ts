@@ -95,7 +95,8 @@ export function newGame(): GameState {
     fragments: { beast: 0, humanoid: 0, undead: 0, giant: 0, dark: 0 },
     revivesUsed: 0,
     suitPlayedTotal: { spade: 0, diamond: 0, heart: 0, club: 0 },
-    ultsUsed: { spade: 0, diamond: 0, heart: 0, club: 0 },
+    suitConsumedTotal: { spade: 0, diamond: 0, heart: 0, club: 0 },
+    ultsThisBattle: { spade: false, diamond: false, heart: false, club: false },
     battlesSinceEquipReward: 0,
   };
   // 起始装备：1 把短剑放在常驻区
@@ -562,6 +563,17 @@ export function applyEnchant(state: GameState, enchantId: EnchantId): boolean {
   if (state.phase !== "forge") return false;
   const recipe = ENCHANT_RECIPES[enchantId];
   if (!recipe) return false;
+  // 5 档升级 / 替换判定
+  // - 当前已装这个附魔且 Lv < 5：升级（消耗等额配方），Lv+1
+  // - 当前已装这个附魔且 Lv = 5：拒绝（满级）
+  // - 其它：替换（Lv 重置为 1）
+  const isSameEnchant = state.player.weaponEnchant === enchantId;
+  const curLevel = state.player.weaponEnchantLevel ?? 1;
+  if (isSameEnchant && curLevel >= 5) {
+    pushLog(state, `${ENCHANT_NAMES[enchantId]} 已满级（Lv 5），无法继续升级。`, "system");
+    return false;
+  }
+
   // 5 折特惠：所有配方碎片消耗减半（向上取整）
   const discount = state.forgeDiscountThisVisit === true;
   const actualCost: Partial<Record<EnemyRace, number>> = {};
@@ -584,9 +596,19 @@ export function applyEnchant(state: GameState, enchantId: EnchantId): boolean {
     const need = actualCost[r as EnemyRace] ?? 0;
     state.player.fragments[r as EnemyRace] -= need;
   }
-  state.player.weaponEnchant = enchantId;
+
+  // 更新附魔 + Lv
+  if (isSameEnchant) {
+    state.player.weaponEnchantLevel = Math.min(5, curLevel + 1);
+  } else {
+    state.player.weaponEnchant = enchantId;
+    state.player.weaponEnchantLevel = 1;
+  }
+  const newLv = state.player.weaponEnchantLevel;
   const costStr = Object.entries(actualCost).map(([r, n]) => `${n} ${r}`).join(" + ");
-  pushLog(state, `武器附魔：${ENCHANT_NAMES[enchantId]}（消耗 ${costStr} 碎片${discount ? " · 5 折" : ""}）。`, "win");
+  const verb = isSameEnchant ? `升级到 Lv ${newLv}` : `Lv 1`;
+  pushLog(state, `武器附魔：${ENCHANT_NAMES[enchantId]} ${verb}（消耗 ${costStr}${discount ? " · 5 折" : ""}）。`, "win");
+
   // 铁匠铺是 map 节点，完成后回地图
   if (state.floorMap) {
     const cur = getNode(state.floorMap, state.floorMap.currentNodeId);
@@ -779,7 +801,7 @@ export function discardHandCards(state: GameState, uids: string[]): boolean {
 }
 
 // ─────────────────────────────────────────────────────────
-// 花色专精 · Tier 3 大招（消耗 10 亲和度）
+// 花色专精 · Tier 3 大招（消耗 8 亲和度，持久化扣减；本场每色限 1 次）
 // ─────────────────────────────────────────────────────────
 
 export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
@@ -790,11 +812,13 @@ export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
   const player = state.battle.player;
   const enemies = state.battle.enemies;
 
-  // 整局限 3 次：4 花色统一（之前只有 ♥ 有限次，导致跨场战斗 ♠/♦/♣ 大招无限释放）
-  if (!state.player.ultsUsed) state.player.ultsUsed = { spade: 0, diamond: 0, heart: 0, club: 0 };
-  const usedCount = state.player.ultsUsed[suit] ?? 0;
-  if (usedCount >= 3) {
-    log(`大招：整局每花色限 3 次，${suit} 已用完。`, "system");
+  // 本场限 1 次：4 花色独立，每场战斗 newBattle 重置 ultsThisBattle
+  // （配合 suitConsumedTotal 持久化消耗，让每次大招都吃永久亲和度成本）
+  if (!state.player.ultsThisBattle) {
+    state.player.ultsThisBattle = { spade: false, diamond: false, heart: false, club: false };
+  }
+  if (state.player.ultsThisBattle[suit]) {
+    log(`大招：本场每花色限 1 次，${suit} 已用过。`, "system");
     return false;
   }
 
@@ -838,12 +862,12 @@ export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
     log(`★♣ 群体禁咒！全体敌人 +沉默 +易伤 +中毒。`, "win");
   }
 
-  // 4 花色 ult 都计入 ultsUsed（整局限 3 次）
-  state.player.ultsUsed[suit]++;
-  log(`大招 ${suit}：剩余 ${3 - state.player.ultsUsed[suit]} 次。`, "system");
+  // 本场释放标记 → 同 suit 在本场不能再放
+  state.player.ultsThisBattle![suit] = true;
 
-  // A 强化：消耗 10 → 8 亲和（让玩家早 burst）
+  // 大招消耗 8 亲和度（持久化到 suitConsumedTotal，跨战不归零，让大招真正吃 build 成本）
   consumeSuitAffinity(state.battle, suit, 8);
+  log(`大招 ${suit}：消耗 8 亲和（永久），下场战斗恢复使用次数。`, "system");
   return true;
 }
 

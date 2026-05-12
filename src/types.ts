@@ -179,6 +179,14 @@ export const STATUS_META: Record<string, StatusMeta> = {
   scepter_clubs:     { name: "禁忌权杖蓄势", desc: "本回合已出 ♣ 牌数（攻击/技能/道具/装备均计入）。本回合内攻击伤害 += stacks × (N 由禁忌权杖 stack 决定，1/2/2/3)。", kind: "buff" },
   took_damage_turn:  { name: "本回合受伤", desc: "（内部状态，玩家无需关注）本回合受到过伤害，用于附魔机制末段判断。", kind: "neutral" },
   calc_charge:       { name: "法术蓄能", desc: "本回合已出非攻击牌数。配合法师杖 / 算计附魔 / 凝神附魔 / 奥术爆裂 → 下次攻击 +X 直伤。", kind: "buff" },
+  // ── 玩家"下次攻击命中时附加 debuff"标记（箭毒蛙 / 抗凝血触发）──
+  next_atk_apply_poison: { name: "箭毒预备", desc: "下次攻击命中时给目标 +stacks 中毒。", kind: "buff" },
+  next_atk_apply_bleed:  { name: "抗凝血预备", desc: "下次攻击命中时给目标 +stacks 出血（持续 2 回合）。", kind: "buff" },
+  // ── 敌人 buff intent 相关（v6）──
+  temp_armor:        { name: "临时护甲", desc: "本回合敌人护甲临时 +stacks（自身或全队 buff 触发）。", kind: "buff" },
+  enemy_atk_buff:    { name: "强化", desc: "下次攻击 +stacks 伤害（敌人 buff intent 蓄势）。", kind: "buff" },
+  enemy_next_hits:   { name: "多段蓄势", desc: "下次攻击 +stacks hits（巨怪狂奔等触发）。", kind: "buff" },
+  enemy_sacrifice:   { name: "血祭蓄势", desc: "下次攻击 +stacks% 伤害（暗影血祭，已扣除 3% maxHP）。", kind: "buff" },
 };
 
 // ── 敌人种族 ──────────────────────────────────────────────
@@ -297,6 +305,68 @@ export const ENCHANTS: EnchantId[] = [
   "ec_warblood", "ec_phalanx", "ec_swift", "ec_focus",
   "ec_lifesteal", "ec_resilient", "ec_arcane", "ec_runic",
 ];
+
+// 附魔 5 档逐步升级 — 同一附魔每次铁匠铺重附消耗等额配方 + Lv +1，至 Lv5 满级
+export const ENCHANT_MAX_LEVEL = 5;
+
+// 各档参数表。index = level - 1。每个附魔的参数槽数量不同，按各自语义读取。
+// 注：所有 ENCHANT_EFFECTS / battle.ts 内的硬编码数值都应该读这个表。
+//
+// 设计约束（按用户要求）：
+//   - Lv1 ≈ 旧固定值的 0.85-0.95×（起点不弱）
+//   - Lv3 ≈ 旧固定值
+//   - Lv5 ≤ 旧固定值的 1.5×（硬上限，不能更高）
+export const ENCHANT_LEVEL_PARAMS: Record<EnchantId, readonly number[][]> = {
+  // 普通（单种族 ×3）
+  e_brawler:    [[10], [12], [14], [16], [18]],                        // [HP<50% 攻击 +N%]（旧 12 → Lv5 18 = 1.50×）
+  e_strategist: [[2],  [2],  [2],  [3],  [3]],                          // [每非攻击牌下张 +N]（旧 2 → Lv5 3 = 1.50×）
+  e_reaper:     [[140],[150],[160],[165],[175]],                        // [击杀后下次 ×(N/100)]（旧 150 → Lv5 175 ≈ bonus +50%→+75% = 1.50×）
+  e_titan:      [[22], [25], [28], [32], [37]],                         // [≥8% maxHP +N%]（旧 25 → Lv5 37 = 1.48×）
+  e_phantom:    [[170,2],[180,3],[200,3],[220,4],[250,4]],               // [闪避后 ×(N/100), 易伤 +M]（旧 200/3 → Lv5 250 = bonus 1.50× / vuln 4 = 1.33×）
+  // 复合（×2+×2）
+  ec_warblood:  [[18,1,4],[20,1,5],[22,1,5],[26,1,6],[30,2,7]],          // [HP<50% +N%, perStep, cap]（旧 20/-/5 → Lv5 30/2/7 = 1.50× / cap 1.40×）
+  ec_phalanx:   [[1,3,4],[1,3,5],[1,4,5],[1,4,6],[1,4,7]],               // [每张 -N, cap -M, 下回合护盾 K]（旧 1/-3/5 → Lv5 1/-4/7 = 1.33× / 1.40×）
+  ec_swift:     [[9,4,22,1],[10,5,25,1],[11,5,28,1],[13,6,33,1],[15,7,40,1]], // [闪避 +N%, 闪后 +M%, cap K%, 易伤 L]（旧 10/5/30/1 → Lv5 15/7/40/1 = 1.50/1.40/1.33×）
+  ec_focus:     [[1,12,4],[1,12,5],[1,12,5],[1,12,6],[1,12,7]],          // [perCard +N, ≥M dmg +K]（旧 1/12/5 → Lv5 1/12/7 = bonus 1.40×）
+  ec_lifesteal: [[7,8],[8,10],[9,11],[11,13],[12,15]],                    // [+N% lifesteal, 满血 +M%]（旧 8/10 → Lv5 12/15 = 1.50/1.50×）
+  ec_resilient: [[2,2,1],[2,2,1],[2,2,1],[3,2,1],[3,3,2]],               // [受击 -N, HP>80% 再 -M, 每回合 +K HP]（旧 2/2/1 → Lv5 3/3/2 = 1.50/1.50/2×）
+  ec_arcane:    [[25],[28],[30],[38],[45]],                              // [染/咒首攻 +N%]（旧 30 → Lv5 45 = 1.50×）
+  ec_runic:     [[2,100],[3,100],[3,100],[4,100],[4,100]],               // [受击 -N, 首次受击 -M%（100% = 完全免疫）]（旧 3/100 → Lv5 4/100 = 1.33×）
+} as const;
+
+// 工具：读当前 player 的附魔档位（默认 1，clamp 到 [1, 5]）
+export function getEnchantLevel(player: PlayerState): number {
+  return Math.max(1, Math.min(ENCHANT_MAX_LEVEL, player.weaponEnchantLevel ?? 1));
+}
+
+// 工具：读当前附魔指定参数槽的值
+export function getEnchantParam(player: PlayerState, idx: number = 0): number {
+  const id = player.weaponEnchant;
+  if (!id) return 0;
+  const lv = getEnchantLevel(player);
+  return ENCHANT_LEVEL_PARAMS[id]?.[lv - 1]?.[idx] ?? 0;
+}
+
+// 工具：按 level 生成附魔描述（替代固定的 ENCHANT_DESCS，level-aware）
+export function getEnchantDescAt(id: EnchantId, level: number): string {
+  const lv = Math.max(1, Math.min(ENCHANT_MAX_LEVEL, level));
+  const p = ENCHANT_LEVEL_PARAMS[id][lv - 1];
+  switch (id) {
+    case "e_brawler":    return `HP < 50% 时，攻击 +${p[0]}%。`;
+    case "e_strategist": return `每出 1 张非攻击牌，下张攻击 +${p[0]} 伤（同回合累积，攻击后清零）。`;
+    case "e_reaper":     return `击杀敌人后，下次攻击 ×${(p[0] / 100).toFixed(2)}（一次性）。`;
+    case "e_titan":      return `单次伤害 ≥ 敌人最大 HP 8% 时，本次伤害额外 +${p[0]}%。`;
+    case "e_phantom":    return `完全闪避后下次攻击 ×${(p[0] / 100).toFixed(1)}，攻击命中后给目标 +${p[1]} 易伤层。`;
+    case "ec_warblood":  return `HP < 50% 时攻击 +${p[0]}%；本场每损 10% maxHP 永久攻击 +${p[1]}（cap +${p[2]}）。`;
+    case "ec_phalanx":   return `本回合攻击牌每打 1 张受击 -${p[0]}（cap -${p[1]}）；本回合未受伤则下回合开局护盾 +${p[2]}。`;
+    case "ec_swift":     return `闪避概率 +${p[0]}%；闪避后本回合内闪避再 +${p[1]}%（cap +${p[2]}%）；闪避后给目标 +${p[3]} 易伤。`;
+    case "ec_focus":     return `每张非攻击牌使下张攻击 +${p[0]} 伤；攻击伤害 ≥ ${p[1]} 时额外 +${p[2]}。`;
+    case "ec_lifesteal": return `攻击吸血额外 +${p[0]}%；HP 满时攻击 +${p[1]}%。`;
+    case "ec_resilient": return `受击 -${p[0]}；HP > 80% 时受击再 -${p[1]}；每回合开始 +${p[2]} HP。`;
+    case "ec_arcane":    return `每出 1 张非攻击牌额外摸 1（每回合 cap 3）；持咒/染色 buff 在场时首次攻击 +${p[0]}%。`;
+    case "ec_runic":     return `受击 -${p[0]}；每场首次受击 ${p[1] >= 100 ? "完全免疫" : "-" + p[1] + "%"}；中毒/燃烧/出血对你无效。`;
+  }
+}
 
 // 稀少种族集合（用于 UI 标记 + 配方校验）
 export const RARE_RACES: EnemyRace[] = ["giant", "dark"];
@@ -420,6 +490,7 @@ export interface PlayerState {
 
   // 武器槽附魔（绑定武器槽，换武器时保留）
   weaponEnchant?: EnchantId;
+  weaponEnchantLevel?: number;  // 1-5，铁匠铺多次附同样的会升 Lv（消耗等额配方）；换不同附魔重置为 1
 
   // 整局 1 次的复活机制（不灭之心）已使用次数；不在 statuses 里因为状态会战斗间清空
   revivesUsed?: number;
@@ -430,11 +501,15 @@ export interface PlayerState {
   // 花色专精：累积打过的同花色攻击牌总数（跨战斗保留；染色/持咒后按视为色累积；cap 30/色）
   suitPlayedTotal?: Record<Suit, number>;
 
+  // 花色专精：累计被大招消耗掉的亲和度（跨战斗持久化；不重置；
+  //   配合 getSuitAffinity 在末端扣减，让消耗成为"整局进度"的代价）
+  suitConsumedTotal?: Record<Suit, number>;
+
   // 装备保底：连续未在 reward_card 拿到装备的场次，达 3 次下场必出装备
   battlesSinceEquipReward?: number;
 
-  // 花色专精大招的整局使用次数（跨战斗保留；4 花色都限 3 次）
-  ultsUsed?: Record<Suit, number>;
+  // 花色专精大招本场战斗已释放标记（每场战斗 newBattle 重置；4 花色独立，每色本场限 1 次）
+  ultsThisBattle?: Record<Suit, boolean>;
 
   // EPIC 临时装备机制：装备 EPIC 武器/防具时把当前装备暂存到 backup，
   // EPIC 用尽（3 次）后自动恢复 backup。比"替换 modal"更灵活，玩家不丢原装备
@@ -443,6 +518,19 @@ export interface PlayerState {
 }
 
 // ── 敌人 ──────────────────────────────────────────────────
+// Buff intent 类型 ID（buff intent 的 effect 分发用）
+//   next_attack_3      - 下次攻击 +3（旧默认行为）
+//   self_armor         - 本回合自身 armor +value
+//   team_armor         - 全队本回合 armor +value
+//   self_heal_pct      - boss 回血 maxHP × value%
+//   next_hits          - 下张攻击 +value hits
+//   self_sacrifice     - 自损 3% maxHP，下张攻击 +value%
+//   double_debuffs     - F12 限定：玩家身上所有 debuff stack ×2
+export type BuffIntentId =
+  | "next_attack_3" | "self_armor" | "team_armor"
+  | "self_heal_pct" | "next_hits" | "self_sacrifice"
+  | "double_debuffs";
+
 export interface EnemyIntent {
   type: "attack" | "buff" | "debuff";
   value: number;
@@ -452,6 +540,9 @@ export interface EnemyIntent {
   debuffId?: string;          // "poison" | "weak" | "vulnerable"
   debuffName?: string;
   debuffDuration?: number;    // -1 表示由 stacks 自衰减（如中毒），>0 表示固定回合
+  // buff 专用：buffId 决定 enemyTurn 里如何执行；buffValue 是参数
+  buffId?: BuffIntentId;
+  buffValue?: number;
 }
 
 // Boss AI 流派 ID（5 基础 + 5 复合 + 1 演化）
@@ -487,6 +578,15 @@ export interface EnemyState {
   weaponMult?: number;     // 武器倍率（第 4 关起显示）
   tier?: "normal" | "elite" | "boss";  // 战斗强度档：精英/Boss 在 UI 上特殊呈现
   eliteAbility?: string;    // 精英特能名称（显示用）
+  // 暴击 / 闪避（buildRandomEnemy 时按 tier × floor 计算，存基础值；
+  //   实战通过 getEnemyCritChance / getEnemyDodgeChance 减去 poison / bleed penalty）
+  critChance?: number;     // 基础暴击率（百分点），精英 cap 15 / boss cap 25
+  dodgeChance?: number;    // 基础闪避率（百分点），精英 cap 9 / boss cap 15
+  // 多动 AP：每回合执行的 intent 次数（按 tier × floor 决定）
+  //   普通 / 精英 F1-5: 1；精英 F6-10: 2；精英 F11+: 3
+  //   Boss F3/F6: 2；F9: 3；F12: 4；F15+: 3
+  //   frozen / fear 状态下本回合限 1 动
+  actionsPerTurn?: number;
   // 共鸣咒：保存原始花色，4 回合后回归
   originalSuit?: Suit;
   // Boss AI 行为流派（精英 + boss 装备），普通敌人不带；详见 bossAI.ts

@@ -81,6 +81,8 @@ interface IntentTemplate {
   debuffId?: string;
   debuffName?: string;
   debuffDuration?: number;
+  buffId?: import("./types.ts").BuffIntentId;  // buff 特效 id（默认 next_attack_3）
+  buffValue?: number;                          // buff 参数（armor 量、heal%、+hits 等）
 }
 
 const INTENT_POOLS: Record<EnemyRace, IntentTemplate[]> = {
@@ -89,7 +91,8 @@ const INTENT_POOLS: Record<EnemyRace, IntentTemplate[]> = {
     { type: "attack", baseValue: 5, desc: "撕咬" },
     { type: "attack", baseValue: 2.5, hits: 2, desc: "连咬" },
     { type: "attack", baseValue: 6, desc: "突袭" },
-    { type: "buff",   baseValue: 0, desc: "嚎叫（+2 攻）" },
+    { type: "buff",   baseValue: 0, desc: "嚎叫（下次攻击 +3）", buffId: "next_attack_3" },
+    { type: "buff",   baseValue: 0, desc: "血怒（自身 armor +2）", buffId: "self_armor", buffValue: 2 },
     { type: "debuff", baseValue: 2, desc: "獠牙伤", debuffId: "poison", debuffName: "中毒" },
   ],
   humanoid: [
@@ -97,7 +100,8 @@ const INTENT_POOLS: Record<EnemyRace, IntentTemplate[]> = {
     { type: "attack", baseValue: 3, hits: 2, desc: "连斩" },
     { type: "attack", baseValue: 5, desc: "突刺" },
     { type: "attack", baseValue: 6, desc: "重击" },
-    { type: "buff",   baseValue: 0, desc: "战吼" },
+    { type: "buff",   baseValue: 0, desc: "战吼（下次攻击 +3）", buffId: "next_attack_3" },
+    { type: "buff",   baseValue: 0, desc: "结阵（全队 armor +2）", buffId: "team_armor", buffValue: 2 },
     { type: "debuff", baseValue: 3, desc: "断筋", debuffId: "weak", debuffName: "虚弱", debuffDuration: 2 },
     { type: "debuff", baseValue: 2, desc: "破甲", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 2 },
   ],
@@ -105,6 +109,7 @@ const INTENT_POOLS: Record<EnemyRace, IntentTemplate[]> = {
     { type: "attack", baseValue: 5, desc: "骨锤" },
     { type: "attack", baseValue: 3, hits: 2, desc: "骨爪" },
     { type: "attack", baseValue: 6, desc: "灵魂吸食" },
+    { type: "buff",   baseValue: 0, desc: "死灵之力（回 5% maxHP）", buffId: "self_heal_pct", buffValue: 5 },
     { type: "debuff", baseValue: 4, desc: "凋零术", debuffId: "poison", debuffName: "中毒" },
     { type: "debuff", baseValue: 2, desc: "诅咒", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 2 },
     { type: "debuff", baseValue: 3, desc: "瘴气", debuffId: "weak", debuffName: "虚弱", debuffDuration: 2 },
@@ -113,7 +118,8 @@ const INTENT_POOLS: Record<EnemyRace, IntentTemplate[]> = {
     { type: "attack", baseValue: 7, desc: "巨拳" },
     { type: "attack", baseValue: 4, hits: 2, desc: "双拳" },
     { type: "attack", baseValue: 9, desc: "跺地震" },
-    { type: "buff",   baseValue: 0, desc: "硬化（armor +1）" },
+    { type: "buff",   baseValue: 0, desc: "硬化（armor +1）", buffId: "self_armor", buffValue: 1 },
+    { type: "buff",   baseValue: 0, desc: "狂奔（下张攻击 +1 hits）", buffId: "next_hits", buffValue: 1 },
     { type: "debuff", baseValue: 3, desc: "砸碎", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 2 },
     { type: "attack", baseValue: 11, desc: "重击" },
   ],
@@ -124,7 +130,8 @@ const INTENT_POOLS: Record<EnemyRace, IntentTemplate[]> = {
     { type: "attack", baseValue: 8, desc: "暗杀重击" },
     { type: "debuff", baseValue: 3, desc: "黑诅咒", debuffId: "vulnerable", debuffName: "易伤", debuffDuration: 3 },
     { type: "debuff", baseValue: 4, desc: "腐血", debuffId: "poison", debuffName: "中毒" },
-    { type: "buff",   baseValue: 0, desc: "暗影遁" },
+    { type: "buff",   baseValue: 0, desc: "暗影遁（下次攻击 +3）", buffId: "next_attack_3" },
+    { type: "buff",   baseValue: 0, desc: "血祭（自损 3%, 下张 +30%）", buffId: "self_sacrifice", buffValue: 30 },
   ],
 };
 
@@ -243,6 +250,8 @@ function generateIntents(race: EnemyRace, floor: number, tier: "normal" | "elite
     debuffId: t.debuffId,
     debuffName: t.debuffName,
     debuffDuration: t.debuffDuration,
+    buffId: t.buffId,
+    buffValue: t.buffValue,
   }));
 }
 
@@ -335,14 +344,24 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
     else if (opts.floor === 11) ai = "cold_hunter"; // F11 精英复合「冷血猎手」
     else ai = "necro_hunter";                      // F12+ 精英复合「死灵猎手」
   } else if (tier === "boss") {
-    // F3/F6 普通 boss：基础 AI（每场随机一种，避免单调）
-    if (opts.floor <= 3) {
-      ai = ["berserker", "hunter", "builder"][Math.floor(Math.random() * 3)] as import("./types.ts").BossAIId;
-    } else if (opts.floor <= 6) {
+    // v6 节奏：boss 从 F6 起每关末必出，所以无 F3 boss
+    // F6-F8: 基础 AI（4 种随机）
+    // F10-F11 / F13+ 普通 boss: 复合 AI 池
+    // F9 / F12 由 buildFixedBoss 单独覆写
+    if (opts.floor <= 8) {
       ai = ["berserker", "hunter", "builder", "healer"][Math.floor(Math.random() * 4)] as import("./types.ts").BossAIId;
+    } else {
+      // F10+ 非固定 boss：选 5 基础 + 2 复合
+      ai = ["berserker", "hunter", "builder", "healer", "reactor", "dual_berserk", "fake_builder"]
+        [Math.floor(Math.random() * 7)] as import("./types.ts").BossAIId;
     }
-    // F9 / F12 boss 由 buildFixedBoss 单独覆写
   }
+
+  // 暴击 / 闪避（按 tier × floor 线性，F12 达 cap）
+  const critChance = enemyBaseCritChance(tier, opts.floor);
+  const dodgeChance = enemyBaseDodgeChance(tier, opts.floor);
+  // 多动 AP
+  const actionsPerTurn = enemyActionsPerTurn(tier, opts.floor);
 
   return {
     id: newEnemyId(name),
@@ -360,7 +379,38 @@ function buildRandomEnemy(opts: BuildOpts): EnemyState {
     tier,
     eliteAbility,
     ai,
+    critChance: critChance > 0 ? critChance : undefined,
+    dodgeChance: dodgeChance > 0 ? dodgeChance : undefined,
+    actionsPerTurn: actionsPerTurn > 1 ? actionsPerTurn : undefined,
   };
+}
+
+// AP/回合：普通敌人 1；精英 F1-5=1, F6-10=2, F11+=3；
+//   Boss F3/F6=2, F9=3, F12=4（终末特例）, F15+=3
+function enemyActionsPerTurn(tier: "normal" | "elite" | "boss", floor: number): number {
+  if (tier === "normal") return 1;
+  if (tier === "elite") {
+    if (floor <= 5) return 1;
+    if (floor <= 10) return 2;
+    return 3;
+  }
+  // boss
+  if (floor === 12) return 4;
+  if (floor >= 9) return 3;
+  return 2;
+}
+
+// 敌人基础暴击率（百分点）：精英 cap 15 / boss cap 25，按 floor 线性
+function enemyBaseCritChance(tier: "normal" | "elite" | "boss", floor: number): number {
+  if (tier === "normal") return 0;
+  const cap = tier === "boss" ? 25 : 15;
+  return Math.min(cap, Math.round(floor / 12 * cap));
+}
+// 敌人基础闪避率（百分点）：精英 cap 9 / boss cap 15
+function enemyBaseDodgeChance(tier: "normal" | "elite" | "boss", floor: number): number {
+  if (tier === "normal") return 0;
+  const cap = tier === "boss" ? 15 : 9;
+  return Math.min(cap, Math.round(floor / 12 * cap));
 }
 
 // ─────────────────────────────────────────────────────────
@@ -390,6 +440,8 @@ function generateAllIntents(race: EnemyRace, floor: number, tier: "boss"): Enemy
     debuffId: t.debuffId,
     debuffName: t.debuffName,
     debuffDuration: t.debuffDuration,
+    buffId: t.buffId,
+    buffValue: t.buffValue,
   }));
 }
 
@@ -404,7 +456,14 @@ export function buildFixedBoss(floor: number): EnemyState | null {
     });
     e.name = "亡灵之主 · 不朽君王";
     e.weaponMult = 1.2;
-    e.intents = generateAllIntents("undead", floor, "boss");
+    const f9Intents = generateAllIntents("undead", floor, "boss");
+    // F9 boss 标志性招：亡者复苏 — 回血 8% maxHP
+    f9Intents.push({
+      type: "buff", value: 0,
+      desc: "亡者复苏（回 8% maxHP）",
+      buffId: "self_heal_pct", buffValue: 8,
+    });
+    e.intents = f9Intents;
     e.intentIndex = Math.floor(Math.random() * e.intents.length);
     e.ai = "unstoppable_healer";  // F9 boss：复合「不朽医者」(dot 越 HP 低越浓)
     return e;
@@ -422,6 +481,12 @@ export function buildFixedBoss(floor: number): EnemyState | null {
       value: Math.max(1, Math.round(scaleAttack(10, floor, "boss") * 1.1)),
       desc: "终末注视（极重击）",
     });
+    // F12 phase 3 标志性招：终末降临 — 全部 debuff stack ×2
+    baseIntents.push({
+      type: "buff", value: 0,
+      desc: "终末降临（玩家 debuff ×2）",
+      buffId: "double_debuffs", buffValue: 0,
+    });
     e.intents = baseIntents;
     e.intentIndex = Math.floor(Math.random() * e.intents.length);
     e.ai = "evolving";  // F12 终末三式：3 阶段切复合流派 + flavor log
@@ -431,7 +496,8 @@ export function buildFixedBoss(floor: number): EnemyState | null {
 }
 
 export function makeEnemyGroupsForFloor(floor: number): EnemyState[][] {
-  const isBossFloor = floor % 3 === 0;
+  // F6 起每关末场是 Boss（v6 节奏改革）
+  const isBossFloor = floor >= 6;
   const groups: EnemyState[][] = [];
 
   // 第 1 场：普通（偶尔多人小怪 — 40% 概率，让群伤技能更有用武之地）

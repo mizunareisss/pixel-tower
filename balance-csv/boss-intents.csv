@@ -1,0 +1,42 @@
+﻿race,name,type,base_value,hits,debuff_id,debuff_name,debuff_duration,status,effect_desc,berserker_role,hunter_role,builder_role,healer_role,reactor_role,notes
+beast,啃咬,attack,4,,,,,current,单击 4 伤,core,follow-up,filler,补刀 (50%),core (HP<60%),
+beast,撕咬,attack,5,,,,,current,单击 5 伤,core,follow-up,filler,补刀 (50%),core (HP<60%),
+beast,连咬,attack,2.5,2,,,,current,2 段 ×2.5（共 5）,core,follow-up,filler,补刀 (50%),core (HP<60%),
+beast,突袭,attack,6,,,,,current,单击 6 伤,core,follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),
+beast,嚎叫,buff,0,,,,,current,下次攻击 +3,opener (HP>70%),—,core (turn≤3 堆 buff),—,safety (HP>60%),
+beast,獠牙伤,debuff,2,,poison,中毒,,current,"+2 中毒（每回合扣 stack HP, 衰减 -1/回）",—,opener (削),—,core (叠 dot),—,
+humanoid,挥砍,attack,4,,,,,current,单击 4 伤,core,follow-up,filler,补刀 (50%),core (HP<60%),
+humanoid,连斩,attack,3,2,,,,current,2 段 ×3,core,follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),
+humanoid,突刺,attack,5,,,,,current,单击 5 伤,core,follow-up,filler,补刀 (50%),core (HP<60%),
+humanoid,重击,attack,6,,,,,current,单击 6 伤,core,follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),
+humanoid,战吼,buff,0,,,,,current,下次攻击 +3,opener (HP>70%),—,core (turn≤3 堆 buff),—,safety (HP>60%),
+humanoid,断筋,debuff,3,,weak,虚弱,2,current,玩家虚弱 stack +3（攻击 -stack），2 回合,—,opener (削),—,core (叠 dot),—,
+humanoid,破甲,debuff,2,,vulnerable,易伤,2,current,玩家易伤 stack +2（受伤 ×1.5），2 回合,—,opener (削),—,core (叠 dot),—,
+undead,骨锤,attack,5,,,,,current,单击 5 伤,core,follow-up,filler,补刀 (50%),core (HP<60%),
+undead,骨爪,attack,3,2,,,,current,2 段 ×3,core,follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),
+undead,灵魂吸食,attack,6,,,,,current,单击 6 伤,core,follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),
+undead,凋零术,debuff,4,,poison,中毒,,current,+4 中毒,—,opener (削),—,core (叠 dot),—,
+undead,诅咒,debuff,2,,vulnerable,易伤,2,current,"易伤 +2, 2 回合",—,opener (削),—,core (叠 dot),—,
+undead,瘴气,debuff,3,,weak,虚弱,2,current,"虚弱 +3, 2 回合",—,opener (削),—,core (叠 dot),—,
+giant,巨拳,attack,7,,,,,current,单击 7 伤,core,follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),
+giant,双拳,attack,4,2,,,,current,2 段 ×4,finisher (HP<30% 取最强),follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),
+giant,跺地震,attack,9,,,,,current,单击 9 伤,finisher (HP<30% 取最强),follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),
+giant,硬化,buff,0,,,,,current,armor +1（永久持续到死，叠加无 cap）,opener (HP>70%),—,core (turn≤3 堆 buff),—,safety (HP>60%),
+giant,砸碎,debuff,3,,vulnerable,易伤,2,current,"易伤 +3, 2 回合",—,opener (削),—,core (叠 dot),—,
+giant,重击,attack,11,,,,,current,单击 11 伤（最强单击）,finisher (HP<30% 取最强),follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),
+dark,暗影斩,attack,5,,,,,current,单击 5 伤,core,follow-up,filler,补刀 (50%),core (HP<60%),
+dark,影矛连射,attack,3,2,,,,current,2 段 ×3,core,follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),
+dark,黑闪,attack,7,,,,,current,单击 7 伤,core,follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),
+dark,暗杀重击,attack,8,,,,,current,单击 8 伤,finisher (HP<30% 取最强),follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),
+dark,黑诅咒,debuff,3,,vulnerable,易伤,3,current,"易伤 +3, 3 回合（最长）",—,opener (削),—,core (叠 dot),—,
+dark,腐血,debuff,4,,poison,中毒,,current,+4 中毒,—,opener (削),—,core (叠 dot),—,
+dark,暗影遁,buff,0,,,,,current,下次攻击 +3,opener (HP>70%),—,core (turn≤3 堆 buff),—,safety (HP>60%),
+beast,血怒,buff,0,,,,,PROPOSED,本回合 boss armor +2,opener (HP>70%),—,core (turn≤3 堆 buff),—,safety (HP>60%),防御 buff，跟嚎叫攻 +3 互补
+humanoid,结阵,buff,0,,,,,PROPOSED,"全队（含自己）armor +2, 1 回合",opener (HP>70%),—,core (turn≤3 堆 buff),—,safety (HP>60%),群体防御 buff，多人战变厚
+undead,死灵之力,buff,0,,,,,PROPOSED,boss HP +5% maxHP,opener (HP>70%),—,core (turn≤3 堆 buff),—,safety (HP>60%),★ 关键 — undead 没有 buff，狂战/构筑/应变流派现在用不了
+undead,凋零附身,buff,0,,,,,PROPOSED,下次攻击命中 → 玩家身上 dot stack +1（全 dot 类共享）,opener (HP>70%),—,core (turn≤3 堆 buff),—,safety (HP>60%),高级备选 —会让 dot 流派更狠
+giant,狂奔,buff,0,,,,,PROPOSED,下张攻击 hits +1（多段化）,opener (HP>70%),—,core (turn≤3 堆 buff),—,safety (HP>60%),让 giant 重击变多段
+dark,血祭,buff,0,,,,,PROPOSED,"自损 3% maxHP, 下张攻击 +30%",opener (HP>70%),—,core (turn≤3 堆 buff),—,safety (HP>60%),高风险高回报 buff
+undead,亡者复苏,buff,0,,,,,F9 boss only,F9 boss 回血 8% maxHP,opener (HP>70%),—,core (turn≤3 堆 buff),—,safety (HP>60%),PROPOSED — 给 F9 boss 标志性招式
+dark,终末注视,attack,11,,,,,F12 boss only,极重击（base 10 × 1.1）,finisher (HP<30% 取最强),follow-up,burst (turn≥6 爆发),补刀 (50%),core (HP<60%),已实装（buildFixedBoss F12 push）
+dark,终末降临,buff,0,,,,,F12 boss only,phase 3：所有玩家身上 debuff stack ×2,opener (HP>70%),—,core (turn≤3 堆 buff),—,safety (HP>60%),PROPOSED — phase 3 触发的标志性招式

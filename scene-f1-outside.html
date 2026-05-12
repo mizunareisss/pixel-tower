@@ -56,12 +56,66 @@
     .reroll-btn:hover { background: rgba(252,211,77,0.1); color: var(--gold); }
     .reroll-btn .reroll { color: var(--gold); margin-left: 6px; }
     .hint {
-      position: fixed; left: 24px; bottom: 24px; z-index: 10;
+      position: fixed; left: 24px; top: 88px; z-index: 10;
       font: 11px 'Noto Sans SC', sans-serif; color: var(--text-dim);
       letter-spacing: 0.5px; line-height: 1.5;
-      max-width: 280px;
+      max-width: 240px;
+      pointer-events: none;
     }
     .hint .em { color: var(--gold); }
+    /* 底部移动栏（玩家选择前进方向）*/
+    .move-bar {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 10;
+      background: rgba(15,12,20,0.7); backdrop-filter: blur(14px);
+      padding: 12px 16px; border-radius: 18px;
+      border: 1px solid rgba(252,211,77,0.22);
+      min-width: 280px; max-width: 92vw;
+      display: flex; flex-direction: column; gap: 10px; align-items: center;
+    }
+    .move-bar .cur {
+      font: 11px 'Cinzel', serif; letter-spacing: 2px; color: var(--gold-dim);
+    }
+    .move-bar .cur b {
+      font-family: 'Noto Sans SC', sans-serif; font-weight: 500;
+      color: var(--gold); font-size: 13px; margin-left: 6px;
+    }
+    .move-bar .moves {
+      display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    }
+    .move-btn {
+      border: 0; cursor: pointer;
+      padding: 10px 14px; border-radius: 12px;
+      background: rgba(40,30,50,0.85);
+      border: 1px solid rgba(252,211,77,0.28);
+      color: var(--text); font-family: 'Noto Sans SC', sans-serif;
+      transition: all .2s;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      min-width: 110px;
+    }
+    .move-btn:hover { background: rgba(252,211,77,0.18); transform: translateY(-2px); }
+    .move-btn .t { font-size: 11px; color: var(--gold-dim); letter-spacing: 1px; }
+    .move-btn .n { font-size: 13px; font-weight: 500; }
+    .move-btn.switch { border-color: rgba(128,200,255,0.4); }
+    .move-btn.switch .t { color: #80c8ff; }
+    .moves .moving {
+      font: 12px 'Noto Sans SC', sans-serif; color: var(--text-dim);
+      padding: 10px 18px;
+    }
+    .moves .cleared {
+      font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 3px;
+      color: var(--gold); padding: 12px 20px;
+      text-shadow: 0 0 10px rgba(252,211,77,0.5);
+    }
+    /* 手机竖屏适配 */
+    @media (max-aspect-ratio: 3/4) {
+      .topbar { padding: 12px 16px; }
+      .floor-num { font-size: 22px; }
+      .floor-name { font-size: 11px; }
+      .legend { right: 12px; padding: 10px 12px; min-width: 130px; font-size: 10px; }
+      .move-bar { min-width: 260px; padding: 10px 12px; }
+      .move-btn { min-width: 90px; padding: 8px 10px; }
+      .hint { display: none; }
+    }
   </style>
   <script type="importmap">
     {
@@ -97,6 +151,11 @@
     塔外荒原 · 两条路径通向塔门<br />
     每条路 <span class="em">3 个敌人</span> · 中段有<span class="em">小路换线</span><br />
     最终 <span class="em">BOSS 守门</span>，胜后开门入塔
+  </div>
+
+  <div class="move-bar">
+    <div class="cur">当前 / CURRENT<b id="curNodeLabel">起点</b></div>
+    <div class="moves" id="movesList"></div>
   </div>
 
   <main></main>
@@ -177,10 +236,53 @@
     document.querySelector('main').appendChild(renderer.domElement);
 
     const aspect = window.innerWidth / window.innerHeight;
-    const camD = 16;
+    // 竖屏适配：视野更小，主体更大
+    const camD = aspect < 1 ? 9 : 12;
     const camera = new THREE.OrthographicCamera(-camD * aspect, camD * aspect, camD, -camD, 0.1, 200);
-    camera.position.set(30, 22, 36);
-    camera.lookAt(0, 5, -8);
+
+    // —— Shot-based 镜头机位（导演视角，玩家移动时镜头慢摇 + d 缩放变化）——
+    const CAMERA_SHOTS = {
+      START: { pos: new THREE.Vector3(15, 11, 25), look: new THREE.Vector3(0,  1, 14),  d: 7 },
+      E1L:   { pos: new THREE.Vector3(0,  10, 18), look: new THREE.Vector3(-8, 1, 5),   d: 7 },
+      E1R:   { pos: new THREE.Vector3(24, 10, 18), look: new THREE.Vector3(8,  1, 5),   d: 7 },
+      E2L:   { pos: new THREE.Vector3(-3, 12, 12), look: new THREE.Vector3(-10, 1, -1), d: 8 },
+      E2R:   { pos: new THREE.Vector3(27, 12, 12), look: new THREE.Vector3(10, 1, -1),  d: 8 },
+      E3L:   { pos: new THREE.Vector3(0,  13, 3),  look: new THREE.Vector3(-8, 2, -10), d: 8 },
+      E3R:   { pos: new THREE.Vector3(24, 13, 3),  look: new THREE.Vector3(8,  2, -10), d: 8 },
+      BOSS:  { pos: new THREE.Vector3(22, 16, -2), look: new THREE.Vector3(0,  3, -17), d: 11 },
+      GATE:  { pos: new THREE.Vector3(8,  20, -14),look: new THREE.Vector3(0,  6, -25), d: 11 },
+    };
+    let camPosCur = CAMERA_SHOTS.START.pos.clone();
+    let camLookCur = CAMERA_SHOTS.START.look.clone();
+    let camPosTarget = camPosCur.clone();
+    let camLookTarget = camLookCur.clone();
+    let camDCur = CAMERA_SHOTS.START.d;
+    let camDTarget = camDCur;
+    camera.position.copy(camPosCur);
+    camera.lookAt(camLookCur);
+
+    function setCamShot(nodeKey, instant = false) {
+      const s = CAMERA_SHOTS[nodeKey];
+      if (!s) return;
+      camPosTarget.copy(s.pos);
+      camLookTarget.copy(s.look);
+      camDTarget = s.d;
+      if (instant) {
+        camPosCur.copy(s.pos);
+        camLookCur.copy(s.look);
+        camDCur = s.d;
+        applyCamFrustum();
+      }
+    }
+    function applyCamFrustum() {
+      const a = window.innerWidth / window.innerHeight;
+      camera.left = -camDCur * a;
+      camera.right = camDCur * a;
+      camera.top = camDCur;
+      camera.bottom = -camDCur;
+      camera.updateProjectionMatrix();
+    }
+    applyCamFrustum();
 
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
@@ -298,6 +400,26 @@
       const flag = block(0.8, 0.8, 0.02, color); flag.position.set(0.4, height - 0.5, 0); g.add(flag);
       // 旗杆顶金球
       const top = sph(0.06, '#fbbf24'); top.position.y = height; g.add(top);
+      g.userData = { flag };
+      return g;
+    }
+    // 飞过的乌鸦剪影
+    function makeCrow() {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6),
+        new THREE.MeshBasicMaterial({ color: 0x080406 }));
+      body.scale.set(1.6, 0.7, 0.9); g.add(body);
+      // 双翼（两个三角形板，pivot 在身体侧面）
+      const wingGeo = new THREE.BufferGeometry();
+      wingGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+        0, 0, 0,  0.35, 0.04, -0.08,  0.22, 0, -0.22,
+      ]), 3));
+      wingGeo.computeVertexNormals();
+      const wingMat = new THREE.MeshBasicMaterial({ color: 0x100408, side: THREE.DoubleSide });
+      const wL = new THREE.Mesh(wingGeo, wingMat); wL.position.x = -0.05; wL.scale.x = -1;
+      const wR = new THREE.Mesh(wingGeo, wingMat); wR.position.x = 0.05;
+      g.add(wL); g.add(wR);
+      g.userData = { wL, wR };
       return g;
     }
 
@@ -355,8 +477,8 @@
       const pole = cyl(0.04, 0.04, 1.2, '#3a2418'); pole.position.y = 0.6; g.add(pole);
       const board = block(0.5, 0.18, 0.04, '#7a4828'); board.position.set(0.1, 1.05, 0); g.add(board);
       const arrow = cone(0.08, 0.18, '#7a4828', 4); arrow.position.set(0.42, 1.05, 0); arrow.rotation.z = -Math.PI/2; g.add(arrow);
-      // 板上"塔门"金字
-      const text = block(0.3, 0.06, 0.005, '#fbbf24'); text.position.set(0.1, 1.05, 0.022); g.add(text);
+      // 板上"塔门"金字（推前避免共面）
+      const text = block(0.3, 0.06, 0.005, '#fbbf24'); text.position.set(0.1, 1.05, 0.04); g.add(text);
       return g;
     }
 
@@ -414,9 +536,9 @@
       const top = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.1, 12, 1, false, 0, Math.PI),
         toon('#5a5060'));
       top.position.y = 0.6; top.rotation.z = -Math.PI/2; top.rotation.y = Math.PI/2; g.add(top);
-      // 碑面十字
-      const cross1 = block(0.04, 0.15, 0.01, '#1a1010'); cross1.position.set(0, 0.4, 0.055); g.add(cross1);
-      const cross2 = block(0.15, 0.04, 0.01, '#1a1010'); cross2.position.set(0, 0.42, 0.055); g.add(cross2);
+      // 碑面十字（推前避免和碑面共面）
+      const cross1 = block(0.04, 0.15, 0.01, '#1a1010'); cross1.position.set(0, 0.4, 0.065); g.add(cross1);
+      const cross2 = block(0.15, 0.04, 0.01, '#1a1010'); cross2.position.set(0, 0.42, 0.066); g.add(cross2);
       return g;
     }
 
@@ -577,15 +699,20 @@
       ground.rotation.x = -Math.PI / 2;
       ground.receiveShadow = true;
       root.add(ground);
-      // 草地块（散布在地面上提供色彩变化）
+      // 草地块（散布在地面上提供色彩变化，关 depthWrite + 微随机 y 避免共面）
       for (let i = 0; i < 60; i++) {
         const w = rand(1.5, 3.5), d = rand(1.5, 3.5);
         const patch = new THREE.Mesh(
           new THREE.PlaneGeometry(w, d),
-          new THREE.MeshBasicMaterial({ color: rng() > 0.5 ? 0x3a4828 : 0x5a4030, transparent: true, opacity: 0.55 }));
+          new THREE.MeshBasicMaterial({
+            color: rng() > 0.5 ? 0x3a4828 : 0x5a4030,
+            transparent: true, opacity: 0.55,
+            depthWrite: false,
+          }));
         patch.rotation.x = -Math.PI / 2;
-        patch.position.set(rand(-25, 25), 0.01, rand(-22, 18));
+        patch.position.set(rand(-25, 25), 0.02 + rng() * 0.015, rand(-22, 18));
         patch.rotation.z = rand(0, Math.PI);
+        patch.renderOrder = 0;
         root.add(patch);
       }
 
@@ -623,28 +750,31 @@
       const base = block(W + 1.5, 1.5, D + 1.5, '#2a1c28');
       base.position.y = 0.75; wall.add(base);
 
-      // 大门（中央底部）
+      // 大门（中央底部，分层 z 避免共面 Z fight）
       const doorH = 8, doorW = 6.5;
+      // 主墙体前端面 z = D/2 = 2.5（D=5）
+      // doorFrame 后端面 z=2.5（贴墙），前端面 z=2.9
       const doorFrame = block(doorW + 1.0, doorH + 1.0, 0.4, '#7a4828');
-      doorFrame.position.set(0, doorH / 2 + 0.5, D / 2 + 0.15);
+      doorFrame.position.set(0, doorH / 2 + 0.5, D / 2 + 0.21);
       wall.add(doorFrame);
+      // door 在 doorFrame 凹槽内（z 范围 [2.95, 3.15]）
       const door = block(doorW, doorH, 0.2, '#1a0a08', { emissive: 0xff3818, emissiveIntensity: 0.4 });
-      door.position.set(0, doorH / 2 + 0.5, D / 2 + 0.3);
+      door.position.set(0, doorH / 2 + 0.5, D / 2 + 0.55);
       wall.add(door);
-      // 门拱
+      // 门拱（在 doorFrame 上方，z 比 frame 略前）
       const archGeo = new THREE.CylinderGeometry(doorW / 2 + 0.5, doorW / 2 + 0.5, 0.4, 16, 1, false, 0, Math.PI);
       const arch = new THREE.Mesh(archGeo, toon('#7a4828'));
-      arch.position.set(0, doorH + 0.9, D / 2 + 0.15);
+      arch.position.set(0, doorH + 0.9, D / 2 + 0.21);
       arch.rotation.z = -Math.PI / 2; arch.rotation.y = Math.PI / 2;
       wall.add(arch);
-      // 门金色花纹（4 颗金钉 + 横条）
+      // 门金色花纹（横条，在 door 前面 z=3.2）
       const doorBolt = block(doorW + 0.05, 0.2, 0.05, '#fbbf24');
-      doorBolt.position.set(0, doorH / 2 + 0.5, D / 2 + 0.41);
+      doorBolt.position.set(0, doorH / 2 + 0.5, D / 2 + 0.7);
       wall.add(doorBolt);
       for (const dy of [doorH * 0.2, -doorH * 0.2]) {
         for (const dx of [-doorW * 0.35, doorW * 0.35]) {
           const stud = sph(0.12, '#fbbf24');
-          stud.position.set(dx, doorH / 2 + 0.5 + dy, D / 2 + 0.42); wall.add(stud);
+          stud.position.set(dx, doorH / 2 + 0.5 + dy, D / 2 + 0.75); wall.add(stud);
         }
       }
       // 门两侧大型石柱
@@ -667,7 +797,7 @@
         pl.position.set(sx, doorH + 2.5, D / 2 + 0.5); wall.add(pl);
       }
 
-      // 墙上窗洞（多层多个）
+      // 墙上窗洞（多层多个，frame 在外、win 在前，z 错开避免共面）
       const windowLayers = 4;
       for (let layer = 0; layer < windowLayers; layer++) {
         const wy = doorH + 2.5 + layer * 4;
@@ -676,15 +806,16 @@
         for (let i = 0; i < winCount; i++) {
           const t = (i / (winCount - 1)) - 0.5;
           const wx = t * (W - 4);
-          if (Math.abs(wx) < 2.5) continue; // 跳过中央门洞
+          if (Math.abs(wx) < 2.5) continue;
+          // 窗框先放（贴墙体表面外突 0.05）
+          const frame = block(1.05, 1.45, 0.08, '#3a2418');
+          frame.position.set(wx, wy, D / 2 + 0.09);
+          wall.add(frame);
+          // 发光窗在 frame 中央前面
           const win = block(0.9, 1.3, 0.05, '#1a0a08',
             { emissive: 0xff8838, emissiveIntensity: 1.8 });
-          win.position.set(wx, wy, D / 2 + 0.05);
+          win.position.set(wx, wy, D / 2 + 0.18);
           wall.add(win);
-          // 窗框
-          const frame = block(1.05, 1.45, 0.08, '#3a2418');
-          frame.position.set(wx, wy, D / 2 + 0.04);
-          wall.add(frame);
         }
       }
 
@@ -781,14 +912,17 @@
     }
     function makeBrokenShield() {
       const g = new THREE.Group();
-      const shield = new THREE.Mesh(new THREE.CircleGeometry(0.35, 16, 0, Math.PI * 1.4), toon('#7a4828'));
-      shield.position.y = 0.05; shield.rotation.x = -Math.PI / 2;
+      // 用 cyl 替代 circle（有厚度，避免 z-fight 地面）
+      const shield = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.04, 16),
+        toon('#7a4828'));
+      shield.position.y = 0.07;
       g.add(shield);
       // 中央金色凸起
-      const boss = sph(0.06, '#fbbf24'); boss.position.y = 0.08; g.add(boss);
-      // 边框
-      const rim = new THREE.Mesh(new THREE.RingGeometry(0.32, 0.36, 16), toon('#3a2418'));
-      rim.rotation.x = -Math.PI / 2; rim.position.y = 0.055; g.add(rim);
+      const boss = sph(0.06, '#fbbf24'); boss.position.y = 0.12; g.add(boss);
+      // 边框（在 shield 顶面之上 0.03）
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.018, 6, 18),
+        toon('#3a2418'));
+      rim.rotation.x = -Math.PI / 2; rim.position.y = 0.10; g.add(rim);
       g.rotation.y = rand(0, Math.PI * 2);
       g.rotation.z = rand(-0.1, 0.1);
       return g;
@@ -799,12 +933,12 @@
       const helm = new THREE.Mesh(
         new THREE.SphereGeometry(0.18, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.65),
         toon('#5a5060'));
-      helm.position.y = 0.1; helm.rotation.x = Math.PI; g.add(helm);
+      helm.position.y = 0.12; helm.rotation.x = Math.PI; g.add(helm);
       // 头盔上的破口
-      const crack = block(0.04, 0.04, 0.04, '#1a1010');
-      crack.position.set(0.1, 0.12, 0); g.add(crack);
-      // 顶部金色装饰
-      const crest = block(0.04, 0.1, 0.18, '#fbbf24'); crest.position.y = 0.18; g.add(crest);
+      const crack = block(0.04, 0.04, 0.05, '#1a1010');
+      crack.position.set(0.1, 0.14, 0); g.add(crack);
+      // 顶部金色装饰（推高避开 helm 表面）
+      const crest = block(0.04, 0.1, 0.18, '#fbbf24'); crest.position.y = 0.24; g.add(crest);
       g.rotation.y = rand(0, Math.PI * 2);
       return g;
     }
@@ -821,14 +955,16 @@
       const g = new THREE.Group();
       const scorch = new THREE.Mesh(
         new THREE.CircleGeometry(0.6 + rand(0, 0.2), 16),
-        new THREE.MeshBasicMaterial({ color: 0x1a0820, transparent: true, opacity: 0.85 }));
+        new THREE.MeshBasicMaterial({ color: 0x1a0820, transparent: true, opacity: 0.85,
+          depthWrite: false }));
       scorch.rotation.x = -Math.PI / 2;
-      scorch.position.y = 0.015;
+      scorch.position.y = 0.05 + rand(0, 0.02);
+      scorch.renderOrder = 0;
       g.add(scorch);
-      // 中心残留紫色符文
-      const rune = block(0.15, 0.005, 0.15, '#c868ff',
+      // 中心残留紫色符文（在 scorch 之上明显）
+      const rune = block(0.15, 0.02, 0.15, '#c868ff',
         { emissive: 0xc868ff, emissiveIntensity: 1.5 });
-      rune.position.y = 0.025; rune.rotation.y = rand(0, Math.PI); g.add(rune);
+      rune.position.y = 0.09; rune.rotation.y = rand(0, Math.PI); g.add(rune);
       // 紫色烟雾（3-4 个小球向上飘）
       const smokes = [];
       for (let i = 0; i < 3; i++) {
@@ -849,12 +985,14 @@
       return g;
     }
     function makeBurnSpot() {
-      // 简单烧焦地块
+      // 简单烧焦地块（关 depthWrite + 微 y 偏移）
       const g = new THREE.Mesh(
         new THREE.CircleGeometry(0.5 + rand(0, 0.4), 16),
-        new THREE.MeshBasicMaterial({ color: 0x1a0e10, transparent: true, opacity: 0.7 }));
+        new THREE.MeshBasicMaterial({ color: 0x1a0e10, transparent: true, opacity: 0.7,
+          depthWrite: false }));
       g.rotation.x = -Math.PI / 2;
-      g.position.y = 0.015;
+      g.position.y = 0.06 + rand(0, 0.02);
+      g.renderOrder = 0;
       return g;
     }
     function makeSiegeWreck() {
@@ -909,11 +1047,11 @@
       startTerrace.position.set(NODES.START.x, (NODES.START.y - 0.4) / 2, NODES.START.z);
       startTerrace.castShadow = true; startTerrace.receiveShadow = true;
       root.add(startTerrace);
-      // 起点台地金色边沿
+      // 起点台地金色边沿（突出于台地顶面之上，避免 Z fight）
       const startEdge = new THREE.Mesh(
         new THREE.CylinderGeometry(3.3, 3.3, 0.1, 12),
         toon('#7a5828'));
-      startEdge.position.set(NODES.START.x, NODES.START.y - 0.05, NODES.START.z);
+      startEdge.position.set(NODES.START.x, NODES.START.y + 0.04, NODES.START.z);
       root.add(startEdge);
 
       // E1 台地（双侧）
@@ -931,11 +1069,11 @@
         toon('#3a322a'));
       e2Mid.position.set(0, (NODES.E2L.y - 0.4) / 2, NODES.E2L.z);
       e2Mid.castShadow = true; e2Mid.receiveShadow = true; root.add(e2Mid);
-      // E2 金色长边
+      // E2 金色长边（抬高避免共面）
       const e2Edge = new THREE.Mesh(
         new THREE.BoxGeometry(22, 0.1, 4),
         toon('#5a3818'));
-      e2Edge.position.set(0, NODES.E2L.y - 0.05, NODES.E2L.z);
+      e2Edge.position.set(0, NODES.E2L.y + 0.04, NODES.E2L.z);
       root.add(e2Edge);
 
       // E3 台地
@@ -954,11 +1092,11 @@
       bossTerrace.position.set(NODES.BOSS.x, (NODES.BOSS.y - 0.4) / 2, NODES.BOSS.z);
       bossTerrace.castShadow = true; bossTerrace.receiveShadow = true;
       root.add(bossTerrace);
-      // BOSS 台金边
+      // BOSS 台金边（抬高）
       const bossEdge = new THREE.Mesh(
         new THREE.CylinderGeometry(4.3, 4.3, 0.15, 16),
         toon('#7a3838'));
-      bossEdge.position.set(NODES.BOSS.x, NODES.BOSS.y - 0.075, NODES.BOSS.z);
+      bossEdge.position.set(NODES.BOSS.x, NODES.BOSS.y + 0.06, NODES.BOSS.z);
       root.add(bossEdge);
 
       // 塔基高台（连接 BOSS 平台到塔门）
@@ -966,9 +1104,9 @@
       towerBase.position.set(0, (TOWER_BASE_Y - 0.4) / 2, -22);
       towerBase.castShadow = true; towerBase.receiveShadow = true;
       root.add(towerBase);
-      // 塔基金边
+      // 塔基金边（抬高）
       const towerBaseEdge = block(18.4, 0.18, 9.4, '#5a2828');
-      towerBaseEdge.position.set(0, TOWER_BASE_Y - 0.09, -22);
+      towerBaseEdge.position.set(0, TOWER_BASE_Y + 0.05, -22);
       root.add(towerBaseEdge);
       // 塔基前侧大台阶（从 Boss 高度到塔基）
       const stepCount = 5;
@@ -979,9 +1117,9 @@
         step.position.set(0, stepY - 0.125, -22 + 4.5 + i * stepDz);
         step.castShadow = true; step.receiveShadow = true;
         root.add(step);
-        // 台阶金边
+        // 台阶金边（抬高避免共面）
         const stepEdge = block(10.1, 0.05, 0.82, '#7a3838');
-        stepEdge.position.set(0, stepY - 0.025, -22 + 4.5 + i * stepDz);
+        stepEdge.position.set(0, stepY + 0.04, -22 + 4.5 + i * stepDz);
         root.add(stepEdge);
       }
 
@@ -990,8 +1128,8 @@
     }
 
     function buildPath() {
+      nodeRingMeshes = {};
       // 路径连接（视觉路面）
-      const PATH_COLOR = '#5a4838';
       drawRoad(NODES.START, NODES.E1L);
       drawRoad(NODES.START, NODES.E1R);
       drawRoad(NODES.E1L, NODES.E2L);
@@ -1000,24 +1138,30 @@
       drawRoad(NODES.E2R, NODES.E3R);
       drawRoad(NODES.E3L, NODES.BOSS);
       drawRoad(NODES.E3R, NODES.BOSS);
+      drawRoad(NODES.BOSS, NODES.GATE);
       // 换线小路（蓝色高亮）
       drawRoad(NODES.E2L, NODES.E2R, true);
 
       // —— 起点（营地 + 玩家 + 旗帜）——
       const startG = new THREE.Group();
       startG.position.set(NODES.START.x, NODES.START.y, NODES.START.z);
-      // 起点圆形地面（亮草地）
+      // 起点圆形地面（亮草地，抬高到台地顶面之上）
       const startGround = new THREE.Mesh(new THREE.CircleGeometry(2.5, 32),
-        new THREE.MeshBasicMaterial({ color: 0x3a5828, transparent: true, opacity: 0.7 }));
+        new THREE.MeshBasicMaterial({ color: 0x3a5828, transparent: true, opacity: 0.7,
+          depthWrite: false }));
       startGround.rotation.x = -Math.PI / 2;
-      startGround.position.y = 0.02;
+      startGround.position.y = 0.08;
+      startGround.renderOrder = 1;
       startG.add(startGround);
-      // 起点光环（绿色）
+      // 起点光环（绿色，在 startGround 之上）
       const startRing = new THREE.Mesh(new THREE.RingGeometry(2.3, 2.5, 32),
-        new THREE.MeshBasicMaterial({ color: 0x4dd870, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
+        new THREE.MeshBasicMaterial({ color: 0x4dd870, transparent: true, opacity: 0.85, side: THREE.DoubleSide,
+          depthWrite: false }));
       startRing.rotation.x = -Math.PI / 2;
-      startRing.position.y = 0.04;
+      startRing.position.y = 0.12;
+      startRing.renderOrder = 2;
       startG.add(startRing);
+      nodeRingMeshes['START'] = startRing;
       // 营火（中央）
       const fire = makeFirePit(0.5);
       fire.position.set(-0.5, 0, -0.5); startG.add(fire);
@@ -1032,41 +1176,50 @@
       const barrel2 = makeBarrel(); barrel2.position.set(-1.1, 0, 1.0); startG.add(barrel2);
       // 路标
       const sign = makeSignpost(); sign.position.set(1.4, 0, 0.8); startG.add(sign);
-      // 旗帜（绿色起点旗）
+      // 旗帜（绿色起点旗，随风摆动）
       const banner = makeBanner('#4dd870', 2.5); banner.position.set(-1.6, 0, -1.0); startG.add(banner);
-      // 玩家小人
-      const player = makePlayer();
-      player.position.set(0, 0, 1.4); player.rotation.y = Math.PI; // 面朝塔门
-      startG.add(player);
+      const bannerFlag = banner.userData.flag;
+      const baseFlagX = bannerFlag.position.x;
+      updaters.push((t) => {
+        bannerFlag.scale.x = 1 + Math.sin(t * 3) * 0.18;
+        bannerFlag.position.x = baseFlagX + Math.sin(t * 3) * 0.08;
+        bannerFlag.rotation.y = Math.sin(t * 2.5) * 0.18;
+      });
+      // 起点角色（独立动态玩家见下方 placePlayer）
       root.add(startG);
 
       // —— 6 个敌人节点 ——
       const ENEMY_SPEC = [
-        { node: NODES.E1L, type: 'goblin', label: '战斗', dec: 'tent' },
-        { node: NODES.E1R, type: 'wolf', label: '战斗', dec: 'bones' },
-        { node: NODES.E2L, type: 'bandit', label: '战斗', dec: 'rack' },
-        { node: NODES.E2R, type: 'skeleton', label: '战斗', dec: 'grave' },
-        { node: NODES.E3L, type: 'darkknight', label: '精英', dec: 'campfire', elite: true },
-        { node: NODES.E3R, type: 'sorcerer', label: '精英', dec: 'altar', elite: true },
+        { key: 'E1L', node: NODES.E1L, type: 'goblin', label: '战斗', dec: 'tent' },
+        { key: 'E1R', node: NODES.E1R, type: 'wolf', label: '战斗', dec: 'bones' },
+        { key: 'E2L', node: NODES.E2L, type: 'bandit', label: '战斗', dec: 'rack' },
+        { key: 'E2R', node: NODES.E2R, type: 'skeleton', label: '战斗', dec: 'grave' },
+        { key: 'E3L', node: NODES.E3L, type: 'darkknight', label: '精英', dec: 'campfire', elite: true },
+        { key: 'E3R', node: NODES.E3R, type: 'sorcerer', label: '精英', dec: 'altar', elite: true },
       ];
       ENEMY_SPEC.forEach(spec => {
         const g = new THREE.Group();
         g.position.set(spec.node.x, spec.node.y, spec.node.z);
-        // 圆形节点地面
+        // 圆形节点地面（提高 + depthWrite 关，避免透明 Z fight）
         const ring = new THREE.Mesh(new THREE.RingGeometry(1.8, 2.0, 32),
           new THREE.MeshBasicMaterial({
             color: spec.elite ? 0xff8c28 : 0xe63329,
-            transparent: true, opacity: 0.85, side: THREE.DoubleSide
+            transparent: true, opacity: 0.85, side: THREE.DoubleSide,
+            depthWrite: false,
           }));
-        ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03;
+        ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12;
+        ring.renderOrder = 2;
         g.add(ring);
-        // 内淡光
+        nodeRingMeshes[spec.key] = ring;
+        // 内淡光（低于 ring，叉开 z）
         const inner = new THREE.Mesh(new THREE.CircleGeometry(1.8, 32),
           new THREE.MeshBasicMaterial({
             color: spec.elite ? 0xff8c28 : 0xe63329,
-            transparent: true, opacity: 0.18
+            transparent: true, opacity: 0.2,
+            depthWrite: false,
           }));
-        inner.rotation.x = -Math.PI / 2; inner.position.y = 0.025;
+        inner.rotation.x = -Math.PI / 2; inner.position.y = 0.08;
+        inner.renderOrder = 1;
         g.add(inner);
         // 敌人模型
         const enemy = makeSimpleEnemy(spec.type);
@@ -1139,14 +1292,19 @@
       // —— Boss 节点（塔门前广场）——
       const bossG = new THREE.Group();
       bossG.position.set(NODES.BOSS.x, NODES.BOSS.y, NODES.BOSS.z);
-      // 大圆形 BOSS 圈
+      // 大圆形 BOSS 圈（提高 + 关 depthWrite）
       const bossRing = new THREE.Mesh(new THREE.RingGeometry(3.5, 3.8, 48),
-        new THREE.MeshBasicMaterial({ color: 0xffd460, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
-      bossRing.rotation.x = -Math.PI / 2; bossRing.position.y = 0.04;
+        new THREE.MeshBasicMaterial({ color: 0xffd460, transparent: true, opacity: 0.85, side: THREE.DoubleSide,
+          depthWrite: false }));
+      bossRing.rotation.x = -Math.PI / 2; bossRing.position.y = 0.14;
+      bossRing.renderOrder = 2;
       bossG.add(bossRing);
+      nodeRingMeshes['BOSS'] = bossRing;
       const bossInner = new THREE.Mesh(new THREE.CircleGeometry(3.5, 48),
-        new THREE.MeshBasicMaterial({ color: 0xffd460, transparent: true, opacity: 0.2 }));
-      bossInner.rotation.x = -Math.PI / 2; bossInner.position.y = 0.035;
+        new THREE.MeshBasicMaterial({ color: 0xffd460, transparent: true, opacity: 0.22,
+          depthWrite: false }));
+      bossInner.rotation.x = -Math.PI / 2; bossInner.position.y = 0.10;
+      bossInner.renderOrder = 1;
       bossG.add(bossInner);
       // 中央 BOSS
       const boss = makeSimpleEnemy('boss');
@@ -1178,8 +1336,23 @@
       const bones2 = makeBoneStack(); bones2.position.set(-2.0, 0, 1.5); bossG.add(bones2);
       root.add(bossG);
 
-      // 路径节点上方浮动小图标
-      // (留待 V2 实现)
+      // —— 塔门节点（GATE，玩家可走到这里进入塔）——
+      const gateG = new THREE.Group();
+      gateG.position.set(NODES.GATE.x, NODES.GATE.y, NODES.GATE.z);
+      const gateRing = new THREE.Mesh(new THREE.RingGeometry(1.4, 1.6, 32),
+        new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.9, side: THREE.DoubleSide,
+          depthWrite: false }));
+      gateRing.rotation.x = -Math.PI / 2; gateRing.position.y = 0.12;
+      gateRing.renderOrder = 2;
+      gateG.add(gateRing);
+      nodeRingMeshes['GATE'] = gateRing;
+      const gateInner = new THREE.Mesh(new THREE.CircleGeometry(1.4, 32),
+        new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.22,
+          depthWrite: false }));
+      gateInner.rotation.x = -Math.PI / 2; gateInner.position.y = 0.08;
+      gateInner.renderOrder = 1;
+      gateG.add(gateInner);
+      root.add(gateG);
     }
 
     function drawRoad(from, to, isConnector = false) {
@@ -1494,6 +1667,170 @@
         const phase = rng() * Math.PI * 2;
         updaters.push((t) => { star.scale.setScalar(1 + Math.sin(t * 1.5 + phase) * 0.4); });
       }
+
+      // —— 飞过的乌鸦群（5 只绕塔上空盘旋）——
+      for (let i = 0; i < 5; i++) {
+        const crow = makeCrow();
+        const speed = rand(0.12, 0.22);
+        const radius = rand(11, 18);
+        const height = rand(13, 22);
+        const phase = rng() * Math.PI * 2;
+        const ovality = rand(0.5, 0.85);
+        root.add(crow);
+        updaters.push((t) => {
+          const a = t * speed + phase;
+          crow.position.set(
+            Math.cos(a) * radius,
+            height + Math.sin(t * 0.6 + i) * 0.4,
+            -10 + Math.sin(a) * radius * ovality
+          );
+          crow.rotation.y = -a - Math.PI / 2;
+          const flap = Math.sin(t * 11 + phase) * 0.5;
+          crow.userData.wL.rotation.z = -flap;
+          crow.userData.wR.rotation.z = flap;
+        });
+      }
+
+      // —— 飘落灰烬 / 火星 / 落叶 ——
+      for (let i = 0; i < 36; i++) {
+        const isEmber = rng() > 0.5;
+        const color = isEmber ? 0xff8838 : (rng() > 0.5 ? 0xa89888 : 0x4a3838);
+        const ember = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 4),
+          new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 }));
+        const baseX = rand(-22, 22);
+        const baseZ = rand(-22, 14);
+        const fallSpeed = rand(0.4, 1.0);
+        const offset = rng() * 6;
+        const sway = rand(0.3, 0.8);
+        ember.position.set(baseX, 12, baseZ);
+        root.add(ember);
+        updaters.push((t) => {
+          const cycle = ((t * fallSpeed + offset) % 6) / 6;  // 0..1
+          ember.position.y = 14 - cycle * 14;
+          ember.position.x = baseX + Math.sin(cycle * Math.PI * 3) * sway;
+          ember.position.z = baseZ + Math.cos(cycle * Math.PI * 2.3) * sway * 0.5;
+          ember.material.opacity = 0.85 * (1 - cycle * 0.7);
+        });
+      }
+
+      // —— 偶发闪电（远处天光一闪）——
+      let nextFlashAt = 6 + rng() * 8;
+      let lastFlashStart = -100;
+      updaters.push((t) => {
+        if (t > nextFlashAt) {
+          lastFlashStart = t;
+          nextFlashAt = t + 8 + rng() * 14;
+        }
+        const dt2 = t - lastFlashStart;
+        if (dt2 < 0.35) {
+          const k = Math.exp(-dt2 * 10);
+          sun.intensity = 1.6 + k * 2.0;
+          ambient.intensity = 0.75 + k * 0.8;
+        } else if (sun.intensity !== 1.6) {
+          sun.intensity = 1.6;
+          ambient.intensity = 0.75;
+        }
+      });
+    }
+
+    // ============ 玩家状态 + 移动 ============
+    let playerObj = null;
+    let playerNode = 'START';
+    const playerVisited = new Set();
+    let moveAnim = null;  // { from, to, startT, duration, nextNode }
+    let nodeRingMeshes = {};  // 记录每个节点圆环 mesh 以更新高亮
+
+    function placePlayer() {
+      if (playerObj) {
+        playerObj.traverse(o => {
+          if (o.geometry) o.geometry.dispose();
+          if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+        });
+        root.remove(playerObj);
+      }
+      playerObj = makePlayer();
+      const n = NODES[playerNode];
+      playerObj.position.set(n.x, n.y, n.z);
+      playerObj.rotation.y = Math.PI;
+      root.add(playerObj);
+      playerVisited.clear();
+      playerVisited.add(playerNode);
+      setCamShot(playerNode, true);  // 初始立即就位
+      updateNodeVisuals();
+    }
+
+    function moveToNode(target) {
+      const cur = NODES[playerNode];
+      if (!cur.next.includes(target)) return;
+      if (moveAnim) return;  // 移动中
+      const to = NODES[target];
+      // 计算朝向角度（让玩家面朝目标）
+      const dx = to.x - cur.x, dz = to.z - cur.z;
+      const facing = Math.atan2(dx, dz);
+      moveAnim = {
+        from: { x: cur.x, y: cur.y, z: cur.z },
+        to:   { x: to.x, y: to.y, z: to.z },
+        startT: clock.getElapsedTime(),
+        duration: 1.6,  // 走得稳一些，相机有时间慢摇
+        nextNode: target,
+        facingFrom: playerObj.rotation.y,
+        facingTo: facing,
+      };
+      // 相机提前开始向目标机位慢摇（与玩家同步移动）
+      setCamShot(target);
+      document.getElementById('movesList').innerHTML = '<div class="moving">前进中…</div>';
+    }
+
+    function updateNodeVisuals() {
+      // 当前节点圆环更亮 / 已通过节点变暗
+      for (const k in nodeRingMeshes) {
+        const ring = nodeRingMeshes[k];
+        if (!ring) continue;
+        if (k === playerNode) {
+          ring.material.opacity = 0.95;
+          ring.scale.setScalar(1.0);
+        } else if (playerVisited.has(k)) {
+          ring.material.opacity = 0.3;
+        } else {
+          ring.material.opacity = 0.85;
+          ring.scale.setScalar(1.0);
+        }
+      }
+      renderMoves();
+    }
+
+    function renderMoves() {
+      const cur = NODES[playerNode];
+      const list = document.getElementById('movesList');
+      const label = document.getElementById('curNodeLabel');
+      label.textContent = cur.label;
+      list.innerHTML = '';
+      if (cur.next.length === 0) {
+        list.innerHTML = '<div class="cleared">★ 关卡通关 ★</div>';
+        return;
+      }
+      cur.next.forEach(nk => {
+        const target = NODES[nk];
+        const btn = document.createElement('button');
+        // 判断节点类型
+        let typeLabel = '';
+        if (nk === 'GATE') typeLabel = '🚪 入塔';
+        else if (nk.startsWith('E3') || nk === 'BOSS') typeLabel = nk === 'BOSS' ? '👑 BOSS' : '✦ 精英';
+        else typeLabel = '⚔ 战斗';
+        // 区分换线小路
+        const isSwitchRoute = (playerNode === 'E2L' && nk === 'E2R') || (playerNode === 'E2R' && nk === 'E2L');
+        if (isSwitchRoute) typeLabel = '🔄 换线';
+        btn.innerHTML = `<div class="t">${typeLabel}</div><div class="n">${target.label}</div>`;
+        btn.className = isSwitchRoute ? 'move-btn switch' : 'move-btn';
+        btn.onclick = () => moveToNode(nk);
+        list.appendChild(btn);
+      });
+    }
+
+    function resetPlayer() {
+      playerNode = 'START';
+      moveAnim = null;
+      placePlayer();
     }
 
     // ============ UI ============
@@ -1501,17 +1838,57 @@
       currentSeed = Math.floor(Math.random() * 999999);
       document.getElementById('seedVal').textContent = String(currentSeed).padStart(6, '0');
       build();
+      resetPlayer();
     };
 
     // ============ 启动 ============
     document.getElementById('seedVal').textContent = String(currentSeed).padStart(6, '0');
     build();
+    placePlayer();
 
     const clock = new THREE.Clock();
     function animate() {
       requestAnimationFrame(animate);
-      const t = clock.getElapsedTime();
+      const dt = clock.getDelta();  // 先调 getDelta（getElapsedTime 内部也会调它）
+      const t = clock.elapsedTime;  // 直接读已累加的 elapsed
       for (const fn of updaters) fn(t);
+
+      // —— 玩家移动动画 ——
+      if (moveAnim && playerObj) {
+        const elapsed = t - moveAnim.startT;
+        let k = Math.min(1, elapsed / moveAnim.duration);
+        // ease in/out
+        const ease = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        playerObj.position.x = moveAnim.from.x + (moveAnim.to.x - moveAnim.from.x) * ease;
+        playerObj.position.y = moveAnim.from.y + (moveAnim.to.y - moveAnim.from.y) * ease;
+        playerObj.position.z = moveAnim.from.z + (moveAnim.to.z - moveAnim.from.z) * ease;
+        // 走路弹跳
+        playerObj.position.y += Math.abs(Math.sin(elapsed * 8)) * 0.06;
+        // 旋转朝向
+        let dRot = moveAnim.facingTo - moveAnim.facingFrom;
+        while (dRot > Math.PI) dRot -= Math.PI * 2;
+        while (dRot < -Math.PI) dRot += Math.PI * 2;
+        playerObj.rotation.y = moveAnim.facingFrom + dRot * Math.min(1, ease * 2);
+        if (k >= 1) {
+          playerNode = moveAnim.nextNode;
+          playerVisited.add(playerNode);
+          moveAnim = null;
+          updateNodeVisuals();
+        }
+      }
+
+      // —— Shot-based 镜头慢摇 ——
+      const camLerp = 1 - Math.exp(-dt * 2.0);
+      camPosCur.lerp(camPosTarget, camLerp);
+      camLookCur.lerp(camLookTarget, camLerp);
+      const dDelta = camDTarget - camDCur;
+      if (Math.abs(dDelta) > 0.001) {
+        camDCur += dDelta * camLerp;
+        applyCamFrustum();
+      }
+      camera.position.copy(camPosCur);
+      camera.lookAt(camLookCur);
+
       composer.render();
     }
     animate();
