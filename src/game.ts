@@ -563,6 +563,17 @@ export function applyEnchant(state: GameState, enchantId: EnchantId): boolean {
   if (state.phase !== "forge") return false;
   const recipe = ENCHANT_RECIPES[enchantId];
   if (!recipe) return false;
+  // 5 档升级 / 替换判定
+  // - 当前已装这个附魔且 Lv < 5：升级（消耗等额配方），Lv+1
+  // - 当前已装这个附魔且 Lv = 5：拒绝（满级）
+  // - 其它：替换（Lv 重置为 1）
+  const isSameEnchant = state.player.weaponEnchant === enchantId;
+  const curLevel = state.player.weaponEnchantLevel ?? 1;
+  if (isSameEnchant && curLevel >= 5) {
+    pushLog(state, `${ENCHANT_NAMES[enchantId]} 已满级（Lv 5），无法继续升级。`, "system");
+    return false;
+  }
+
   // 5 折特惠：所有配方碎片消耗减半（向上取整）
   const discount = state.forgeDiscountThisVisit === true;
   const actualCost: Partial<Record<EnemyRace, number>> = {};
@@ -585,9 +596,19 @@ export function applyEnchant(state: GameState, enchantId: EnchantId): boolean {
     const need = actualCost[r as EnemyRace] ?? 0;
     state.player.fragments[r as EnemyRace] -= need;
   }
-  state.player.weaponEnchant = enchantId;
+
+  // 更新附魔 + Lv
+  if (isSameEnchant) {
+    state.player.weaponEnchantLevel = Math.min(5, curLevel + 1);
+  } else {
+    state.player.weaponEnchant = enchantId;
+    state.player.weaponEnchantLevel = 1;
+  }
+  const newLv = state.player.weaponEnchantLevel;
   const costStr = Object.entries(actualCost).map(([r, n]) => `${n} ${r}`).join(" + ");
-  pushLog(state, `武器附魔：${ENCHANT_NAMES[enchantId]}（消耗 ${costStr} 碎片${discount ? " · 5 折" : ""}）。`, "win");
+  const verb = isSameEnchant ? `升级到 Lv ${newLv}` : `Lv 1`;
+  pushLog(state, `武器附魔：${ENCHANT_NAMES[enchantId]} ${verb}（消耗 ${costStr}${discount ? " · 5 折" : ""}）。`, "win");
+
   // 铁匠铺是 map 节点，完成后回地图
   if (state.floorMap) {
     const cur = getNode(state.floorMap, state.floorMap.currentNodeId);

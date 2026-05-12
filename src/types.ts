@@ -298,6 +298,63 @@ export const ENCHANTS: EnchantId[] = [
   "ec_lifesteal", "ec_resilient", "ec_arcane", "ec_runic",
 ];
 
+// 附魔 5 档逐步升级 — 同一附魔每次铁匠铺重附消耗等额配方 + Lv +1，至 Lv5 满级
+export const ENCHANT_MAX_LEVEL = 5;
+
+// 各档参数表。index = level - 1。每个附魔的参数槽数量不同，按各自语义读取。
+// 注：所有 ENCHANT_EFFECTS / battle.ts 内的硬编码数值都应该读这个表。
+export const ENCHANT_LEVEL_PARAMS: Record<EnchantId, readonly number[][]> = {
+  // 普通（单种族 ×3）
+  e_brawler:    [[10], [13], [16], [20], [25]],                        // [HP<50% 攻击 +N%]
+  e_strategist: [[1],  [1],  [2],  [3],  [4]],                          // [每非攻击牌下张 +N]
+  e_reaper:     [[120],[130],[140],[150],[165]],                        // [击杀后下次攻击 ×(N/100)]
+  e_titan:      [[15], [18], [22], [26], [32]],                         // [≥8% maxHP 时 +N%]
+  e_phantom:    [[150,2],[170,2],[200,3],[230,3],[260,4]],               // [闪避后下次 ×(N/100), 易伤 +M]
+  // 复合（×2+×2）
+  ec_warblood:  [[15,1,3],[17,1,3],[20,1,4],[23,1,5],[28,2,5]],          // [HP<50% +N%, 每10%maxHP +M atk, cap K]
+  ec_phalanx:   [[1,2,3],[1,3,4],[1,3,5],[2,4,6],[2,5,7]],               // [每张 -N, cap -M, 未受伤下回合护盾 K]
+  ec_swift:     [[8,3,18,1],[10,4,22,1],[12,5,28,1],[14,6,36,2],[16,8,45,2]], // [闪避 +N%, 闪后 +M%, cap K%, 易伤 L]
+  ec_focus:     [[1,10,3],[1,11,4],[1,12,5],[2,13,6],[2,15,8]],          // [每非攻击 +N, ≥M dmg +K]
+  ec_lifesteal: [[5,6],[6,8],[8,10],[10,13],[12,16]],                    // [+N% lifesteal, 满血 +M%]
+  ec_resilient: [[1,1,1],[2,1,1],[2,2,1],[3,3,2],[4,4,2]],               // [受击 -N, HP>80% 再 -M, 每回合 +K HP]
+  ec_arcane:    [[20],[25],[30],[38],[45]],                              // [染/咒首攻 +N%]（摸牌效果不缩放）
+  ec_runic:     [[1,50],[2,50],[3,100],[3,150],[4,150]],                 // [受击 -N, 首次受击 -M%（>=100% 完全免疫）]
+} as const;
+
+// 工具：读当前 player 的附魔档位（默认 1，clamp 到 [1, 5]）
+export function getEnchantLevel(player: PlayerState): number {
+  return Math.max(1, Math.min(ENCHANT_MAX_LEVEL, player.weaponEnchantLevel ?? 1));
+}
+
+// 工具：读当前附魔指定参数槽的值
+export function getEnchantParam(player: PlayerState, idx: number = 0): number {
+  const id = player.weaponEnchant;
+  if (!id) return 0;
+  const lv = getEnchantLevel(player);
+  return ENCHANT_LEVEL_PARAMS[id]?.[lv - 1]?.[idx] ?? 0;
+}
+
+// 工具：按 level 生成附魔描述（替代固定的 ENCHANT_DESCS，level-aware）
+export function getEnchantDescAt(id: EnchantId, level: number): string {
+  const lv = Math.max(1, Math.min(ENCHANT_MAX_LEVEL, level));
+  const p = ENCHANT_LEVEL_PARAMS[id][lv - 1];
+  switch (id) {
+    case "e_brawler":    return `HP < 50% 时，攻击 +${p[0]}%。`;
+    case "e_strategist": return `每出 1 张非攻击牌，下张攻击 +${p[0]} 伤（同回合累积，攻击后清零）。`;
+    case "e_reaper":     return `击杀敌人后，下次攻击 ×${(p[0] / 100).toFixed(2)}（一次性）。`;
+    case "e_titan":      return `单次伤害 ≥ 敌人最大 HP 8% 时，本次伤害额外 +${p[0]}%。`;
+    case "e_phantom":    return `完全闪避后下次攻击 ×${(p[0] / 100).toFixed(1)}，攻击命中后给目标 +${p[1]} 易伤层。`;
+    case "ec_warblood":  return `HP < 50% 时攻击 +${p[0]}%；本场每损 10% maxHP 永久攻击 +${p[1]}（cap +${p[2]}）。`;
+    case "ec_phalanx":   return `本回合攻击牌每打 1 张受击 -${p[0]}（cap -${p[1]}）；本回合未受伤则下回合开局护盾 +${p[2]}。`;
+    case "ec_swift":     return `闪避概率 +${p[0]}%；闪避后本回合内闪避再 +${p[1]}%（cap +${p[2]}%）；闪避后给目标 +${p[3]} 易伤。`;
+    case "ec_focus":     return `每张非攻击牌使下张攻击 +${p[0]} 伤；攻击伤害 ≥ ${p[1]} 时额外 +${p[2]}。`;
+    case "ec_lifesteal": return `攻击吸血额外 +${p[0]}%；HP 满时攻击 +${p[1]}%。`;
+    case "ec_resilient": return `受击 -${p[0]}；HP > 80% 时受击再 -${p[1]}；每回合开始 +${p[2]} HP。`;
+    case "ec_arcane":    return `每出 1 张非攻击牌额外摸 1（每回合 cap 3）；持咒/染色 buff 在场时首次攻击 +${p[0]}%。`;
+    case "ec_runic":     return `受击 -${p[0]}；每场首次受击 ${p[1] >= 100 ? "完全免疫" : "-" + p[1] + "%"}；中毒/燃烧/出血对你无效。`;
+  }
+}
+
 // 稀少种族集合（用于 UI 标记 + 配方校验）
 export const RARE_RACES: EnemyRace[] = ["giant", "dark"];
 export function isRareRace(race: EnemyRace): boolean {
@@ -420,6 +477,7 @@ export interface PlayerState {
 
   // 武器槽附魔（绑定武器槽，换武器时保留）
   weaponEnchant?: EnchantId;
+  weaponEnchantLevel?: number;  // 1-5，铁匠铺多次附同样的会升 Lv（消耗等额配方）；换不同附魔重置为 1
 
   // 整局 1 次的复活机制（不灭之心）已使用次数；不在 statuses 里因为状态会战斗间清空
   revivesUsed?: number;

@@ -4359,6 +4359,111 @@ body.is-touch button:hover:not(:disabled) {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px;
 }
+
+/* ── 顶部跳过按钮（避免列表太长玩家要滚到底）─── */
+.forge-top-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 8px;
+}
+.forge-skip-top {
+  background: rgba(180, 180, 180, 0.14);
+  color: #d0d4da;
+  border: 1px solid rgba(180, 180, 180, 0.4);
+  padding: 5px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.forge-skip-top:hover {
+  background: rgba(220, 220, 220, 0.22);
+  color: #fff;
+}
+
+/* ── 4 花色折叠区 ─── */
+.forge-suit-section {
+  margin: 8px 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.forge-suit-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(40, 40, 50, 0.6);
+  border: none;
+  border-left: 4px solid var(--suit-color, #888);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.forge-suit-head:hover {
+  background: rgba(60, 60, 75, 0.7);
+}
+.forge-suit-sym {
+  font-size: 18px;
+  color: var(--suit-color, #ccc);
+}
+.forge-suit-name {
+  flex: 1;
+  text-align: left;
+  letter-spacing: 0.04em;
+}
+.forge-suit-arrow {
+  font-size: 11px;
+  color: #999;
+}
+.forge-suit-section.open .forge-suit-arrow {
+  color: var(--yellow);
+}
+.forge-suit-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  padding: 10px;
+  background: rgba(20, 20, 26, 0.4);
+}
+
+/* Lv 徽章 — 当前附魔旁边 + 卡片头部 */
+.forge-lv-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 900;
+  color: #f7d068;
+  background: rgba(220, 170, 60, 0.15);
+  border: 1px solid rgba(240, 200, 90, 0.5);
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+.forge-current-desc {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #b0b6bf;
+  font-weight: 400;
+}
+.forge-card.maxed {
+  opacity: 0.6;
+}
+.forge-card.maxed .forge-btn {
+  background: rgba(120, 120, 120, 0.2);
+  color: #999;
+  cursor: not-allowed;
+}
+/* 单/复合 kind 徽章 — 跟特化/互补徽章并排 */
+.forge-tag-kind {
+  background: rgba(140, 160, 200, 0.18);
+  color: #a0b4d8;
+  border-color: rgba(140, 160, 200, 0.4);
+}
 .forge-card.v2 {
   display: flex;
   flex-direction: column;

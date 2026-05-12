@@ -13,7 +13,7 @@ import type {
   LogKind,
   Suit,
 } from "./types.ts";
-import { HAND_LIMIT, DRAW_PER_TURN, SUIT_SYMBOLS, SUITS } from "./types.ts";
+import { HAND_LIMIT, DRAW_PER_TURN, SUIT_SYMBOLS, SUITS, getEnchantParam } from "./types.ts";
 import { CARD_DB, suitMultiplier, damageEnemy, ENCHANT_EFFECTS, EPIC_USES_PER_BATTLE } from "./cards.ts";
 import { selectAIIntent } from "./bossAI.ts";
 
@@ -472,8 +472,9 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
   if (charge && charge.stacks > 0) {
     let mul = 0;
     if (player.weapons[0]?.defId === "wizard_staff") mul += 3;
-    if (player.weaponEnchant === "e_strategist") mul += 2;
-    if (player.weaponEnchant === "ec_focus") mul += 1;
+    // e_strategist / ec_focus：每非攻击牌 +N 伤，N 由 Lv 决定
+    if (player.weaponEnchant === "e_strategist") mul += getEnchantParam(player, 0);
+    if (player.weaponEnchant === "ec_focus")     mul += getEnchantParam(player, 0);
     // 奥术爆裂：本回合每张非攻击牌 +3
     if (player.statuses.find(s => s.id === "arcane_burst")) mul += 3;
     if (mul > 0) {
@@ -779,13 +780,15 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
     }
   }
 
-  // 重甲列阵附魔：每打出 1 张攻击牌，本回合受击 -1（cap -3）
+  // 重甲列阵附魔：每攻击牌 -N 减伤累积，cap -M（Lv1-5: [-1,-2,3]/[-1,-3,4]/[-1,-3,5]/[-2,-4,6]/[-2,-5,7]）
   if (state.player.weaponEnchant === "ec_phalanx") {
+    const perCard = getEnchantParam(state.player, 0);
+    const cap = getEnchantParam(state.player, 1);
     const ex = state.player.statuses.find(s => s.id === "phalanx_dr");
     if (ex) {
-      if (ex.stacks < 3) { ex.stacks += 1; ex.duration = 1; }
+      if (ex.stacks < cap) { ex.stacks = Math.min(cap, ex.stacks + perCard); ex.duration = 1; }
     } else {
-      state.player.statuses.push({ id: "phalanx_dr", name: "重甲列阵", stacks: 1, duration: 1 });
+      state.player.statuses.push({ id: "phalanx_dr", name: "重甲列阵", stacks: Math.min(cap, perCard), duration: 1 });
     }
   }
 
@@ -1068,8 +1071,8 @@ export function getCurrentDodgeChance(player: PlayerState, state?: BattleState):
   // 烟雾弹临时 buff（多回合）
   const smoke = player.statuses.find(s => s.id === "smoke_dodge");
   if (smoke) chance += smoke.stacks;
-  // 风行步附魔：常驻 +10%
-  if (player.weaponEnchant === "ec_swift") chance += 10;
+  // 风行步附魔：常驻 +N%（Lv1-5: 8/10/12/14/16，idx 0）
+  if (player.weaponEnchant === "ec_swift") chance += getEnchantParam(player, 0);
   // 风行余势：闪避触发后本回合临时叠加
   const swiftTemp = player.statuses.find(s => s.id === "swift_dodge_temp");
   if (swiftTemp) chance += swiftTemp.stacks;
@@ -1118,23 +1121,26 @@ function onDodgeTriggered(state: BattleState, attackerEnemy?: EnemyState, log?: 
     drawCards(state.player, drawN, log);
     log(`♦ 幻影披风：闪避后摸 ${drawN} 张。`, "player");
   }
-  // 风行步：闪避后本回合内闪避 +5%（cap 30%）
+  // 风行步：闪避后本回合内闪避 +M%（cap K%）；M = idx 1，K = idx 2
   if (e === "ec_swift") {
+    const incPct = getEnchantParam(state.player, 1);
+    const capPct = getEnchantParam(state.player, 2);
     const ex = state.player.statuses.find(s => s.id === "swift_dodge_temp");
     if (ex) {
-      ex.stacks = Math.min(30, ex.stacks + 5);
+      ex.stacks = Math.min(capPct, ex.stacks + incPct);
       ex.duration = Math.max(ex.duration, 1);
     } else {
-      state.player.statuses.push({ id: "swift_dodge_temp", name: "风行余势", stacks: 5, duration: 1 });
+      state.player.statuses.push({ id: "swift_dodge_temp", name: "风行余势", stacks: Math.min(capPct, incPct), duration: 1 });
     }
-    // 闪避后给当前目标 +1 易伤
+    // 闪避后给当前目标 +N 易伤（N = idx 3）
     const target = attackerEnemy?.alive
       ? attackerEnemy
       : state.enemies[state.targetIndex] ?? state.enemies.find(en => en.alive);
     if (target) {
+      const vulnInc = getEnchantParam(state.player, 3);
       const v = target.statuses.find(s => s.id === "vulnerable");
-      if (v) { v.stacks += 1; v.duration = Math.max(v.duration, 2); }
-      else target.statuses.push({ id: "vulnerable", name: "易伤", stacks: 1, duration: 2 });
+      if (v) { v.stacks += vulnInc; v.duration = Math.max(v.duration, 2); }
+      else target.statuses.push({ id: "vulnerable", name: "易伤", stacks: vulnInc, duration: 2 });
     }
   }
 }
@@ -1166,13 +1172,20 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     return;
   }
 
-  // ★ 符文护盾：每场首次受击免疫（消耗 enc_runic_immune）
+  // ★ 符文护盾：每场首次受击 -M%（Lv1-2: 50%, Lv3+: 100% 完全免疫）
   const runicImmune = state.player.statuses.find(s => s.id === "enc_runic_immune");
   if (runicImmune && state.player.weaponEnchant === "ec_runic") {
     state.player.statuses = state.player.statuses.filter(s => s.id !== "enc_runic_immune");
-    log("★ 符文护盾：本场首次受击免疫！", "player");
-    state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
-    return;
+    const reductionPct = getEnchantParam(state.player, 1);
+    if (reductionPct >= 100) {
+      log("★ 符文护盾：本场首次受击完全免疫！", "player");
+      state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
+      return;
+    } else {
+      // 部分免疫：base 直接按比例砍
+      base = Math.max(0, Math.floor(base * (1 - reductionPct / 100)));
+      log(`★ 符文护盾：本场首次受击 -${reductionPct}%（${base} 伤穿透）。`, "player");
+    }
   }
 
   let dmg = base;
@@ -1186,14 +1199,19 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
 
   // 附魔减伤：守护契 / 重甲列阵 / 符文护盾
   const enc = state.player.weaponEnchant;
+  // 守护契：受击 -N（idx 0）+ HP > 80% 再 -M（idx 1）
+  // Lv1-5: [-1, -1] / [-2, -1] / [-2, -2] / [-3, -3] / [-4, -4]
   if (enc === "ec_resilient") {
-    dmg = Math.max(0, dmg - 2);
+    const base = getEnchantParam(state.player, 0);
+    const hiHpBonus = getEnchantParam(state.player, 1);
+    dmg = Math.max(0, dmg - base);
     if (state.player.vita > state.player.vitaMax * 0.80) {
-      dmg = Math.max(0, dmg - 2);
+      dmg = Math.max(0, dmg - hiHpBonus);
     }
   }
+  // 符文护盾：受击 -N（idx 0；Lv1-5: 1/2/3/3/4）
   if (enc === "ec_runic") {
-    dmg = Math.max(0, dmg - 3);
+    dmg = Math.max(0, dmg - getEnchantParam(state.player, 0));
   }
   const phalanxDr = state.player.statuses.find(s => s.id === "phalanx_dr");
   if (phalanxDr && enc === "ec_phalanx") {
@@ -1476,12 +1494,13 @@ function enemyTurn(state: BattleState, log: (m: string, k?: LogKind) => void) {
     if (state.player.vita <= 0) break;
   }
 
-  // ec_phalanx：本回合（含敌方回合）未受伤 → 下回合开局护盾 +5；并清理本回合"受伤"标记
+  // ec_phalanx：本回合未受伤 → 下回合开局护盾 +K（K = idx 2；Lv1-5: 3/4/5/6/7）
   if (state.player.weaponEnchant === "ec_phalanx" && !state.player.statuses.find(s => s.id === "took_damage_turn")) {
+    const shieldGain = getEnchantParam(state.player, 2);
     const sh = state.player.statuses.find(s => s.id === "shield_block");
-    if (sh) sh.stacks += 5;
-    else state.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 5, duration: -1 });
-    log("重甲列阵：本回合未受伤，下回合开局护盾 +5。", "player");
+    if (sh) sh.stacks += shieldGain;
+    else state.player.statuses.push({ id: "shield_block", name: "护盾", stacks: shieldGain, duration: -1 });
+    log(`重甲列阵：本回合未受伤，下回合开局护盾 +${shieldGain}。`, "player");
   }
   // 清理"受伤"标记（duration=-1，需要手动清）
   state.player.statuses = state.player.statuses.filter(s => s.id !== "took_damage_turn");
@@ -1547,10 +1566,11 @@ export function endPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) 
     log(`♥ 红心专精·生机：+${heal} HP。`, "player");
   }
 
-  // 守护契附魔：每回合开始 +1 HP
+  // 守护契附魔：每回合开始 +N HP（N = idx 2；Lv1-5: 1/1/1/2/2）
   if (state.player.weaponEnchant === "ec_resilient" && state.player.vita < state.player.vitaMax) {
-    state.player.vita = Math.min(state.player.vitaMax, state.player.vita + 1);
-    log("守护契：+1 HP。", "player");
+    const heal = getEnchantParam(state.player, 2);
+    state.player.vita = Math.min(state.player.vitaMax, state.player.vita + heal);
+    log(`守护契：+${heal} HP。`, "player");
   }
 
   // 生命囊（♥ super_rare 防具）：每回合开始 +3/4/5/6 HP（与 leather_armor 叠加）
@@ -1563,10 +1583,13 @@ export function endPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) 
     if (state.player.vita > before) log(`♥ 生命囊：+${state.player.vita - before} HP。`, "player");
   }
 
-  // 战狂血誓：根据当前 HP 损失档位维持永久 +X 攻击 stack（cap +5）
+  // 战狂血誓：每损 10% maxHP +M 永久攻击（cap +K）
+  // Lv1-5: M = 1/1/1/1/2, K = 3/3/4/5/5（idx 1 = M, idx 2 = K）
   if (state.player.weaponEnchant === "ec_warblood") {
+    const perStep = getEnchantParam(state.player, 1);
+    const cap = getEnchantParam(state.player, 2);
     const lossPct = 1 - (state.player.vita / Math.max(1, state.player.vitaMax));
-    const targetStacks = Math.min(5, Math.floor(lossPct * 10));
+    const targetStacks = Math.min(cap, Math.floor(lossPct * 10) * perStep);
     const ex = state.player.statuses.find(s => s.id === "warblood_perm_atk");
     if (targetStacks > 0) {
       if (ex) {

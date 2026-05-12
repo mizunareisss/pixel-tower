@@ -16,7 +16,7 @@ import type {
   CardRarity,
   EquipEffect,
 } from "./types.ts";
-import { SUIT_SYMBOLS, SUITS, isRedSuit } from "./types.ts";
+import { SUIT_SYMBOLS, SUITS, isRedSuit, getEnchantParam } from "./types.ts";
 
 // ── 楼层倍率 ──────────────────────────────────────────────
 export function floorScale(floor: number): number {
@@ -2359,13 +2359,14 @@ export interface EnchantEffect {
 
 export const ENCHANT_EFFECTS: Record<EnchantId, EnchantEffect> = {
   // ── 普通附魔（5）─────────────────────────────────────────
-  // 强袭（兽 ×3，♠ 特化）：HP < 50% 攻击 +12%
+  // 强袭（兽 ×3，♠ 特化）：HP < 50% 攻击 +N%（Lv1-5: 10/13/16/20/25）
   e_brawler: {
     id: "e_brawler",
     onAttack: (ctx, d) => {
       if (ctx.player.vita < ctx.player.vitaMax * 0.50) {
-        ctx.log("强袭：绝境攻击 +12%。", "player");
-        return d * 1.12;
+        const pct = getEnchantParam(ctx.player, 0);
+        ctx.log(`强袭：绝境攻击 +${pct}%。`, "player");
+        return d * (1 + pct / 100);
       }
       return d;
     },
@@ -2373,48 +2374,52 @@ export const ENCHANT_EFFECTS: Record<EnchantId, EnchantEffect> = {
   // 算计（人型 ×3，♣ 特化）：每出 1 张非攻击牌，下张攻击 +2 伤
   // 标记型：calc_charge 由 battle.ts 统一累积；calcAttackDamage 检 weaponEnchant 决定每 stack 加成
   e_strategist: { id: "e_strategist" },
-  // 收割（不死 ×3，♥ 特化）：击杀后下次攻击 ×1.5（一次性）
+  // 收割（不死 ×3，♥ 特化）：击杀后下次攻击 ×(N/100)（Lv1-5: 1.20/1.30/1.40/1.50/1.65）
   e_reaper: {
     id: "e_reaper",
     onKill: (ctx, target) => {
       const exists = ctx.player.statuses.find(s => s.id === "e_reaper_buff");
       if (!exists) ctx.player.statuses.push({ id: "e_reaper_buff", name: "收割之刃", stacks: 1, duration: -1 });
-      ctx.log(`收割：击杀 ${target.name}，下次攻击 ×1.5。`, "player");
+      const mult = getEnchantParam(ctx.player, 0) / 100;
+      ctx.log(`收割：击杀 ${target.name}，下次攻击 ×${mult.toFixed(2)}。`, "player");
     },
     onAttack: (ctx, d) => {
       const charge = ctx.player.statuses.find(s => s.id === "e_reaper_buff");
       if (charge) {
         ctx.player.statuses = ctx.player.statuses.filter(s => s.id !== "e_reaper_buff");
-        ctx.log("收割之刃：本次攻击 ×1.5。", "player");
-        return d * 1.5;
+        const mult = getEnchantParam(ctx.player, 0) / 100;
+        ctx.log(`收割之刃：本次攻击 ×${mult.toFixed(2)}。`, "player");
+        return d * mult;
       }
       return d;
     },
   },
-  // 撼地（巨怪 ×3，♠ 特化强档）：单击 ≥ 敌人 maxHP 8% 时 +25%
+  // 撼地（巨怪 ×3，♠ 特化强档）：单击 ≥ 8% maxHP 时 +N%（Lv1-5: 15/18/22/26/32）
   e_titan: {
     id: "e_titan",
     onAttack: (ctx, d) => {
       if (d >= ctx.target.maxHp * 0.08) {
-        ctx.log(`撼地 +25%！（${Math.floor(d)} ≥ ${Math.floor(ctx.target.maxHp * 0.08)}）`, "player");
-        return d * 1.25;
+        const pct = getEnchantParam(ctx.player, 0);
+        ctx.log(`撼地 +${pct}%！（${Math.floor(d)} ≥ ${Math.floor(ctx.target.maxHp * 0.08)}）`, "player");
+        return d * (1 + pct / 100);
       }
       return d;
     },
   },
-  // 幻影（暗影 ×3，♦ 特化强档）：闪避后下次攻击 ×2 + 给目标 +3 易伤层
+  // 幻影（暗影 ×3，♦ 特化强档）：闪避后 ×(N/100) + 易伤 +M（Lv1-5: ×1.5/+2, ×1.7/+2, ×2.0/+3, ×2.3/+3, ×2.6/+4）
   e_phantom: {
     id: "e_phantom",
     onAttack: (ctx, d) => {
       const charge = ctx.player.statuses.find(s => s.id === "phantom_charge");
       if (charge) {
         ctx.player.statuses = ctx.player.statuses.filter(s => s.id !== "phantom_charge");
-        // 给目标 +3 易伤层
+        const mult = getEnchantParam(ctx.player, 0) / 100;
+        const vulnStacks = getEnchantParam(ctx.player, 1);
         const v = ctx.target.statuses.find(s => s.id === "vulnerable");
-        if (v) { v.stacks += 3; v.duration = Math.max(v.duration, 2); }
-        else ctx.target.statuses.push({ id: "vulnerable", name: "易伤", stacks: 3, duration: 2 });
-        ctx.log(`幻影残像：本次攻击 ×2 + 目标 +3 易伤。`, "player");
-        return d * 2;
+        if (v) { v.stacks += vulnStacks; v.duration = Math.max(v.duration, 2); }
+        else ctx.target.statuses.push({ id: "vulnerable", name: "易伤", stacks: vulnStacks, duration: 2 });
+        ctx.log(`幻影残像：本次攻击 ×${mult.toFixed(1)} + 目标 +${vulnStacks} 易伤。`, "player");
+        return d * mult;
       }
       return d;
     },
@@ -2422,24 +2427,23 @@ export const ENCHANT_EFFECTS: Record<EnchantId, EnchantEffect> = {
 
   // ── 复合附魔（8）─────────────────────────────────────────
   // 战狂血誓（兽×2 + 巨怪×2，♠ 强化中档）
-  // HP<50% 攻击 +20%；本场战斗每损 10% maxHP 永久攻击 +1（cap +5）
+  // HP<50% 攻击 +N%；每损 10% maxHP 永久 +M atk（cap +K）
+  // Lv1-5: (15,1,3) / (17,1,3) / (20,1,4) / (23,1,5) / (28,2,5)
   ec_warblood: {
     id: "ec_warblood",
     onAttack: (ctx, d) => {
       let bonus = 0;
-      // 永久攻击 +1（基于 warblood_perm_atk status）
       const perm = ctx.player.statuses.find(s => s.id === "warblood_perm_atk");
       if (perm) bonus += perm.stacks;
-      // HP<50% 时再 +20%
       const lowHp = ctx.player.vita < ctx.player.vitaMax * 0.50;
+      const pct = getEnchantParam(ctx.player, 0);
       let res = d + bonus;
-      if (lowHp) res *= 1.20;
+      if (lowHp) res *= (1 + pct / 100);
       if (bonus > 0 || lowHp) {
-        ctx.log(`战狂血誓：${bonus > 0 ? `+${bonus} ` : ""}${lowHp ? "× 1.20（绝境）" : ""}。`, "player");
+        ctx.log(`战狂血誓：${bonus > 0 ? `+${bonus} ` : ""}${lowHp ? `× ${(1 + pct / 100).toFixed(2)}（绝境）` : ""}。`, "player");
       }
       return res;
     },
-    // 永久 stack 累积放在 battle.ts 的 onTurnStart 里检查（避免重复触发）
   },
   // 重甲列阵（兽×2 + 人型×2，♠ 互补）
   // 攻击牌每打 1 张本回合受击 -1（cap -3）；本回合未受伤则下回合开局护盾 +5
@@ -2450,31 +2454,36 @@ export const ENCHANT_EFFECTS: Record<EnchantId, EnchantEffect> = {
   // 闪避 +10% 在 battle.ts/getCurrentDodgeChance；其余在 damagePlayer 触发
   ec_swift: { id: "ec_swift" },
   // 凝神（不死×2 + 人型×2，♦ 互补）
-  // 每张非攻击牌使下张攻击 +1；伤害 ≥ 12 时额外 +5
-  // 标记型：calc_charge 由 battle.ts 统一累积；calcAttackDamage 检 weaponEnchant
+  // 每非攻击牌 +N 伤；伤害 ≥ M 时额外 +K
+  // Lv1-5: (1,10,3) / (1,11,4) / (1,12,5) / (2,13,6) / (2,15,8)
+  // 注：calc_charge 在 battle.ts 累积，每 stack 加成读 Lv 表 idx 0；这里只处理"≥M 时额外 +K"段
   ec_focus: {
     id: "ec_focus",
     onAttack: (ctx, d) => {
-      if (d >= 12) {
-        ctx.log("凝神：伤害 ≥ 12，+5。", "player");
-        return d + 5;
+      const threshold = getEnchantParam(ctx.player, 1);
+      const bonus = getEnchantParam(ctx.player, 2);
+      if (d >= threshold) {
+        ctx.log(`凝神：伤害 ≥ ${threshold}，+${bonus}。`, "player");
+        return d + bonus;
       }
       return d;
     },
   },
   // 血祭仪（不死×2 + 暗影×2，♥ 强化中档）
-  // 攻击吸血额外 +8%；HP 满时攻击 +10%
+  // 攻击吸血 +N%；满血 +M%（Lv1-5: 5/6, 6/8, 8/10, 10/13, 12/16）
   ec_lifesteal: {
     id: "ec_lifesteal",
     onAttack: (ctx, d) => {
-      const heal = Math.max(0, Math.floor(d * 0.08));
+      const lifesteal = getEnchantParam(ctx.player, 0) / 100;
+      const fullHpBonus = getEnchantParam(ctx.player, 1) / 100;
+      const heal = Math.max(0, Math.floor(d * lifesteal));
       if (heal > 0) {
         ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + heal);
         ctx.log(`血祭仪：吸血 ${heal}。`, "player");
       }
       if (ctx.player.vita >= ctx.player.vitaMax) {
-        ctx.log("血祭仪：HP 满，攻击 +10%。", "player");
-        return d * 1.10;
+        ctx.log(`血祭仪：HP 满，攻击 +${Math.round(fullHpBonus * 100)}%。`, "player");
+        return d * (1 + fullHpBonus);
       }
       return d;
     },
@@ -2484,8 +2493,7 @@ export const ENCHANT_EFFECTS: Record<EnchantId, EnchantEffect> = {
   // 实装：damagePlayer 检 weaponEnchant；endPlayerTurn 加血
   ec_resilient: { id: "ec_resilient" },
   // 秘法回响（人型×2 + 暗影×2，♣ 强化中档）
-  // 每张非攻击牌额外摸 1（每回合 cap 3）；持咒/染色 buff 在场首次攻击 +30%
-  // 摸牌实装：playSkillOrItem 末尾；首次攻击 +30% 实装在 onAttack
+  // 每非攻击牌 +1 摸（cap 3）；染/咒在场首攻 +N%（Lv1-5: 20/25/30/38/45）
   ec_arcane: {
     id: "ec_arcane",
     onAttack: (ctx, d) => {
@@ -2494,9 +2502,10 @@ export const ENCHANT_EFFECTS: Record<EnchantId, EnchantEffect> = {
       const hasChantOrDye = ctx.player.statuses.some(s =>
         s.id.startsWith("chanted_") || s.id.startsWith("dyed_"));
       if (hasChantOrDye) {
+        const pct = getEnchantParam(ctx.player, 0);
         ctx.player.statuses.push({ id: "arcane_first_used", name: "秘法已触发", stacks: 1, duration: -1 });
-        ctx.log("秘法回响：染/咒在场，本场首攻 +30%。", "player");
-        return d * 1.30;
+        ctx.log(`秘法回响：染/咒在场，本场首攻 +${pct}%。`, "player");
+        return d * (1 + pct / 100);
       }
       return d;
     },

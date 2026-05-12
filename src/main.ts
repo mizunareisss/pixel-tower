@@ -51,6 +51,7 @@ import type { EventId } from "./events.ts";
 import { NODE_TYPE_META, getReachableNodes } from "./map.ts";
 import { SUIT_SYMBOLS, SUITS, isRedSuit, FIGHTS_PER_FLOOR, STATUS_META, RACES, FRAGMENT_NAMES, FRAGMENT_ICONS,
   ENCHANTS, ENCHANT_NAMES, ENCHANT_DESCS, ENCHANT_RECIPES, RACE_NAMES, isRareRace,
+  ENCHANT_MAX_LEVEL, getEnchantDescAt,
   SUIT_TIER_NAMES, SUIT_TIER_DESCS, SUIT_THEMES } from "./types.ts";
 import type { EnemyRace, Suit, EnchantId } from "./types.ts";
 import type { GameState, CardInstance, EnemyState, StatusEffect } from "./types.ts";
@@ -407,7 +408,8 @@ function showCharacterDetail(): void {
           <div class="cd-item-sub">
             <span class="cd-sub-label">⚒ 附魔</span>
             <b>${escapeHTML(ENCHANT_NAMES[enchant])}</b>
-            <div class="cd-item-desc">${escapeHTML(ENCHANT_DESCS[enchant])}</div>
+            <span class="forge-lv-badge">Lv ${state.player.weaponEnchantLevel ?? 1}/${ENCHANT_MAX_LEVEL}</span>
+            <div class="cd-item-desc">${escapeHTML(getEnchantDescAt(enchant, state.player.weaponEnchantLevel ?? 1))}</div>
           </div>
         ` : ""}
       </div>
@@ -544,8 +546,8 @@ function showChipDetail(type: "weapon" | "armor" | "perk") {
         <p class="status-info-desc">${escapeHTML(def.desc)}</p>
         <div class="status-info-stats"><span><b>当前效果：</b>${escapeHTML(eff?.stat ?? eff?.desc ?? "")}</span></div>
         ${enchant ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #333">
-          <p class="status-info-desc" style="color:var(--yellow);font-weight:900">⚒ 附魔：${escapeHTML(ENCHANT_NAMES[enchant])}</p>
-          <p class="status-info-desc" style="font-size:11px;color:var(--gray)">${escapeHTML(ENCHANT_DESCS[enchant])}</p>
+          <p class="status-info-desc" style="color:var(--yellow);font-weight:900">⚒ 附魔：${escapeHTML(ENCHANT_NAMES[enchant])} <span class="forge-lv-badge">Lv ${state.player.weaponEnchantLevel ?? 1}/${ENCHANT_MAX_LEVEL}</span></p>
+          <p class="status-info-desc" style="font-size:11px;color:var(--gray)">${escapeHTML(getEnchantDescAt(enchant, state.player.weaponEnchantLevel ?? 1))}</p>
         </div>` : ""}
       `;
     }
@@ -1712,6 +1714,7 @@ function renderDiscardCardEl(inst: CardInstance): HTMLElement {
 
 function renderForge() {
   const cur = state.player.weaponEnchant;
+  const curLevel = state.player.weaponEnchantLevel ?? 1;
   const curWeapon = state.player.weapons[0] ? CARD_DB[state.player.weapons[0].defId].name : "（无武器）";
   const recolorUsed = state.forgeRecolorUsed === true;
   const totalFragments = Object.values(state.player.fragments).reduce((a, b) => a + b, 0);
@@ -1723,79 +1726,126 @@ function renderForge() {
   const discountBanner = state.forgeDiscountThisVisit
     ? `<div id="forge-discount-banner">★ 5 折特惠：本次访问所有附魔配方碎片消耗减半（向上取整）</div>`
     : "";
+
+  // 当前附魔所在花色：默认展开
+  const curBranch = cur ? ENCHANT_RECIPES[cur].branch : null;
+  const curDescNow = cur ? getEnchantDescAt(cur, curLevel) : "";
+  const curLine = cur
+    ? `<b>${escapeHTML(ENCHANT_NAMES[cur])}</b> <span class="forge-lv-badge">Lv ${curLevel}/${ENCHANT_MAX_LEVEL}</span><br><span class="forge-current-desc">${escapeHTML(curDescNow)}</span>`
+    : "<b>（无）</b>";
+
+  // 跳过按钮放在顶部和底部各一个 — 玩家不用滚到底
   stageEl.innerHTML = `
-    <p class="hint">用灵魂碎片为武器附魔。普通附魔（单种族 ×3）/ 复合附魔（2 种族 ×2+×2）。换附魔会覆盖旧的。</p>
+    <div class="forge-top-bar">
+      <button id="forge-skip-btn-top" class="forge-skip-top">离开铁匠铺 →</button>
+    </div>
+    <p class="hint">同一附魔重附 → 升级 Lv（消耗相同配方）；换不同附魔会重置为 Lv 1。Lv 5 满级。</p>
     ${discountBanner}
-    <div id="forge-current">当前武器：<b>${escapeHTML(curWeapon)}</b>　|　当前附魔：<b>${cur ? escapeHTML(ENCHANT_NAMES[cur]) : "（无）"}</b></div>
+    <div id="forge-current">当前武器：<b>${escapeHTML(curWeapon)}</b>　|　当前附魔：${curLine}</div>
     <div id="forge-recolor-section">
       <div class="forge-recolor-title">🎨 染坊（每次铁匠铺仅可使用 1 次）</div>
       <div class="forge-recolor-desc">用任意 3 个灵魂碎片，把牌库里的 1 张攻击牌永久变成你选的花色。</div>
       ${recolorBtn}
     </div>
-    <div id="forge-section-single">
-      <div class="forge-section-title">🔹 普通附魔（单种族 ×3 碎片）</div>
-      <div class="forge-grid" id="forge-list-single"></div>
-    </div>
-    <div id="forge-section-composite">
-      <div class="forge-section-title">🔸 复合附魔（2 种族 ×2 + ×2 碎片）<span class="forge-section-sub">含巨怪/暗影 = 强档；双稀少 = 究极</span></div>
-      <div class="forge-grid" id="forge-list-composite"></div>
-    </div>
-    <button id="forge-skip-btn" class="big-btn">跳过铁匠铺</button>
+    <div id="forge-suit-sections"></div>
+    <button id="forge-skip-btn" class="big-btn">离开铁匠铺</button>
   `;
-  // 染色按钮绑定
   const rb = stageEl.querySelector(".forge-recolor-btn") as HTMLButtonElement | null;
   if (rb && !recolorUsed && totalFragments >= 3) {
     rb.addEventListener("click", () => showForgeRecolorWizard());
   }
-  const listSingle = $("forge-list-single");
-  const listComposite = $("forge-list-composite");
-  const discount = state.forgeDiscountThisVisit === true;
-  for (const eid of ENCHANTS) {
-    const recipe = ENCHANT_RECIPES[eid];
-    // 实际消耗：5 折时减半（向上取整）
-    const costEntries = (Object.entries(recipe.cost) as [import("./types.ts").EnemyRace, number][])
-      .map(([r, n]) => [r, discount ? Math.ceil(n / 2) : n] as [import("./types.ts").EnemyRace, number]);
-    const enough = costEntries.every(([r, n]) => (state.player.fragments[r] ?? 0) >= (n ?? 0));
-    const isCurrent = cur === eid;
-    const branchSym = SUIT_SYMBOLS[recipe.branch];
-    const branchTheme = SUIT_THEMES[recipe.branch];
-    const variantBadge = recipe.variant === "specialize"
-      ? `<span class="forge-tag forge-tag-spec">特化</span>`
-      : `<span class="forge-tag forge-tag-comp">互补</span>`;
-    const tierBadge = recipe.doubleRare
-      ? `<span class="forge-tag forge-tag-ultimate">究极</span>`
-      : recipe.hasRare
-        ? `<span class="forge-tag forge-tag-rare">强档</span>`
-        : `<span class="forge-tag forge-tag-base">普通</span>`;
-    const costHtml = costEntries.map(([r, n]) => {
-      const have = state.player.fragments[r] ?? 0;
-      const ok = have >= n;
-      const rare = isRareRace(r);
-      return `<span class="forge-cost-pill${ok ? " ok" : " miss"}${rare ? " rare" : ""}">${FRAGMENT_ICONS[r]} ${FRAGMENT_NAMES[r]} ${have}/${n}</span>`;
-    }).join("");
 
-    const card = document.createElement("div");
-    card.className = `forge-card v2${enough ? " ok" : " disabled"}${isCurrent ? " current" : ""}${recipe.doubleRare ? " ultimate" : recipe.hasRare ? " rare" : ""}`;
-    card.innerHTML = `
-      <div class="forge-card-head">
-        <span class="forge-branch" style="color:${branchTheme.color}">${branchSym} ${branchTheme.name}</span>
-        ${variantBadge}${tierBadge}
-      </div>
-      <div class="forge-name">${escapeHTML(ENCHANT_NAMES[eid])}${isCurrent ? "（已装备）" : ""}</div>
-      <div class="forge-desc">${escapeHTML(ENCHANT_DESCS[eid])}</div>
-      <div class="forge-cost-row">${costHtml}</div>
-      <button class="forge-btn" ${enough ? "" : "disabled"}>${enough ? (isCurrent ? "重新附魔" : "应用") : "碎片不足"}</button>
+  // 按 4 花色分组（折叠）— 顺序：当前装备花色优先，其它按 SUITS 顺序
+  const sectionsRoot = $("forge-suit-sections");
+  const discount = state.forgeDiscountThisVisit === true;
+  const sortedSuits: Suit[] = [];
+  if (curBranch) sortedSuits.push(curBranch);
+  for (const s of SUITS) if (s !== curBranch) sortedSuits.push(s);
+
+  for (const suit of sortedSuits) {
+    const enchantsInSuit = ENCHANTS.filter(eid => ENCHANT_RECIPES[eid].branch === suit);
+    if (enchantsInSuit.length === 0) continue;
+    const sym = SUIT_SYMBOLS[suit];
+    const theme = SUIT_THEMES[suit];
+    const isOpen = suit === curBranch;  // 当前花色默认展开，其它折叠
+    const section = document.createElement("div");
+    section.className = `forge-suit-section${isOpen ? " open" : ""}`;
+    section.innerHTML = `
+      <button class="forge-suit-head" data-suit="${suit}" style="--suit-color:${theme.color}">
+        <span class="forge-suit-sym">${sym}</span>
+        <span class="forge-suit-name">${escapeHTML(theme.name)} · ${enchantsInSuit.length} 款附魔</span>
+        <span class="forge-suit-arrow">${isOpen ? "▼" : "▶"}</span>
+      </button>
+      <div class="forge-suit-body" ${isOpen ? "" : "hidden"}></div>
     `;
-    if (enough) {
-      card.querySelector("button")!.addEventListener("click", () => {
-        applyEnchant(state, eid);
-        render();
-      });
+    const body = section.querySelector(".forge-suit-body") as HTMLElement;
+    for (const eid of enchantsInSuit) {
+      const recipe = ENCHANT_RECIPES[eid];
+      const costEntries = (Object.entries(recipe.cost) as [import("./types.ts").EnemyRace, number][])
+        .map(([r, n]) => [r, discount ? Math.ceil(n / 2) : n] as [import("./types.ts").EnemyRace, number]);
+      const enough = costEntries.every(([r, n]) => (state.player.fragments[r] ?? 0) >= (n ?? 0));
+      const isCurrent = cur === eid;
+      const isMaxed = isCurrent && curLevel >= ENCHANT_MAX_LEVEL;
+      const nextLv = isCurrent ? Math.min(ENCHANT_MAX_LEVEL, curLevel + 1) : 1;
+      const descAtNext = getEnchantDescAt(eid, nextLv);
+      const variantBadge = recipe.variant === "specialize"
+        ? `<span class="forge-tag forge-tag-spec">特化</span>`
+        : `<span class="forge-tag forge-tag-comp">互补</span>`;
+      const tierBadge = recipe.doubleRare
+        ? `<span class="forge-tag forge-tag-ultimate">究极</span>`
+        : recipe.hasRare
+          ? `<span class="forge-tag forge-tag-rare">强档</span>`
+          : `<span class="forge-tag forge-tag-base">普通</span>`;
+      const kindBadge = recipe.kind === "single"
+        ? `<span class="forge-tag forge-tag-kind">单×3</span>`
+        : `<span class="forge-tag forge-tag-kind">2+2</span>`;
+      const lvBadge = isCurrent
+        ? `<span class="forge-lv-badge">Lv ${curLevel}${isMaxed ? "（满）" : `→${nextLv}`}</span>`
+        : "";
+      const costHtml = costEntries.map(([r, n]) => {
+        const have = state.player.fragments[r] ?? 0;
+        const ok = have >= n;
+        const rare = isRareRace(r);
+        return `<span class="forge-cost-pill${ok ? " ok" : " miss"}${rare ? " rare" : ""}">${FRAGMENT_ICONS[r]} ${FRAGMENT_NAMES[r]} ${have}/${n}</span>`;
+      }).join("");
+
+      const btnText = isMaxed ? "已满级"
+        : !enough ? "碎片不足"
+        : isCurrent ? `升级到 Lv ${nextLv}`
+        : `应用（Lv 1）`;
+      const btnDisabled = isMaxed || !enough;
+
+      const card = document.createElement("div");
+      card.className = `forge-card v2${enough ? " ok" : " disabled"}${isCurrent ? " current" : ""}${isMaxed ? " maxed" : ""}${recipe.doubleRare ? " ultimate" : recipe.hasRare ? " rare" : ""}`;
+      card.innerHTML = `
+        <div class="forge-card-head">
+          ${variantBadge}${tierBadge}${kindBadge}${lvBadge}
+        </div>
+        <div class="forge-name">${escapeHTML(ENCHANT_NAMES[eid])}${isCurrent ? "（已装备）" : ""}</div>
+        <div class="forge-desc">${escapeHTML(descAtNext)}</div>
+        <div class="forge-cost-row">${costHtml}</div>
+        <button class="forge-btn" ${btnDisabled ? "disabled" : ""}>${btnText}</button>
+      `;
+      if (!btnDisabled) {
+        card.querySelector("button")!.addEventListener("click", () => {
+          applyEnchant(state, eid);
+          render();
+        });
+      }
+      body.appendChild(card);
     }
-    if (recipe.kind === "single") listSingle.appendChild(card);
-    else listComposite.appendChild(card);
+    // 点击 head 折叠/展开
+    const head = section.querySelector(".forge-suit-head") as HTMLButtonElement;
+    head.addEventListener("click", () => {
+      const opened = section.classList.toggle("open");
+      body.hidden = !opened;
+      head.querySelector(".forge-suit-arrow")!.textContent = opened ? "▼" : "▶";
+    });
+    sectionsRoot.appendChild(section);
   }
-  $("forge-skip-btn").addEventListener("click", () => { skipForge(state); render(); });
+  const skipFn = () => { skipForge(state); render(); };
+  $("forge-skip-btn").addEventListener("click", skipFn);
+  $("forge-skip-btn-top").addEventListener("click", skipFn);
 }
 
 // 染色向导：选攻击牌 → 选目标花色 → 自动从最高库存种族扣 3 碎片
