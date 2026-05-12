@@ -808,28 +808,35 @@ const FULL_PLATE: CardDef = {
   equipSuit: "club",
   baseReduce: 5,
   equipEffects: [
-    { desc: "-5 受击 + 反震 +2 护盾 / 受击。", stat: "-5 受击 反震+2",
+    // 反震：受击时累积到 fullplate_pending 蓄势状态（独立于 shield_block）
+    //  startNewPlayerTurn 那里会把 pending 转换为 shield_block（duration=-1 持续）
+    //  这样匹配描述「下回合开始时释放为临时护盾」，避免 shield 在敌方回合白涨然后清零
+    { desc: "-5 受击 + 反震 +2 蓄势 → 下回合开局变护盾。", stat: "-5 受击 反震+2",
       onTakeDamage: (c, d) => {
-        const ex = c.player.statuses.find(s => s.id === "shield_block");
-        if (ex) ex.stacks += 2; else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 2, duration: 1 });
+        const ex = c.player.statuses.find(s => s.id === "fullplate_pending");
+        if (ex) ex.stacks += 2;
+        else c.player.statuses.push({ id: "fullplate_pending", name: "反震蓄势", stacks: 2, duration: -1 });
         return Math.max(0, d - 5);
       } },
-    { desc: "-7 受击 + 反震 +3 护盾 / 受击。", stat: "-7 受击 反震+3",
+    { desc: "-7 受击 + 反震 +3 蓄势 → 下回合开局变护盾。", stat: "-7 受击 反震+3",
       onTakeDamage: (c, d) => {
-        const ex = c.player.statuses.find(s => s.id === "shield_block");
-        if (ex) ex.stacks += 3; else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 3, duration: 1 });
+        const ex = c.player.statuses.find(s => s.id === "fullplate_pending");
+        if (ex) ex.stacks += 3;
+        else c.player.statuses.push({ id: "fullplate_pending", name: "反震蓄势", stacks: 3, duration: -1 });
         return Math.max(0, d - 7);
       } },
-    { desc: "-9 受击 + 反震 +4 护盾 / 受击。", stat: "-9 受击 反震+4",
+    { desc: "-9 受击 + 反震 +4 蓄势 → 下回合开局变护盾。", stat: "-9 受击 反震+4",
       onTakeDamage: (c, d) => {
-        const ex = c.player.statuses.find(s => s.id === "shield_block");
-        if (ex) ex.stacks += 4; else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 4, duration: 1 });
+        const ex = c.player.statuses.find(s => s.id === "fullplate_pending");
+        if (ex) ex.stacks += 4;
+        else c.player.statuses.push({ id: "fullplate_pending", name: "反震蓄势", stacks: 4, duration: -1 });
         return Math.max(0, d - 9);
       } },
-    { desc: "-12 受击 + 反震 +5 护盾 / 受击。", stat: "-12 受击 反震+5",
+    { desc: "-12 受击 + 反震 +5 蓄势 → 下回合开局变护盾。", stat: "-12 受击 反震+5",
       onTakeDamage: (c, d) => {
-        const ex = c.player.statuses.find(s => s.id === "shield_block");
-        if (ex) ex.stacks += 5; else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: 5, duration: 1 });
+        const ex = c.player.statuses.find(s => s.id === "fullplate_pending");
+        if (ex) ex.stacks += 5;
+        else c.player.statuses.push({ id: "fullplate_pending", name: "反震蓄势", stacks: 5, duration: -1 });
         return Math.max(0, d - 12);
       } },
   ],
@@ -1284,7 +1291,7 @@ const IT_PURIFY: CardDef = {
   desc: "清除自身所有负面状态。",
   onPlay: (c) => {
     // 保留正向 buff / shield / 武器 buff，其他全清
-    const KEEP = new Set(["battle_cry", "double_strike", "evasive", "shield_block", "reflect", "busi_triggered", "weapon_buff", "sharpened", "shadow_double", "counter_stance", "frenzy", "charged", "knight_charge", "combat_rhythm", "time_stop", "smoke_dodge", "guaranteed_dodge", "pierce_next", "phantom_charge", "echo", "dodge_full_round", "triple_strike", "phalanx_dr", "swift_dodge_temp", "enc_runic_immune", "enc_dot_immune", "warblood_perm_atk", "blood_pact", "arcane_burst", "brew_regen", "pierce_bonus", "pierce_perm", "calc_charge", "blood_pact_charge", "next_atk_apply_poison", "next_atk_apply_bleed"]);
+    const KEEP = new Set(["battle_cry", "double_strike", "evasive", "shield_block", "reflect", "busi_triggered", "weapon_buff", "sharpened", "shadow_double", "counter_stance", "frenzy", "charged", "knight_charge", "combat_rhythm", "time_stop", "smoke_dodge", "guaranteed_dodge", "pierce_next", "phantom_charge", "echo", "dodge_full_round", "triple_strike", "phalanx_dr", "swift_dodge_temp", "enc_runic_immune", "enc_dot_immune", "warblood_perm_atk", "blood_pact", "arcane_burst", "brew_regen", "pierce_bonus", "pierce_perm", "calc_charge", "blood_pact_charge", "next_atk_apply_poison", "next_atk_apply_bleed", "fullplate_pending"]);
     const before = c.player.statuses.length;
     c.player.statuses = c.player.statuses.filter(s => KEEP.has(s.id));
     if (c.player.statuses.length < before) c.log(`净化药水：清除 ${before - c.player.statuses.length} 个负面状态。`, "player");
