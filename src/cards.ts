@@ -1211,15 +1211,15 @@ const IT_HEAL_POTION: CardDef = {
 };
 
 const IT_PURIFY: CardDef = {
-  id: "it_purify", name: "驱毒剂", category: "item", target: "self",
-  desc: "清除自身所有负面状态 + 摸 1 张牌。",
+  id: "it_purify", name: "净化药水", category: "item", target: "self",
+  desc: "清除自身所有负面状态。",
   onPlay: (c) => {
+    // 保留正向 buff / shield / 武器 buff，其他全清
+    const KEEP = new Set(["battle_cry", "double_strike", "evasive", "shield_block", "reflect", "busi_triggered", "weapon_buff", "sharpened", "shadow_double", "counter_stance", "frenzy", "charged", "knight_charge", "scepter_clubs", "combat_rhythm", "time_stop", "smoke_dodge", "guaranteed_dodge", "pierce_next", "phantom_charge", "echo", "dodge_full_round", "triple_strike", "phalanx_dr", "swift_dodge_temp", "enc_runic_immune", "enc_dot_immune", "warblood_perm_atk", "blood_pact", "arcane_burst", "brew_regen", "pierce_bonus", "pierce_perm", "calc_charge", "blood_pact_charge", "battle_cry"]);
     const before = c.player.statuses.length;
-    c.player.statuses = c.player.statuses.filter(s => ["battle_cry", "double_strike", "evasive", "shield_block", "reflect", "busi_triggered", "weapon_buff"].includes(s.id));
-    if (c.player.statuses.length < before) c.log("驱毒剂：清除负面。", "player");
-    // 没中毒也有价值：摸 1 张
-    (c as any)._drawN = ((c as any)._drawN ?? 0) + 1;
-    c.log("驱毒剂：摸 1 张。", "player");
+    c.player.statuses = c.player.statuses.filter(s => KEEP.has(s.id));
+    if (c.player.statuses.length < before) c.log(`净化药水：清除 ${before - c.player.statuses.length} 个负面状态。`, "player");
+    else c.log("净化药水：当前无负面状态。", "system");
   },
 };
 
@@ -1408,13 +1408,39 @@ const SK_DRAIN_WAVE: CardDef = {
   },
 };
 
-// 道具：穿甲油 — 本场战斗武器永久 +2 pierce
+// 道具：解毒剂 — 仅清中毒（更便宜的针对性净化）
+const IT_ANTIDOTE: CardDef = {
+  id: "it_antidote", name: "解毒剂", category: "item", target: "self",
+  desc: "清除自身中毒状态。",
+  onPlay: (c) => {
+    const had = !!c.player.statuses.find(s => s.id === "poison");
+    c.player.statuses = c.player.statuses.filter(s => s.id !== "poison");
+    c.log(had ? "解毒剂：清除中毒。" : "解毒剂：当前未中毒。", had ? "player" : "system");
+  },
+};
+
+// 道具：活力剂 — 清易伤、虚弱（针对性防御 debuff）
+const IT_ENERGY: CardDef = {
+  id: "it_energy", name: "活力剂", category: "item", target: "self",
+  desc: "清除自身易伤、虚弱状态。",
+  onPlay: (c) => {
+    const before = c.player.statuses.length;
+    c.player.statuses = c.player.statuses.filter(s => s.id !== "vulnerable" && s.id !== "weak");
+    const cleared = before - c.player.statuses.length;
+    c.log(cleared > 0 ? `活力剂：清除 ${cleared} 个易伤 / 虚弱。` : "活力剂：当前无易伤 / 虚弱。", cleared > 0 ? "player" : "system");
+  },
+};
+
+// 道具：穿甲油 — 3 回合内武器 +3 pierce
 const IT_PIERCE_OIL: CardDef = {
   id: "it_pierce_oil", name: "穿甲油", category: "item", target: "self",
-  desc: "本场战斗内武器永久 +2 pierce。",
+  desc: "3 回合内，武器 +3 pierce。",
   onPlay: (c) => {
-    addStatus(c.player, "pierce_perm", "穿甲油", 2, -1);
-    c.log("穿甲油：武器 +2 pierce。", "player");
+    // 重复使用刷新 duration + 覆盖 stacks 为 3（不叠加）
+    const ex = c.player.statuses.find(s => s.id === "pierce_perm");
+    if (ex) { ex.stacks = 3; ex.duration = 3; }
+    else c.player.statuses.push({ id: "pierce_perm", name: "穿甲油", stacks: 3, duration: 3 });
+    c.log("穿甲油：3 回合内武器 +3 pierce。", "player");
   },
 };
 
@@ -1529,13 +1555,14 @@ const SK_WRATH: CardDef = {
   },
 };
 
-// Epic 道具：复读机 — 本场战斗每出 1 张非攻击牌复制 1 份到手牌
+// Epic 道具：复读机 — 本回合内每出 1 张非攻击牌复制 1 份到手牌，回合结束失效
 const IT_ECHO: CardDef = {
   id: "it_echo", name: "复读机", category: "item", target: "self",
-  desc: "每出 1 张非攻击牌，复制一份回手牌。",
+  desc: "本回合内，每出 1 张非攻击牌，复制一份回手牌，回合结束后失效。",
   onPlay: (c) => {
-    addStatus(c.player, "echo", "复读", 1, -1);
-    c.log("复读机：时间在打嗝。", "player");
+    // duration -1 → 1（本回合，回合结束清掉）
+    addStatus(c.player, "echo", "复读", 1, 1);
+    c.log("复读机：本回合时间在打嗝（回合结束失效）。", "player");
   },
 };
 
@@ -1913,6 +1940,8 @@ export const CARD_DB: Record<string, CardDef> = {
   sk_drain_wave: SK_DRAIN_WAVE,
   it_pierce_oil: IT_PIERCE_OIL,
   it_echo: IT_ECHO,
+  it_antidote: IT_ANTIDOTE,
+  it_energy: IT_ENERGY,
   // Epic 卡（5 张）
   excalibur: EXCALIBUR,
   divine_blade: DIVINE_BLADE,
@@ -1958,6 +1987,9 @@ const _RARITY: Record<string, "rare" | "super_rare" | "epic"> = {
   sk_blast: "rare", sk_shadow_strike: "rare", sk_dye: "rare", sk_attune: "rare",
   sk_pierce_shot: "rare", sk_frenzy: "super_rare",
   it_regroup: "rare", it_elixir: "rare", it_smoke: "rare",
+  // 用户调整：it_purify common→rare、it_bomb common→rare
+  // 新道具 it_antidote / it_energy 默认 common（不需要进 _RARITY）
+  it_purify: "rare", it_bomb: "rare",
   sk_chain_bolt: "rare", sk_fire_wall: "rare", sk_shockwave: "rare",
   sk_group_curse: "rare", sk_mass_weak: "rare", sk_lightning: "rare",
   // 用户调整：sk_freeze / sk_quick_draw 升 rare；sk_fear 升 super_rare；sk_chant / sk_curse_vortex 升 epic
@@ -2058,6 +2090,7 @@ export const REWARD_CARD_POOL_BASE = [
   // 道具（10 = 原 7 + 速摸 + 药剂 + 穿甲油）
   "it_heal", "it_purify", "it_whetstone", "it_regroup", "it_bomb", "it_elixir", "it_smoke",
   "it_quick_draw", "it_brew", "it_pierce_oil",
+  "it_antidote", "it_energy",
   // 流派资源补全 v1（3 张）
   "vampire_fang",       // ♥ rare 武器
   "lifebloom_staff",    // ♥ super_rare 武器

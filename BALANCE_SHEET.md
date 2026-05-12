@@ -134,7 +134,7 @@
 | `p_lifetap` | 生命汲取 | 每回合 -3% 最大 HP，伤敌 = 最大 HP × 5%（每张） | club |
 | `p_coldblood` | 冷血 | 无 debuff 时攻击 +3%（每张） | club |
 
-## 无花色 / 通用（共 52 张）
+## 无花色 / 通用（共 54 张）
 
 ### 技能牌（41）
 
@@ -182,21 +182,23 @@
 | `sk_drain_wave` | 吸血潮 | super_rare | all | 对全体敌人造 5% 各自 HP 上限 的直伤（向上取整），伤害总和转为你的 HP。 |
 | `sk_wrath` | 众神之怒 | epic | all | 所有存活敌人受到当前 HP 30% 直伤。 |
 
-### 道具牌（11）
+### 道具牌（13）
 
 | ID | 名称 | 稀有度 | 目标 | 描述 |
 |---|---|---|---|---|
 | `it_heal` | 回血药水 | common | self | 回复最大 HP 的 20%（最少 12 点）。 |
-| `it_purify` | 驱毒剂 | common | self | 清除自身所有负面状态 + 摸 1 张牌。 |
+| `it_purify` | 净化药水 | rare | self | 清除自身所有负面状态。 |
 | `it_whetstone` | 磨刀石 | common | self | 下一张攻击伤害 ×1.5。 |
 | `it_regroup` | 重整 | rare | self | 弃掉所有手牌，重摸 5 张。 |
-| `it_bomb` | 炸弹 | common | single | 对目标造成 (5 + 楼层) 点直接伤害。 |
+| `it_bomb` | 炸弹 | rare | single | 对目标造成 (5 + 楼层) 点直接伤害。 |
 | `it_elixir` | 强化药 | rare | self | 本场战斗武器 +2 伤。 |
 | `it_smoke` | 烟雾弹 | rare | self | 5 回合内闪避概率 +30%。 |
 | `it_quick_draw` | 速摸 | rare | self | 立刻摸 3 张牌；本回合内不能再出技能牌。 |
 | `it_brew` | 药剂 | rare | self | 本场战斗内每回合开始时回复 2 HP。 |
-| `it_pierce_oil` | 穿甲油 | rare | self | 本场战斗内武器永久 +2 pierce。 |
-| `it_echo` | 复读机 | epic | self | 每出 1 张非攻击牌，复制一份回手牌。 |
+| `it_pierce_oil` | 穿甲油 | rare | self | 3 回合内，武器 +3 pierce。 |
+| `it_echo` | 复读机 | epic | self | 本回合内，每出 1 张非攻击牌，复制一份回手牌，回合结束后失效。 |
+| `it_antidote` | 解毒剂 | common | self | 清除自身中毒状态。 |
+| `it_energy` | 活力剂 | common | self | 清除自身易伤、虚弱状态。 |
 
 ---
 
