@@ -827,7 +827,7 @@ function renderBattle() {
       const descs = SUIT_TIER_DESCS[suit];
       showConfirm({
         title: `${SUIT_SYMBOLS[suit]} ${theme.name} · ${names.ult}`,
-        body: `${descs.ult}<br><br>消耗 <b>10 点</b>该花色亲和度。`,
+        body: `${descs.ult}<br><br>消耗 <b>8 点</b>该花色亲和度（永久扣减，本场每花色限 1 次）。`,
         confirmLabel: "释放！",
         onConfirm: () => {
           if (releaseSuitUltimate(state, suit)) render();
@@ -971,7 +971,7 @@ function renderSuitBlock(): string {
 
   // T3 大招按钮（悬浮在方块上方）
   const ultBtn = (tier >= 3 && isActive)
-    ? `<button class="suit-ult-floating" data-suit="${suit}" title="释放 ${theme.name} 大招（消耗 10 亲和）">⚡ ${escapeHTML(names.ult)}</button>`
+    ? `<button class="suit-ult-floating" data-suit="${suit}" title="释放 ${theme.name} 大招（消耗 8 亲和，永久；本场每色限 1 次）">⚡ ${escapeHTML(names.ult)}</button>`
     : "";
 
   // 并列指示器

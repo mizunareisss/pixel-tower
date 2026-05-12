@@ -44,23 +44,23 @@ export const SUIT_PLAYED_CAP = 30;
 // 它们的"协助专精"作用通过 trackSuitPlayed 已经按视为色累积进 player.suitPlayedTotal
 export function getSuitAffinity(state: BattleState, suit: Suit): number {
   let aff = 0;
-  // 装备同花色：每件 +1.5
+  // 装备同花色：每件 +1.3
   for (const w of state.player.weapons) {
-    if (CARD_DB[w.defId]?.equipSuit === suit) aff += 1.5;
+    if (CARD_DB[w.defId]?.equipSuit === suit) aff += 1.3;
   }
   for (const a of state.player.armors) {
-    if (CARD_DB[a.defId]?.equipSuit === suit) aff += 1.5;
+    if (CARD_DB[a.defId]?.equipSuit === suit) aff += 1.3;
   }
-  // 特性同花色：每张 +1
+  // 特性同花色：每张 +0.8
   for (const p of state.player.perks) {
-    if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 1;
+    if (CARD_DB[p.defId]?.defaultSuit === suit) aff += 0.8;
   }
-  // 出过的同花色攻击牌：每张 +0.2（持久化到 player.suitPlayedTotal，cap 30）
+  // 出过的同花色攻击牌：每张 +0.3（持久化到 player.suitPlayedTotal，cap 30）
   const played = state.player.suitPlayedTotal?.[suit] ?? 0;
-  aff += Math.min(SUIT_PLAYED_CAP, played) * 0.2;
-  // Tier 3 大招消耗：扣减
-  const consumed = state.player.statuses.find(s => s.id === `suit_consumed_${suit}`);
-  if (consumed) aff -= consumed.stacks;
+  aff += Math.min(SUIT_PLAYED_CAP, played) * 0.3;
+  // 大招消耗：跨战斗持久化（读 player.suitConsumedTotal，不再用 status）
+  const consumed = state.player.suitConsumedTotal?.[suit] ?? 0;
+  aff -= consumed;
   return Math.max(0, Math.min(20, aff));
 }
 
@@ -117,12 +117,13 @@ export function getTiedSpecialties(state: BattleState): Suit[] {
   return entries.filter(e => e.a === maxAff).map(e => e.s);
 }
 
-// Tier 3 大招消耗 10 亲和（通过 suit_consumed_X 状态记录"已扣"）
+// Tier 3 大招消耗：持久化到 player.suitConsumedTotal（跨战斗保留）
+// 之前用 status 实现 → status 在 newBattle 全清，导致消耗形同虚设、跨战亲和度反弹
 export function consumeSuitAffinity(state: BattleState, suit: Suit, amount: number): void {
-  const id = `suit_consumed_${suit}`;
-  const existing = state.player.statuses.find(s => s.id === id);
-  if (existing) existing.stacks += amount;
-  else state.player.statuses.push({ id, name: `${suit}-已耗`, stacks: amount, duration: -1 });
+  if (!state.player.suitConsumedTotal) {
+    state.player.suitConsumedTotal = { spade: 0, diamond: 0, heart: 0, club: 0 };
+  }
+  state.player.suitConsumedTotal[suit] = (state.player.suitConsumedTotal[suit] ?? 0) + amount;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -261,6 +262,8 @@ export function drawCards(player: PlayerState, n: number, log: (m: string, k?: L
 export function newBattle(player: PlayerState, enemies: EnemyState[], floor: number = 1): BattleState {
   player.statuses = [];
   player.turnsElapsed = 0;
+  // 大招本场释放标记：每场战斗重置（4 花色每色本场限 1 次）
+  player.ultsThisBattle = { spade: false, diamond: false, heart: false, club: false };
   // 把上一场残留的手牌/弃牌全部塞回牌库，重新洗
   player.deck = [...player.deck, ...player.hand, ...player.discard];
   player.hand = [];

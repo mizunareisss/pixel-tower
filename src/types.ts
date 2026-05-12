@@ -430,11 +430,15 @@ export interface PlayerState {
   // 花色专精：累积打过的同花色攻击牌总数（跨战斗保留；染色/持咒后按视为色累积；cap 30/色）
   suitPlayedTotal?: Record<Suit, number>;
 
+  // 花色专精：累计被大招消耗掉的亲和度（跨战斗持久化；不重置；
+  //   配合 getSuitAffinity 在末端扣减，让消耗成为"整局进度"的代价）
+  suitConsumedTotal?: Record<Suit, number>;
+
   // 装备保底：连续未在 reward_card 拿到装备的场次，达 3 次下场必出装备
   battlesSinceEquipReward?: number;
 
-  // 花色专精大招的整局使用次数（跨战斗保留；4 花色都限 3 次）
-  ultsUsed?: Record<Suit, number>;
+  // 花色专精大招本场战斗已释放标记（每场战斗 newBattle 重置；4 花色独立，每色本场限 1 次）
+  ultsThisBattle?: Record<Suit, boolean>;
 
   // EPIC 临时装备机制：装备 EPIC 武器/防具时把当前装备暂存到 backup，
   // EPIC 用尽（3 次）后自动恢复 backup。比"替换 modal"更灵活，玩家不丢原装备
