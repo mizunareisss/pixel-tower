@@ -179,6 +179,12 @@ export const STATUS_META: Record<string, StatusMeta> = {
   scepter_clubs:     { name: "禁忌权杖蓄势", desc: "本回合已出 ♣ 牌数（攻击/技能/道具/装备均计入）。本回合内攻击伤害 += stacks × (N 由禁忌权杖 stack 决定，1/2/2/3)。", kind: "buff" },
   took_damage_turn:  { name: "本回合受伤", desc: "（内部状态，玩家无需关注）本回合受到过伤害，用于附魔机制末段判断。", kind: "neutral" },
   calc_charge:       { name: "法术蓄能", desc: "本回合已出非攻击牌数。配合法师杖 / 算计附魔 / 凝神附魔 / 奥术爆裂 → 下次攻击 +X 直伤。", kind: "buff" },
+  // ── 特性 / 附魔触发的 charge buff ──
+  blood_pact_charge:   { name: "血誓蓄势", desc: "受伤转化的攻击加成：下次攻击 +stacks 直伤（由特性血誓 p_blood_pact 触发，cap +6 / 张）。", kind: "buff" },
+  e_reaper_buff:       { name: "收割之刃", desc: "击杀后下次攻击伤害 ×1.2-1.75（按附魔 Lv），一次性。", kind: "buff" },
+  arcane_draws:        { name: "秘法摸牌计数", desc: "（内部）本回合秘法回响附魔触发的额外摸牌数，cap 3。", kind: "neutral" },
+  arcane_first_used:   { name: "秘法已触发", desc: "（内部）本场战斗秘法回响「首攻 +N%」已触发过，不再生效。", kind: "neutral" },
+  swift_first_used:    { name: "疾风已触发", desc: "（内部）本场战斗第 1 回合首攻已被疾风斩特性加成过。", kind: "neutral" },
   // ── 玩家"下次攻击命中时附加 debuff"标记（箭毒蛙 / 抗凝血触发）──
   next_atk_apply_poison: { name: "箭毒预备", desc: "下次攻击命中时给目标 +stacks 中毒。", kind: "buff" },
   next_atk_apply_bleed:  { name: "抗凝血预备", desc: "下次攻击命中时给目标 +stacks 出血（持续 2 回合）。", kind: "buff" },
