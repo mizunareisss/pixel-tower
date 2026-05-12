@@ -3225,27 +3225,65 @@ body.is-touch button:hover:not(:disabled) {
   vertical-align: middle;
 }
 
-/* 临时护盾 / 减伤数值芯片（玩家卡 HP 行右侧，紧邻闪避） */
-/* 吸收型护盾（shield_block）— 银白色 */
-.pcard-shield-chip {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 7px;
+/* 防御类大芯片（玩家卡 HP 行右侧）
+   5 色变体：shield 银白 / phalanx 古铜 / dodge 蓝 / counter 紫红 / immune 金
+   icon + 可选数值，紧凑但醒目，点击打开详情 */
+.pcard-def-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 5px;
+  padding: 1px 6px;
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.04em;
-  color: #d8e1eb;
-  background: rgba(180, 200, 220, 0.18);
-  border: 1px solid rgba(200, 215, 230, 0.55);
+  border: 1px solid transparent;
   border-radius: 3px;
   vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 100ms ease;
+}
+.pcard-def-chip:hover {
+  transform: translateY(-1px);
+}
+.pcard-def-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+.pcard-def-val {
+  line-height: 1;
+}
+/* 吸收型护盾（shield_block）— 银白 */
+.pcard-def-chip.shield {
+  color: #e0e6ee;
+  background: rgba(180, 200, 220, 0.18);
+  border-color: rgba(200, 215, 230, 0.55);
   box-shadow: inset 0 0 6px rgba(255, 255, 255, 0.08);
 }
-/* 减伤型（phalanx_dr 重甲列阵）— 古铜色，跟 shield 区分 */
-.pcard-shield-chip.phalanx {
-  color: #d8a87a;
-  background: rgba(180, 130, 80, 0.16);
-  border-color: rgba(200, 150, 90, 0.5);
+/* 减伤型（phalanx_dr 重甲列阵）— 古铜 */
+.pcard-def-chip.phalanx {
+  color: #e6b88a;
+  background: rgba(180, 130, 80, 0.18);
+  border-color: rgba(200, 150, 90, 0.55);
+}
+/* 闪避类（evasive / dodge_full_round / guaranteed_dodge / smoke_dodge / swift_dodge_temp）— 蓝青 */
+.pcard-def-chip.dodge {
+  color: #8ad4ff;
+  background: rgba(74, 144, 217, 0.18);
+  border-color: rgba(120, 180, 230, 0.55);
+}
+/* 反击/控制（counter_stance / time_stop）— 紫红 */
+.pcard-def-chip.counter {
+  color: #f0a8d8;
+  background: rgba(180, 80, 140, 0.18);
+  border-color: rgba(220, 130, 180, 0.55);
+}
+/* 免疫类（enc_runic_immune / enc_dot_immune）— 金 */
+.pcard-def-chip.immune {
+  color: #f7d068;
+  background: rgba(220, 170, 60, 0.16);
+  border-color: rgba(240, 200, 90, 0.55);
 }
 
 /* ═══════════════════════════════════════

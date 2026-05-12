@@ -773,18 +773,9 @@ function renderBattle() {
   const dodgeChip = dodgePct > 0
     ? `<span class="pcard-dodge-chip" title="闪避概率 ${dodgePct}%">🎯${dodgePct}%</span>`
     : "";
-  // 临时护盾汇总：shield_block.stacks（吸收型）+ phalanx_dr.stacks（减伤型）
-  // 在 HP 行右侧显示真实数值，避免分散在小芯片里看不清
-  const shieldStat = state.player.statuses.find(s => s.id === "shield_block");
-  const phalanxStat = state.player.statuses.find(s => s.id === "phalanx_dr");
-  const shieldVal = shieldStat?.stacks ?? 0;
-  const phalanxVal = phalanxStat?.stacks ?? 0;
-  const shieldChip = shieldVal > 0
-    ? `<span class="pcard-shield-chip" title="临时护盾 ${shieldVal}（吸收下次受到的伤害）">🛡 ${shieldVal}</span>`
-    : "";
-  const phalanxChip = phalanxVal > 0
-    ? `<span class="pcard-shield-chip phalanx" title="重甲列阵 减伤 ${phalanxVal}（本回合每次受击减 ${phalanxVal}）">🪖 -${phalanxVal}</span>`
-    : "";
+  // 防御类数值芯片：HP 行右侧统一展示，避免分散到小状态 chip 里看不清
+  // 每个 chip 用 data-status-* 标记 → 复用现有 .status-tag 点击委托打开详情弹窗
+  const defChipsHtml = renderDefensiveChips(state.player.statuses);
   const hpLow = hpPct <= 30;
   // 专精方块（替代旧的 .pcard-suit-row 长芯片）
   const suitBlock = renderSuitBlock();
@@ -795,8 +786,7 @@ function renderBattle() {
         <div class="pcard-hp-row">
           <span class="pcard-hp-val">${state.player.vita} / ${state.player.vitaMax}</span>
           <div class="pcard-hp-bar"><div class="pcard-hp-fill" style="width:${hpPct}%"></div></div>
-          ${shieldChip}
-          ${phalanxChip}
+          ${defChipsHtml}
           ${dodgeChip}
         </div>
         <button class="pcard-summary-btn" id="pcard-summary-btn"></button>
@@ -875,9 +865,13 @@ function renderBattle() {
   }
 
   // Player card — status row
-  // 隐藏内部状态：took_damage_turn / 类似 marker 玩家不关心的内部 flag
+  // 隐藏内部状态 + 已在 HP 行作为大芯片展示的防御类（避免重复显示）
   const HIDDEN_STATUSES = new Set([
     "took_damage_turn", "busi_triggered", "chanted_used",
+    // 防御类（提升到 HP 行右侧的大芯片）
+    "shield_block", "phalanx_dr", "evasive", "counter_stance",
+    "dodge_full_round", "guaranteed_dodge", "smoke_dodge", "swift_dodge_temp",
+    "enc_runic_immune", "enc_dot_immune", "time_stop",
   ]);
   const ps = $("pcard-statuses");
   const visibleStatuses = state.player.statuses.filter(s => !HIDDEN_STATUSES.has(s.id));
@@ -1280,6 +1274,71 @@ const STATUS_ICONS: Record<string, string> = {
   // 控制 / 累积
   calc_charge: "🧮", "blood_pact_charge": "💢",
 };
+
+// 防御类大芯片（HP 行右侧）— 把分散的护盾/闪避/免疫值统一展示
+// 每个 chip 仍带 .status-tag 类 + data-status-* → 复用全局 click 委托打开详情
+type DefChipDef = {
+  id: string;             // status id
+  icon: string;           // emoji
+  variant: "shield" | "phalanx" | "dodge" | "counter" | "immune";
+  label: (s: StatusEffect) => string;     // chip 显示文字（不含 icon）
+  tooltip: (s: StatusEffect) => string;
+};
+const DEFENSIVE_CHIPS: DefChipDef[] = [
+  { id: "shield_block", icon: "🛡", variant: "shield",
+    label: s => `${s.stacks}`,
+    tooltip: s => `临时护盾 ${s.stacks}：吸收下次受击伤害（点击详情）` },
+  { id: "phalanx_dr", icon: "🪖", variant: "phalanx",
+    label: s => `-${s.stacks}`,
+    tooltip: s => `重甲列阵：本回合每次受击 -${s.stacks}（点击详情）` },
+  { id: "evasive", icon: "🌬", variant: "dodge",
+    label: () => "½",
+    tooltip: () => `闪避姿态：本回合受到的伤害减半（点击详情）` },
+  { id: "dodge_full_round", icon: "✨", variant: "dodge",
+    label: () => "100%",
+    tooltip: () => `影舞步：本回合敌人攻击全闪避（点击详情）` },
+  { id: "guaranteed_dodge", icon: "🌟", variant: "dodge",
+    label: () => "",
+    tooltip: () => `必闪：下次受击 100% 闪避（一次性）` },
+  { id: "smoke_dodge", icon: "💨", variant: "dodge",
+    label: () => "",
+    tooltip: () => `烟幕闪避：下次受击 100% 闪避（一次性）` },
+  { id: "swift_dodge_temp", icon: "💨", variant: "dodge",
+    label: s => `+${s.stacks}%`,
+    tooltip: s => `风行余势：本回合闪避率 +${s.stacks}%` },
+  { id: "counter_stance", icon: "🪞", variant: "counter",
+    label: () => "50%",
+    tooltip: () => `反击姿态：受击向攻击者反弹 50% 伤害` },
+  { id: "time_stop", icon: "⏸", variant: "counter",
+    label: () => "",
+    tooltip: () => `时停：敌人下回合不行动` },
+  { id: "enc_runic_immune", icon: "🔰", variant: "immune",
+    label: () => "",
+    tooltip: () => `符文护盾：本场首次受击免疫（一次性）` },
+  { id: "enc_dot_immune", icon: "🕊", variant: "immune",
+    label: () => "",
+    tooltip: () => `圣化：免疫中毒 / 燃烧 / 出血伤害` },
+];
+
+function renderDefensiveChips(statuses: StatusEffect[]): string {
+  const parts: string[] = [];
+  for (const def of DEFENSIVE_CHIPS) {
+    const s = statuses.find(x => x.id === def.id);
+    if (!s || s.stacks <= 0) continue;
+    const labelText = def.label(s);
+    parts.push(
+      `<span class="pcard-def-chip ${def.variant} status-tag" `
+      + `data-status-id="${escapeHTML(def.id)}" `
+      + `data-status-stacks="${s.stacks}" `
+      + `data-status-duration="${s.duration}" `
+      + `title="${escapeHTML(def.tooltip(s))}">`
+      + `<span class="pcard-def-icon">${def.icon}</span>`
+      + (labelText ? `<span class="pcard-def-val">${labelText}</span>` : "")
+      + `</span>`
+    );
+  }
+  return parts.join("");
+}
 
 // 紧凑状态 chip（icon-only + stacks）— 用于玩家面板状态栏
 function renderStatusTag(s: StatusEffect): string {
