@@ -5331,3 +5331,234 @@ body.is-touch button:hover:not(:disabled) {
   border-color: rgba(255,94,94,0.60);
   background: linear-gradient(180deg, rgba(255,94,94,0.06), transparent 80%), var(--bg-card);
 }
+
+/* ═══ 调试控制台浮窗 ═══════════════════════════════════════════ */
+
+#dbg-toggle-btn {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 9998;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(200, 104, 255, 0.45);
+  background: rgba(30, 24, 40, 0.92);
+  color: #c868ff;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s, background 0.15s;
+}
+#dbg-toggle-btn:hover {
+  transform: scale(1.1);
+  background: rgba(50, 38, 70, 0.95);
+}
+#dbg-toggle-btn.dbg-active {
+  background: rgba(200, 104, 255, 0.20);
+  border-color: rgba(200, 104, 255, 0.85);
+}
+
+#dbg-console-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+}
+#dbg-console-root.dbg-hidden {
+  display: none;
+}
+
+.dbg-panel {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: min(520px, 92vw);
+  max-height: 85vh;
+  background: rgba(18, 14, 24, 0.97);
+  border: 1px solid rgba(200, 104, 255, 0.4);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 12px;
+  color: #d8d3e6;
+}
+
+.dbg-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(40, 30, 56, 0.95);
+  border-bottom: 1px solid rgba(200, 104, 255, 0.3);
+  border-radius: 8px 8px 0 0;
+  cursor: move;
+  user-select: none;
+}
+.dbg-title {
+  font-weight: 600;
+  color: #c868ff;
+  font-size: 13px;
+}
+.dbg-spacer {
+  flex: 1;
+}
+
+.dbg-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  background: rgba(60, 48, 80, 0.85);
+  border: 1px solid rgba(200, 104, 255, 0.35);
+  border-radius: 4px;
+  color: #d8d3e6;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+.dbg-btn:hover {
+  background: rgba(100, 80, 140, 0.95);
+  border-color: rgba(200, 104, 255, 0.65);
+}
+.dbg-btn.dbg-tab-active {
+  background: rgba(200, 104, 255, 0.22);
+  border-color: rgba(200, 104, 255, 0.85);
+  color: #fff;
+}
+.dbg-btn.dbg-mode-active {
+  background: rgba(255, 200, 80, 0.18);
+  border-color: rgba(255, 200, 80, 0.6);
+}
+
+.dbg-close-btn {
+  background: rgba(80, 40, 40, 0.7);
+  border-color: rgba(255, 100, 100, 0.4);
+}
+.dbg-close-btn:hover {
+  background: rgba(140, 60, 60, 0.95);
+}
+
+.dbg-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 10px;
+}
+
+/* State tab */
+.dbg-tab-state {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 360px;
+}
+.dbg-dump {
+  flex: 1;
+  width: 100%;
+  min-height: 320px;
+  margin-top: 6px;
+  padding: 8px;
+  background: rgba(8, 6, 12, 0.95);
+  border: 1px solid rgba(100, 70, 140, 0.3);
+  border-radius: 4px;
+  color: #b8c5d0;
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  resize: vertical;
+  outline: none;
+}
+
+/* Cheats tab */
+.dbg-tab-cheats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dbg-section {
+  padding: 6px 8px;
+  background: rgba(28, 22, 36, 0.7);
+  border: 1px solid rgba(100, 70, 140, 0.25);
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+.dbg-section-title {
+  font-weight: 600;
+  color: #ffd08a;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.dbg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.dbg-row:last-child {
+  margin-bottom: 0;
+}
+.dbg-mini-label {
+  color: #8a83a3;
+  font-size: 11px;
+  margin: 0 2px;
+}
+.dbg-hint {
+  color: #6e6a85;
+  font-size: 10.5px;
+  font-style: italic;
+}
+.dbg-tinybox {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: #8a83a3;
+}
+.dbg-tinybox input {
+  margin: 0;
+}
+
+.dbg-tab-cheats input[type="text"],
+.dbg-tab-cheats input[type="number"],
+.dbg-tab-cheats input:not([type]),
+.dbg-tab-cheats select {
+  padding: 3px 6px;
+  background: rgba(8, 6, 12, 0.85);
+  border: 1px solid rgba(100, 70, 140, 0.4);
+  border-radius: 3px;
+  color: #e0d8f0;
+  font-size: 11px;
+  outline: none;
+}
+.dbg-card-search {
+  flex: 1;
+  min-width: 200px;
+}
+.dbg-frag-cell,
+.dbg-suit-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  background: rgba(8, 6, 12, 0.5);
+  border-radius: 3px;
+}
+
+.dbg-enemy-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: rgba(60, 30, 30, 0.4);
+  border-radius: 3px;
+  margin-bottom: 3px;
+  font-size: 11px;
+}

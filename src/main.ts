@@ -58,6 +58,7 @@ import { SUIT_SYMBOLS, SUITS, isRedSuit, FIGHTS_PER_FLOOR, STATUS_META, RACES, F
   SUIT_TIER_NAMES, SUIT_TIER_DESCS, SUIT_THEMES } from "./types.ts";
 import type { EnemyRace, Suit, EnchantId } from "./types.ts";
 import type { GameState, CardInstance, EnemyState, StatusEffect } from "./types.ts";
+import { mountDebugConsole, notifyDebugConsoleRender } from "./debugConsole.ts";
 
 const ENEMY_EMOJI: Record<string, string> = {
   // ── 兽 beast ──
@@ -171,6 +172,8 @@ const floorEl = $("floor-display");
 const phaseEl = $("phase-display");
 
 function render() {
+  // 通知调试控制台：每次主 UI render 都让浮窗 state 跟着刷
+  notifyDebugConsoleRender();
   // 战斗出场动画拦截：phase 从 battle → 任何非战斗 phase（且不是 game_over 失败 / suit_pick 暂停选花色）
   // 修：原条件用废弃 phase "battle_victory"，但 onBattleWon 实际直接跳 reward_card，从不经过中间 phase
   if (!_battleExitInFlight && _prevPhase === "battle"
@@ -4074,6 +4077,9 @@ function renderCodexCard(d: import("./types.ts").CardDef): string {
 $("wb-apply").addEventListener("click", () => {
   // 隐藏 workbench panel — 只是为了兼容 index.html 里 display:none 的元素，无实际功能
 });
+
+// 挂载调试控制台（` 键 / 右上角 🐞 chip 开关）
+mountDebugConsole(() => state, () => render());
 
 render();
 
