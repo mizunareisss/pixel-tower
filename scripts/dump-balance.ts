@@ -1,6 +1,8 @@
 // 平衡数值导出脚本
 // 用法：npx tsx scripts/dump-balance.ts
-// 输出：BALANCE_SHEET.md（按花色分类的全卡 + 附魔 5 档 + 花色专精完整表）
+// 输出：
+//   BALANCE_SHEET.md（按花色分类的全卡 + 附魔 5 档 + 花色专精完整表）
+//   balance-csv/*.csv（同样数据的 CSV，便于导 Google Sheets / Numbers / Excel）
 
 import { CARD_DB } from "../src/cards.ts";
 import {
@@ -8,7 +10,7 @@ import {
   getEnchantDescAt, ENCHANT_MAX_LEVEL,
 } from "../src/types.ts";
 import type { CardDef, Suit, CardCategory } from "../src/types.ts";
-import { writeFileSync } from "fs";
+import { writeFileSync, mkdirSync } from "fs";
 
 const SUIT_LABEL: Record<string, string> = {
   spade:   "♠ 黑桃 / 莽夫流（攻击）",
@@ -195,9 +197,164 @@ out.push(`### 亲和度公式
 - **T3**（aff ≥ 15）：可释放大招"群体禁咒"
 `);
 
-// ───────── 写出 ─────────
+// ───────── 写出 markdown ─────────
 writeFileSync("BALANCE_SHEET.md", out.join("\n"));
 console.log(`✓ BALANCE_SHEET.md (${out.length} lines)`);
+
+// ───────── CSV 导出（按类别每文件一份，便于 Sheets / Numbers / Excel）─────────
+mkdirSync("balance-csv", { recursive: true });
+
+// 1) attacks.csv / skills.csv / items.csv — 共用列
+{
+  const cats: Record<string, [string, CardDef][]> = { attack: [], skill: [], item: [] };
+  for (const [id, d] of Object.entries(CARD_DB)) {
+    if (cats[d.category]) cats[d.category].push([id, d]);
+  }
+  for (const [cat, rows] of Object.entries(cats)) {
+    const fname = `balance-csv/${cat}s.csv`;
+    const lines: string[] = [csvRow(["id", "name", "suit", "rarity", "target", "desc"])];
+    for (const [id, d] of rows) {
+      lines.push(csvRow([
+        id, d.name,
+        d.attackSuit ?? d.defaultSuit ?? "",
+        d.rarity ?? "",
+        d.target ?? "",
+        d.desc,
+      ]));
+    }
+    writeFileSync(fname, lines.join("\n") + "\n");
+    console.log(`✓ ${fname} (${rows.length} rows)`);
+  }
+}
+
+// 2) equipment.csv — 装备含 4 stack 各档
+{
+  const rows: [string, CardDef][] = [];
+  for (const [id, d] of Object.entries(CARD_DB)) {
+    if (d.category === "equipment") rows.push([id, d]);
+  }
+  const lines: string[] = [csvRow([
+    "id", "name", "slot", "suit", "rarity",
+    "baseDmg", "hits", "pierce", "baseReduce",
+    "desc",
+    "stack1_stat", "stack1_desc",
+    "stack2_stat", "stack2_desc",
+    "stack3_stat", "stack3_desc",
+    "stack4_stat", "stack4_desc",
+  ])];
+  for (const [id, d] of rows) {
+    const eff = d.equipEffects ?? [];
+    lines.push(csvRow([
+      id, d.name, d.equipKind ?? "", d.equipSuit ?? "", d.rarity ?? "",
+      d.baseDmg ?? "", d.hits ?? "", d.pierce ?? "", d.baseReduce ?? "",
+      d.desc,
+      eff[0]?.stat ?? "", eff[0]?.desc ?? "",
+      eff[1]?.stat ?? "", eff[1]?.desc ?? "",
+      eff[2]?.stat ?? "", eff[2]?.desc ?? "",
+      eff[3]?.stat ?? "", eff[3]?.desc ?? "",
+    ]));
+  }
+  writeFileSync("balance-csv/equipment.csv", lines.join("\n") + "\n");
+  console.log(`✓ balance-csv/equipment.csv (${rows.length} rows)`);
+}
+
+// 3) perks.csv — 特性
+{
+  const rows: [string, CardDef][] = [];
+  for (const [id, d] of Object.entries(CARD_DB)) {
+    if (d.category === "perk") rows.push([id, d]);
+  }
+  const lines: string[] = [csvRow(["id", "name", "default_suit", "rarity", "unit_desc", "full_desc"])];
+  for (const [id, d] of rows) {
+    lines.push(csvRow([
+      id, d.name, d.defaultSuit ?? "", d.rarity ?? "",
+      d.perkEffect?.unitDesc ?? "",
+      d.desc,
+    ]));
+  }
+  writeFileSync("balance-csv/perks.csv", lines.join("\n") + "\n");
+  console.log(`✓ balance-csv/perks.csv (${rows.length} rows)`);
+}
+
+// 4) enchants.csv — 13 附魔，每行 1 个，5 档参数 + 描述全部展开为列
+{
+  const lines: string[] = [csvRow([
+    "id", "name", "branch", "kind", "variant", "tier",
+    "recipe_cost",
+    "lv1_params", "lv1_desc",
+    "lv2_params", "lv2_desc",
+    "lv3_params", "lv3_desc",
+    "lv4_params", "lv4_desc",
+    "lv5_params", "lv5_desc",
+  ])];
+  for (const eid of ENCHANTS) {
+    const id = eid as keyof typeof ENCHANT_NAMES;
+    const recipe = ENCHANT_RECIPES[id];
+    const cost = Object.entries(recipe.cost).map(([r, n]) => `${r}×${n}`).join("+");
+    const tierLabel = recipe.doubleRare ? "究极" : recipe.hasRare ? "强档" : "普通";
+    const params = ENCHANT_LEVEL_PARAMS[id];
+    lines.push(csvRow([
+      eid, ENCHANT_NAMES[id], recipe.branch, recipe.kind, recipe.variant, tierLabel,
+      cost,
+      params[0].join("/"), getEnchantDescAt(id, 1),
+      params[1].join("/"), getEnchantDescAt(id, 2),
+      params[2].join("/"), getEnchantDescAt(id, 3),
+      params[3].join("/"), getEnchantDescAt(id, 4),
+      params[4].join("/"), getEnchantDescAt(id, 5),
+    ]));
+  }
+  writeFileSync("balance-csv/enchants.csv", lines.join("\n") + "\n");
+  console.log(`✓ balance-csv/enchants.csv (${ENCHANTS.length} rows)`);
+}
+
+// 5) specialty.csv — 4 花色专精 T1/T2/T3 + 大招 + 亲和度公式
+{
+  const lines: string[] = [csvRow([
+    "suit", "tier", "effect_kind", "effect", "param"
+  ])];
+  // 花色专精详表（按 battle.ts 实装）
+  const data: Array<[string, string, string, string, string]> = [
+    // 公式行
+    ["公式", "—", "装备同色加成", "每件 +1.3", "1.3"],
+    ["公式", "—", "特性同色加成", "每张 +0.8", "0.8"],
+    ["公式", "—", "出牌同色加成", "每张 +0.3（cap 30）", "0.3"],
+    ["公式", "—", "大招亲和消耗", "每次 -8（持久跨战）", "8"],
+    ["公式", "—", "T1 阈值", "亲和 ≥ 5", "5"],
+    ["公式", "—", "T2 阈值", "亲和 ≥ 10", "10"],
+    ["公式", "—", "T3 阈值", "亲和 ≥ 15", "15"],
+    ["公式", "—", "亲和封顶", "20 / 色", "20"],
+    ["公式", "—", "大招本场限次", "每色 1 次", "1"],
+    // ♠
+    ["♠ 黑桃", "T1", "攻击倍率", "×1.10", "1.10"],
+    ["♠ 黑桃", "T1", "暴击率", "5%（中毒 -3%/层 cap -30%）", "5"],
+    ["♠ 黑桃", "T1", "Keyword 锐利", "♠ 攻击 +1 pierce", "1"],
+    ["♠ 黑桃", "T2", "破甲加成", "pierce += ceil(楼层/3)", "—"],
+    ["♠ 黑桃", "T3 大招", "狂战之击", "当前目标 50% 真实伤害（无视护甲）", "50"],
+    // ♦
+    ["♦ 方块", "T1", "受击反弹", "3 HP", "3"],
+    ["♦ 方块", "T1", "闪避加成", "+5% 闪避", "5"],
+    ["♦ 方块", "T2", "破甲加成", "pierce += 3（v5 新增）", "3"],
+    ["♦ 方块", "T3 大招", "影舞步", "本回合 100% 闪避 + 三连击 + 敌人停顿", "—"],
+    // ♥
+    ["♥ 红心", "T1", "吸血", "所有攻击 8% lifesteal", "8"],
+    ["♥ 红心", "T1", "生机", "每回合开始 +2 HP", "2"],
+    ["♥ 红心", "T1", "Keyword 贪婪", "♥ 攻击额外 +5% 吸血", "5"],
+    ["♥ 红心", "T2", "绝境攻击", "HP < 25% 时攻击 +30%", "30"],
+    ["♥ 红心", "T2", "绝境减伤", "HP < 50% 时受击 ×0.7", "30"],
+    ["♥ 红心", "T3 大招", "生命洪流", "HP +50% maxHP + maxHP +3 永久", "50"],
+    // ♣
+    ["♣ 梅花", "T1", "受击减伤", "-2", "2"],
+    ["♣ 梅花", "T1", "Keyword 守序", "♣ 出牌 +1 临时护盾", "1"],
+    ["♣ 梅花", "T2", "受击再减", "-3（共 -5）", "3"],
+    ["♣ 梅花", "T3 大招", "群体禁咒", "全敌 沉默 3 回 + 易伤 3 层 3 回 + 中毒 3", "—"],
+  ];
+  for (const row of data) lines.push(csvRow(row));
+  writeFileSync("balance-csv/specialty.csv", lines.join("\n") + "\n");
+  console.log(`✓ balance-csv/specialty.csv (${data.length} rows)`);
+}
+
+console.log("\n→ Markdown: BALANCE_SHEET.md");
+console.log("→ CSV: balance-csv/*.csv（6 个文件，可分别导 Sheets / Numbers / Excel）");
 
 // ─────────────── 工具 ───────────────
 function cleanCell(s: string | undefined): string {
@@ -206,4 +363,15 @@ function cleanCell(s: string | undefined): string {
 }
 function jstr(arr: readonly number[]): string {
   return `[${arr.join(", ")}]`;
+}
+
+// CSV 单元格：RFC 4180 — 含 , " 或 换行 时用双引号包裹，内部 " 转 ""
+function csvCell(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  if (/[,"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+function csvRow(cells: unknown[]): string {
+  return cells.map(csvCell).join(",");
 }

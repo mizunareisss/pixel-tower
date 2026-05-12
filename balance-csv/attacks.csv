@@ -1,0 +1,5 @@
+id,name,suit,rarity,target,desc
+atk_spade,攻击 ♠,spade,common,,打出武器一击（♠）。
+atk_diamond,攻击 ♦,diamond,common,,打出武器一击（♦）。
+atk_heart,攻击 ♥,heart,common,,打出武器一击（♥）。
+atk_club,攻击 ♣,club,common,,打出武器一击（♣）。
