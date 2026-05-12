@@ -825,9 +825,11 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
   if (def.target === "single" && !ensureValidTarget(state)) return false;
   const ctx = getCtx(state, log);
   // 群攻技能随武器叠加等比提升伤害
+  // 注：此处只用武器叠加 stack 维度（×1.0/1.4/1.8/2.2），不再复合武器实例的 floorScale；
+  // 否则 F8+ 拿到的 stack 4 武器会让 AOE 技能伤害爆炸（实测 F10 stack4 武器 ×4.95 倍）
   if (def.target === "all" && state.player.weapons.length > 0) {
     const sc = state.player.weapons.length;
-    ctx.slotScale = [1.0, 1.4, 1.8, 2.2][Math.min(sc, 4) - 1] * (state.player.weapons[0].scale ?? 1.0);
+    ctx.slotScale = [1.0, 1.4, 1.8, 2.2][Math.min(sc, 4) - 1];
   }
 
   // 注：旧版「♣ 守序」keyword 触发器（出 ♣ skill/item 时 +1 护盾）已移除。
@@ -857,10 +859,6 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
     return true;
   }
 
-  // 处理特殊指令（聚气摸 N）
-  const drawN = (ctx as any)._drawN;
-  if (drawN) drawCards(state.player, drawN, log);
-
   // 重整：弃所有手牌（不含当前），重摸 N
   const regroupN = (ctx as any)._regroup;
   if (regroupN) {
@@ -874,8 +872,14 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
     return true;
   }
 
+  // 关键顺序：先把本张卡从手牌移除 → 进弃牌堆 → 再处理摸牌效果
+  // 否则手牌满 10 时聚气类技能的摸牌会判定为溢出 → 进强制弃牌 modal，玩家被迫弃一张换不到位
   state.player.hand = state.player.hand.filter(c => c.uid !== card.uid);
   dispatchPlayedCardEpicAware(state, card, log);
+
+  // 处理特殊指令（聚气摸 N / 快摸 摸 N 等）
+  const drawN = (ctx as any)._drawN;
+  if (drawN) drawCards(state.player, drawN, log);
 
   // 法袍：出技能/道具时摸 1 张
   if (state.player.armors[0]?.defId === "mage_robe") {
@@ -931,12 +935,12 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
   return true;
 }
 
-// 累积"非攻击牌已出张数"——为法师杖 / 算计 / 凝神 提供 buff stacks
+// 累积"非攻击牌已出张数"——多个消费者读取：
+//   - 法师杖（arcane_scepter）/ 算计附魔（e_strategist）/ 凝神附魔（ec_focus）：下次攻击 +N/stack
+//   - 奥术爆裂 status：下次攻击 +3/stack
+//   - 心刃技能：直接读 stacks ×4 当作直伤
+// 修复：旧版有装备 gate 导致没装这些装备的玩家心刃永远 0 stack → 1 伤。改为始终累积，由消费者决定要不要用。
 function accumulateCalcCharge(state: BattleState, _log: (m: string, k?: LogKind) => void) {
-  const hasWizardStaff = state.player.weapons[0]?.defId === "arcane_scepter";
-  const e = state.player.weaponEnchant;
-  const hasEnchantCharge = e === "e_strategist" || e === "ec_focus";
-  if (!hasWizardStaff && !hasEnchantCharge) return;
   const existing = state.player.statuses.find(s => s.id === "calc_charge");
   if (existing) existing.stacks += 1;
   else state.player.statuses.push({ id: "calc_charge", name: "累积加成", stacks: 1, duration: -1 });
@@ -1330,10 +1334,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
       log("♠ 不朽战甲：下张攻击 +1 hit。", "player");
     }
 
-    // ★ 花色专精 · 方块 Tier 1（≥5）：受击反弹 +3 — A 强化：+2 → +3
-    if (activeSuitD === "diamond" && suitTier(state, "diamond") >= 1 && attackerEnemy?.alive) {
-      damageEnemy(attackerEnemy, 3, log, `♦ 方块专精反伤 → ${attackerEnemy.name} -3。`);
-    }
+    // 注：旧版 ♦ T1 受击反弹 +3 已移除（XLSX 新版 ♦ T1 只有 8% 闪避，无反伤）
 
     // 不灭之心：HP 归 0 时复活到 50%，整局仅 1 次（XLSX v6：固定 50%，stack 不增加复活效率）
     if (state.player.vita <= 0
@@ -1371,7 +1372,14 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
 // - 装备 AI 的精英/boss：调用 bossAI selectAIIntent（带 avoidIndices）
 // - 普通 boss：随机不重复
 // - 其他：顺序循环
+// 注：所有路径都过一次 debuff 饱和检查 — 如果选中的 intent 是已饱和的 debuff（玩家堆了 20+ 中毒还要叠中毒之类），
+// 改选同 enemy 其他可用 intent，避免 AI 看起来"愣头愣脑"地叠废 debuff
 function chooseEnemyIntentIdx(enemy: EnemyState, state: BattleState, usedThisTurn: number[]): number {
+  const rawIdx = chooseRawIntentIdx(enemy, state, usedThisTurn);
+  return redirectIfSaturated(enemy, state, rawIdx, usedThisTurn);
+}
+
+function chooseRawIntentIdx(enemy: EnemyState, state: BattleState, usedThisTurn: number[]): number {
   if (enemy.ai) {
     const aiIdx = selectAIIntent(enemy, state, usedThisTurn);
     if (aiIdx >= 0 && aiIdx < enemy.intents.length) return aiIdx;
@@ -1389,14 +1397,61 @@ function chooseEnemyIntentIdx(enemy: EnemyState, state: BattleState, usedThisTur
   return (enemy.intentIndex + 1) % enemy.intents.length;
 }
 
+// 玩家身上某个 debuff 是否已堆到 "再叠也基本浪费" 的程度
+//   DoT 类（poison / burn / bleed）：达到固定阈值则浪费 — 每回合伤害已经够高
+//   纯标记类（weak / vulnerable / silenced / frozen / fear）：stacks 只控 duration，再叠几乎没增益
+export function isDebuffSaturated(state: BattleState, debuffId: string): boolean {
+  const status = state.player.statuses.find(s => s.id === debuffId);
+  if (!status) return false;
+  // 阈值表 — 超过即视为"再叠没意义"
+  const thresholds: Record<string, number> = {
+    poison: 10,      // 10 × 1% maxHP = 每回合 10% maxHP，再叠看起来很蠢
+    burn: 10,        // 10 × 2% maxHP = 每回合 20% maxHP
+    bleed: 5,        // 5 × 5% 当前HP = 每回合 25% 当前HP（+ 闪避罚 25%）
+    weak: 3,         // stacks 只控 duration，3 层足够续命
+    vulnerable: 3,
+    silenced: 1,     // 标记类：有一层就够
+    frozen: 1,
+    fear: 1,
+  };
+  return status.stacks >= (thresholds[debuffId] ?? 10);
+}
+
+// 如果 rawIdx 是个饱和 debuff intent，改选同 enemy 其他可用 intent
+function redirectIfSaturated(enemy: EnemyState, state: BattleState, rawIdx: number, usedThisTurn: number[]): number {
+  if (rawIdx < 0 || rawIdx >= enemy.intents.length) return rawIdx;
+  const intent = enemy.intents[rawIdx];
+  if (intent.type !== "debuff" || !intent.debuffId) return rawIdx;
+  if (!isDebuffSaturated(state, intent.debuffId)) return rawIdx;
+
+  // 在剩余 intent 里找个不饱和的（优先 attack/buff，其次未饱和的 debuff）
+  const candidates: number[] = [];
+  for (let i = 0; i < enemy.intents.length; i++) {
+    if (i === rawIdx || usedThisTurn.includes(i)) continue;
+    const it = enemy.intents[i];
+    if (it.type !== "debuff" || !it.debuffId || !isDebuffSaturated(state, it.debuffId)) {
+      candidates.push(i);
+    }
+  }
+  if (candidates.length === 0) return rawIdx;  // 全饱和就只能原样叠（保底，不死循环）
+  // 优先 attack > buff > 其他
+  const attacks = candidates.filter(i => enemy.intents[i].type === "attack");
+  if (attacks.length > 0) return attacks[Math.floor(Math.random() * attacks.length)];
+  const buffs = candidates.filter(i => enemy.intents[i].type === "buff");
+  if (buffs.length > 0) return buffs[Math.floor(Math.random() * buffs.length)];
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
 // 执行单个 intent（attack / buff / debuff）— 含多动 log 前缀
-function executeIntent(
+// 生成器：每个"逻辑子步"yield 一次，让 UI 在多段攻击间能逐 hit 渲染 + 播放 hit 动画。
+// 调用方：enemyTurnSteps 用 yield* 转发；sync runner 用 for 循环耗尽。
+function* executeIntent(
   state: BattleState,
   enemy: EnemyState,
   intent: EnemyIntent,
   log: (m: string, k?: LogKind) => void,
   prefix: string,
-): void {
+): Generator<void, void, void> {
   // 沉默时 buff intent 跳过（攻击 / debuff 仍可出）
   if (intent.type === "buff" && enemy.statuses.find(s => s.id === "silenced")) {
     log(`${prefix}${enemy.name} 被沉默，跳过 buff。`, "player");
@@ -1450,6 +1505,8 @@ function executeIntent(
         log(`★ ${enemy.name} 暴击！${orig} → ${hitValue}（${critChance}%）`, "enemy");
       }
       damagePlayer(state, hitValue, log, enemy);
+      // 每 hit 之间 yield —— UI 逐击渲染 / 播 hit 动画 / 飘伤害数字；第一击不 yield（与外层 yield 合并）
+      if (i < hits - 1) yield;
       if (state.player.vita <= 0) break;
     }
   } else if (intent.type === "buff") {
@@ -1620,9 +1677,9 @@ function* enemyTurnSteps(state: BattleState, log: (m: string, k?: LogKind) => vo
       }
 
       const prefix = maxActions > 1 ? `[${actionNum}/${maxActions}] ` : "";
-      executeIntent(state, enemy, intent, log, prefix);
+      yield* executeIntent(state, enemy, intent, log, prefix);
 
-      yield;  // ★ 每次行动后 yield，UI 在此 render + 1s 延迟
+      yield;  // ★ 每次行动结束后 yield —— intent 内部的多段攻击会在更早处 yield 拆分
       if (state.player.vita <= 0) break;
     }
   }

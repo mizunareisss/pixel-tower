@@ -445,6 +445,29 @@ function generateAllIntents(race: EnemyRace, floor: number, tier: "boss"): Enemy
   }));
 }
 
+// 给定 (floor, tier) 生成单只敌人编组（map.ts 节点 payload 用）
+// boss 时优先取 buildFixedBoss（F9 / F12），其他情况按 tier 随机
+export function buildSingleEncounter(floor: number, tier: "normal" | "elite" | "boss"): EnemyState[] {
+  if (tier === "boss") {
+    const fixed = buildFixedBoss(floor);
+    if (fixed) return [fixed];
+    return [buildRandomEnemy({ floor, tier: "boss" })];
+  }
+  if (tier === "elite") {
+    return [buildRandomEnemy({ floor, tier: "elite" })];
+  }
+  // normal：可能多人战
+  if (floor >= 2 && Math.random() < 0.40) {
+    const size = Math.random() < 0.5 ? 2 : 3;
+    const arr: EnemyState[] = [];
+    for (let i = 0; i < size; i++) {
+      arr.push(buildRandomEnemy({ floor, tier: "normal", groupSize: size }));
+    }
+    return arr;
+  }
+  return [buildRandomEnemy({ floor, tier: "normal" })];
+}
+
 // F9: 亡灵之主 · 不朽君王（undead 阵营守门）
 // F12: 无相之主 · 终末注视（dark 阵营 · 塔顶）
 // 返回 null 表示该楼层不是固定 Boss 楼层，调用方应该回退到 buildRandomEnemy
