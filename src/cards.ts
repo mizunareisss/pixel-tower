@@ -1680,7 +1680,7 @@ const PERK_TOUGH: CardDef = {
   perkEffect: {
     unitDesc: "受击伤害 -3%（每张，cap 30%）",
     summary: (s) => `受击 -${Math.min(30, s * 3)}%`,
-    onTakeDamage: (_c, d, s) => Math.max(0, d * (1 - Math.min(0.30, 0.03 * s))),
+    onTakeDamage: (_c, d, s) => Math.max(0, Math.floor(d * (1 - Math.min(0.30, 0.03 * s)))),
   },
 };
 
@@ -1730,7 +1730,7 @@ const PERK_IRON_WILL: CardDef = {
     summary: (s) => `濒死(≤30%) 受击 -${s * 8}%`,
     onTakeDamage: (c, d, s) => {
       if (c.player.vita <= Math.floor(c.player.vitaMax * 0.3)) {
-        return Math.max(0, d * (1 - 0.08 * s));
+        return Math.max(0, Math.floor(d * (1 - 0.08 * s)));
       }
       return d;
     },

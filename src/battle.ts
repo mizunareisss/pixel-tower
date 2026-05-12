@@ -1264,6 +1264,10 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     log("闪避姿态：伤害 -30%。", "player");
   }
 
+  // 防御性取整：armor / perk 的 onTakeDamage 可能漏写 Math.floor 返回浮点
+  // 没在这里取整的话，下面 shield 吸收会把浮点累积进 shield.stacks → 0.7000004 这种鬼数字
+  dmg = Math.max(0, Math.floor(dmg));
+
   // 护盾吸收
   const shield = state.player.statuses.find(s => s.id === "shield_block");
   if (shield && dmg > 0) {
@@ -1285,17 +1289,28 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   }
 
   dmg = Math.max(0, Math.floor(dmg));
+
+  // 完全格挡反馈：base 攻击 > 0 但 dmg 被减到 0，玩家应该看到"挡住了"，否则 banner 显示但 UI 没反应像 bug
+  if (base > 0 && dmg === 0) {
+    log(`✦ 完全格挡（${base} 伤被减伤 / 护盾全吸收）。`, "player");
+    state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;  // 复用 dodge 动效信号（先简化，后续可加专门的 block 视觉）
+  }
+
   if (dmg > 0) {
     state.player.vita -= dmg;
     log(`你受到 ${dmg} 点伤害。`, "enemy");
 
     // 标记本回合受伤（用于 ec_phalanx 末端判断"未受伤则下回合 +5 护盾"）
-    // 用 duration=-1，由 endPlayerTurn 在敌人回合结束后手动检查并清理
+    // 这个是真"掉血"标记，不算"挨打"，所以保留在 dmg > 0 内
     if (!state.player.statuses.find(s => s.id === "took_damage_turn")) {
       state.player.statuses.push({ id: "took_damage_turn", name: "本回合受伤", stacks: 1, duration: -1 });
     }
+  }
 
-    // 骑士铠（♠ rare 防具）：受击后下次攻击充能 +X 直伤（v5 cap 5 → 3，防止 5 击换 +30 burst）
+  // 以下"挨打反馈"钩子：移出 dmg > 0 守卫 — 完全格挡也算挨打，应该触发
+  // （仅在敌方攻击真正命中且没闪避 / 没免疫的情况下走到这里）
+  if (base > 0) {
+    // 骑士铠（♠ rare 防具）：受击后下次攻击充能 +X 直伤
     if (state.player.armors[0]?.defId === "knight_plate") {
       const stack = Math.min(state.player.armors.length, 4);
       const bonusByStack = [3, 4, 5, 6];
@@ -1309,7 +1324,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
       log(`骑士铠充能：下次攻击 +${bonus} 直伤（×${existing?.stacks ?? 1}，cap 3）。`, "player");
     }
 
-    // 战甲带（♠ rare 防具）：XLSX v6 固定 +2 攻击（去掉 stack 缩放）
+    // 战甲带（♠ rare 防具）：受击后下次攻击 +2
     if (state.player.armors[0]?.defId === "combat_belt") {
       const existing = state.player.statuses.find(s => s.id === "battle_cry");
       if (existing) existing.stacks += 2;
@@ -1317,7 +1332,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
       log(`♠ 战甲带：下次攻击 +2。`, "player");
     }
 
-    // 斩魂铠（♠ super_rare 防具）：XLSX v6 固定 +1 永久攻 / 受击（cap 10）
+    // 斩魂铠（♠ super_rare 防具）：受击后永久攻击 +1
     if (state.player.armors[0]?.defId === "soulreaver_plate") {
       const existing = state.player.statuses.find(s => s.id === "warblood_perm_atk");
       if (existing) {
@@ -1335,6 +1350,9 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     }
 
     // 注：旧版 ♦ T1 受击反弹 +3 已移除（XLSX 新版 ♦ T1 只有 8% 闪避，无反伤）
+  }
+
+  if (dmg > 0) {
 
     // 不灭之心：HP 归 0 时复活到 50%，整局仅 1 次（XLSX v6：固定 50%，stack 不增加复活效率）
     if (state.player.vita <= 0
