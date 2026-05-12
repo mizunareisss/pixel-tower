@@ -1680,7 +1680,7 @@ const PERK_TOUGH: CardDef = {
   perkEffect: {
     unitDesc: "受击伤害 -3%（每张，cap 30%）",
     summary: (s) => `受击 -${Math.min(30, s * 3)}%`,
-    onTakeDamage: (_c, d, s) => Math.max(0, d * (1 - Math.min(0.30, 0.03 * s))),
+    onTakeDamage: (_c, d, s) => Math.max(0, Math.floor(d * (1 - Math.min(0.30, 0.03 * s)))),
   },
 };
 
@@ -1730,7 +1730,7 @@ const PERK_IRON_WILL: CardDef = {
     summary: (s) => `濒死(≤30%) 受击 -${s * 8}%`,
     onTakeDamage: (c, d, s) => {
       if (c.player.vita <= Math.floor(c.player.vitaMax * 0.3)) {
-        return Math.max(0, d * (1 - 0.08 * s));
+        return Math.max(0, Math.floor(d * (1 - 0.08 * s)));
       }
       return d;
     },
@@ -2211,33 +2211,12 @@ function pickRarity(floor: number): CardRarity {
   return "common";
 }
 
-// 花色操作牌（已拥有时仍允许出现，但权重通过 ownedFactor 自然衰减）
+// 花色操作牌（保留分组用，UI 可能引用）
 const SUIT_OPERATION_CARDS = new Set(["sk_dye", "sk_attune", "sk_chant", "sk_recolor"]);
 
-// 关键 build 件（pierce / dodge）：早期 friendly，floor 越大加成越弱（衔接动态曲线）
-const BUILD_KEY_CARDS = new Set([
-  "sk_pierce_shot", "sk_pierce_strike", "p_insight", "p_armor_break", "it_pierce_oil",
-  "sk_step", "sk_evasion_burst", "p_dodge", "mind_armor",
-]);
-
-// 流派对齐：return "with" / "neutral" / "against"
-// 判定依据：cardSuit（attackSuit / equipSuit / defaultSuit）vs 玩家主流派
-function cardAlignment(cardId: string, mainSuit: Suit | null): "with" | "neutral" | "against" {
-  if (!mainSuit) return "neutral";
-  const def = CARD_DB[cardId];
-  if (!def) return "neutral";
-  const cardSuit = def.attackSuit ?? def.equipSuit ?? def.defaultSuit;
-  if (!cardSuit) return "neutral";
-  if (cardSuit === mainSuit) return "with";
-  // 反向：仅"色相反"算反向（红 vs 黑），让大部分 ♦/♥ 之间或 ♠/♣ 之间不算冲突
-  const isRedMain = mainSuit === "heart" || mainSuit === "diamond";
-  const isRedCard = cardSuit === "heart" || cardSuit === "diamond";
-  if (isRedMain !== isRedCard) return "against";
-  return "neutral";
-}
-
-// 已拥有衰减（平滑曲线）：非装备 N=0→1.0, 1→0.85, 2→0.65, 3→0.45, 4+→0.30
-//                     装备   N=0→1.0, 1→1.0,  2→0.85, 3→0.70, 4+→0.50
+// 已拥有衰减（避免重复抽到玩家已堆满的卡）
+// 非装备 N=0→1.0, 1→0.85, 2→0.65, 3→0.45, 4+→0.30
+// 装备   N=0→1.0, 1→1.0,  2→0.85, 3→0.70, 4+→0.50（装备首次有更高保留）
 function ownedFactor(cardId: string, ownedCount: number): number {
   const def = CARD_DB[cardId];
   const isEquip = def?.category === "equipment";
@@ -2246,86 +2225,12 @@ function ownedFactor(cardId: string, ownedCount: number): number {
   return [1.0, 0.85, 0.65, 0.45, 0.30][n];
 }
 
-// 牌库大小因子：膨胀越大 → 略压新卡（鼓励玩家精炼 build）
-function sizeFactor(deckSize: number): number {
-  if (deckSize > 50) return 0.85;
-  if (deckSize > 40) return 0.95;
-  return 1.0;
-}
-
-// 关键 build 件加权（随 floor 由强到弱）
-function buildItemBoost(cardId: string, floor: number): number {
-  if (!BUILD_KEY_CARDS.has(cardId)) return 1.0;
-  if (floor <= 2) return 1.5;
-  if (floor <= 5) return 1.3;
-  return 1.1;
-}
-
-// 流派偏好加权（随 floor 由弱到强再到弱）
-function alignmentMult(align: "with" | "neutral" | "against", floor: number): number {
-  if (floor <= 2) return 1.0;  // 早期不引导
-  if (floor <= 5) {
-    if (align === "with") return 1.6;
-    if (align === "against") return 0.5;
-    return 1.0;
-  }
-  // floor 6+：温和
-  if (align === "with") return 1.3;
-  if (align === "against") return 0.8;
-  return 1.0;
-}
-
-// 计算玩家"主流派"：取已拥有的同花色装备 + 同花色特性最多的那个
-function getMainSuit(ownedCounts: Map<string, number>): Suit | null {
-  const score: Record<Suit, number> = { spade: 0, diamond: 0, heart: 0, club: 0 };
-  for (const [id, cnt] of ownedCounts) {
-    const def = CARD_DB[id];
-    if (!def || !cnt) continue;
-    const s = def.equipSuit ?? def.defaultSuit;
-    if (def.category === "equipment" && s) score[s] += cnt * 1.5;
-    else if (def.category === "perk" && s) score[s] += cnt * 1.0;
-  }
-  const max = Math.max(...Object.values(score));
-  if (max < 1.0) return null;  // 玩家还没明显倾向
-  // 找出最高的
-  for (const s of ["spade", "diamond", "heart", "club"] as Suit[]) {
-    if (score[s] === max) return s;
-  }
-  return null;
-}
-
-// 单卡权重合成（用于在候选池里加权采样）
-function computeCardWeight(
-  cardId: string,
-  ownedCounts: Map<string, number>,
-  deckSize: number,
-  floor: number,
-  mainSuit: Suit | null,
-): number {
-  let w = 1.0;
-  // 1. 装备类基础加权 ×1.5（仍然偏向装备出现）
-  if (CARD_DB[cardId]?.category === "equipment") w *= 1.5;
-  // 2. 已拥有衰减
-  w *= ownedFactor(cardId, ownedCounts.get(cardId) ?? 0);
-  // 3. 牌库大小压制
-  w *= sizeFactor(deckSize);
-  // 4. 关键 build 件加权（pierce/dodge）
-  w *= buildItemBoost(cardId, floor);
-  // 5. 流派偏好
-  w *= alignmentMult(cardAlignment(cardId, mainSuit), floor);
-  return Math.max(0.01, w);  // 别归 0，保留极小概率
-}
-
-function pickWeightedFromCandidatesV2(
-  candidates: string[],
-  ownedCounts: Map<string, number>,
-  deckSize: number,
-  floor: number,
-  mainSuit: Suit | null,
-): string {
+// 候选池里加权随机挑一个 id（v7：仅按 ownedFactor 衰减，无其他 build 加权）
+function pickWeighted(candidates: string[], ownedCounts: Map<string, number>): string {
+  if (candidates.length === 0) throw new Error("pickWeighted: empty");
   const items = candidates.map(id => ({
     id,
-    w: computeCardWeight(id, ownedCounts, deckSize, floor, mainSuit),
+    w: Math.max(0.01, ownedFactor(id, ownedCounts.get(id) ?? 0)),
   }));
   const total = items.reduce((s, x) => s + x.w, 0);
   let r = Math.random() * total;
@@ -2336,12 +2241,10 @@ function pickWeightedFromCandidatesV2(
 }
 
 /**
- * 关卡奖励抽卡：先 roll 每张候选的稀有度档，再从该档卡池里抽（无放回）
- * 多重权重：
- *   ownedFactor（已拥有数量衰减）× sizeFactor（牌库膨胀压制）×
- *   装备类 ×1.5 × buildItemBoost（关键 build 件随 floor 弱化）×
- *   alignmentMult（流派对齐随 floor 强化再弱化）
- * 一次奖励里同 defId 不会重复（used set）。装备保底 forceEquipment。
+ * 关卡奖励抽卡：先 roll 稀有度档（floor-scaled），再从该档卡池里按 ownedFactor 衰减抽。
+ * v7：移除所有 build 加权（流派对齐 / pierce/dodge 件 / 装备 ×1.5），
+ *   仅保留"已拥有衰减"避免抽到玩家已堆满的卡。
+ * 一次奖励里同 defId 不会重复（used set）。装备保底 forceEquipment 仍生效。
  */
 export function rollRewardChoices(
   pool: string[],
@@ -2350,10 +2253,7 @@ export function rollRewardChoices(
   ownedCounts?: Map<string, number>,
   forceEquipment = false,
 ): CardInstance[] {
-  const owned = ownedCounts ?? new Map();
-  const deckSize = Array.from(owned.values()).reduce((s, x) => s + x, 0);
-  const mainSuit = getMainSuit(owned);
-
+  const owned = ownedCounts ?? new Map<string, number>();
   const byRarity: Record<CardRarity, string[]> = { common: [], rare: [], rare_plus: [], super_rare: [], epic: [] };
   for (const id of pool) {
     const r = (CARD_DB[id]?.rarity ?? "common") as CardRarity;
@@ -2362,11 +2262,11 @@ export function rollRewardChoices(
   const result: CardInstance[] = [];
   const used = new Set<string>();
 
-  // 装备保底：第一张候选强制是装备
+  // 装备保底：第一张候选强制是装备（按 ownedFactor 加权随机）
   if (forceEquipment) {
     const allEquip = pool.filter(id => CARD_DB[id]?.category === "equipment");
     if (allEquip.length > 0) {
-      const pickedId = pickWeightedFromCandidatesV2(allEquip, owned, deckSize, floor, mainSuit);
+      const pickedId = pickWeighted(allEquip, owned);
       used.add(pickedId);
       result.push(makeInstance(pickedId, undefined, floor));
     }
@@ -2375,15 +2275,14 @@ export function rollRewardChoices(
   // 优先抽，最多回退 1 档
   for (let i = result.length; i < n; i++) {
     let tier: CardRarity = pickRarity(floor);
-    let candidates: string[];
     const order: CardRarity[] = ["epic", "super_rare", "rare", "rare_plus", "common"];
     const startIdx = order.indexOf(tier);
     let pickedId: string | undefined;
     for (let j = startIdx; j < order.length && !pickedId; j++) {
       tier = order[j];
-      candidates = byRarity[tier].filter(id => !used.has(id));
+      const candidates = byRarity[tier].filter(id => !used.has(id));
       if (candidates.length > 0) {
-        pickedId = pickWeightedFromCandidatesV2(candidates, owned, deckSize, floor, mainSuit);
+        pickedId = pickWeighted(candidates, owned);
       }
     }
     if (pickedId) {

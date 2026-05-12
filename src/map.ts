@@ -7,7 +7,7 @@
 //   - 节点之间连接保证可达性
 
 import type { FloorMap, FloorTheme, MapNode, MapNodeType } from "./types.ts";
-import { makeEnemyGroupsForFloor, buildFixedBoss } from "./enemies.ts";
+import { buildSingleEncounter } from "./enemies.ts";
 
 let _nodeIdCounter = 0;
 function newNodeId(): string { return `n${++_nodeIdCounter}`; }
@@ -288,27 +288,16 @@ export function generateFloorMap(floor: number): FloorMap {
 // 节点 payload 预生成
 // ─────────────────────────────────────────────────────────
 
-// makeEnemyGroupsForFloor 生成的是 3 战的 groups。我们这里只需要单战。
-// 简单做法：调用一次取第一组 / 第二组 / 第三组（非 boss/elite 取 normal pool）。
-// 优雅做法：让 enemies.ts 提供 buildSingleEncounter(floor, type)。这里先用 hack。
+// 节点 payload：按节点类型预生成对应战斗 / 事件
+// 修复：旧版用 makeEnemyGroupsForFloor 的 groups[2] 当 elite 战斗，但 F6+ 楼层 groups[2] 已经是 boss 了，
+// 导致 elite 节点也刷出 boss。改用 buildSingleEncounter(floor, tier) 严格按节点类型取敌人。
 function preRollPayload(node: MapNode, floor: number): void {
-  if (node.type === "battle" || node.type === "elite" || node.type === "boss") {
-    // F9 / F12 Boss 节点使用固定 Boss（亡灵之主 / 无相之主）
-    if (node.type === "boss") {
-      const fixed = buildFixedBoss(floor);
-      if (fixed) {
-        node.enemies = [fixed];
-        return;
-      }
-    }
-    // 其他战斗：借用现有 makeEnemyGroupsForFloor，按 type 选 group
-    const groups = makeEnemyGroupsForFloor(floor);
-    if (node.type === "boss" || node.type === "elite") {
-      node.enemies = groups[2];
-    } else {
-      // 普通战：随机取 group 0 或 1
-      node.enemies = groups[Math.floor(Math.random() * 2)];
-    }
+  if (node.type === "boss") {
+    node.enemies = buildSingleEncounter(floor, "boss");
+  } else if (node.type === "elite") {
+    node.enemies = buildSingleEncounter(floor, "elite");
+  } else if (node.type === "battle") {
+    node.enemies = buildSingleEncounter(floor, "normal");
   } else if (node.type === "event") {
     // 事件 id：复用 rollFloorEvent 的池（强制触发）
     node.eventId = rollEventForNode();

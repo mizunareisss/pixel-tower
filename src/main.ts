@@ -982,7 +982,10 @@ function openLogOverlay() {
     <div id="log-modal">
       <div class="log-modal-header">
         <span class="panel-label">战斗日志</span>
-        <button id="log-close">✕</button>
+        <div class="log-modal-actions">
+          <button id="log-debug" class="log-action-btn" title="导出全量战斗数据（含玩家/敌人状态 + 完整日志）">🐞 详细</button>
+          <button id="log-close">✕</button>
+        </div>
       </div>
       <div id="log-content">${entries || '<p class="empty">暂无记录</p>'}</div>
     </div>
@@ -991,7 +994,183 @@ function openLogOverlay() {
   const content = document.getElementById("log-content")!;
   content.scrollTop = content.scrollHeight;
   document.getElementById("log-close")?.addEventListener("click", () => overlay.remove());
+  document.getElementById("log-debug")?.addEventListener("click", () => openDebugDumpOverlay());
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+}
+
+// 调试 dump：暴露全量战斗数据（玩家 + 敌人 + 完整日志），纯文字，可复制/导出
+function openDebugDumpOverlay() {
+  document.getElementById("debug-dump-overlay")?.remove();
+  const text = buildDebugDump();
+  const overlay = document.createElement("div");
+  overlay.id = "debug-dump-overlay";
+  overlay.className = "ic-overlay";
+  overlay.innerHTML = `
+    <div class="ic-modal debug-dump-modal">
+      <div class="ic-title">🐞 战斗数据全量 Dump</div>
+      <p class="ic-body">玩家状态 + 敌人状态 + 完整日志，纯文本格式。复制或导出后可直接给 AI debug。</p>
+      <textarea class="debug-dump-text" readonly></textarea>
+      <div class="ic-actions">
+        <button class="ic-cancel">关闭</button>
+        <button class="debug-copy">复制到剪贴板</button>
+        <button class="debug-export">导出为 .txt</button>
+      </div>
+    </div>
+  `;
+  const ta = overlay.querySelector<HTMLTextAreaElement>(".debug-dump-text")!;
+  ta.value = text;
+  overlay.querySelector(".ic-cancel")!.addEventListener("click", () => overlay.remove());
+  overlay.querySelector(".debug-copy")!.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      const btn = overlay.querySelector(".debug-copy") as HTMLButtonElement;
+      const orig = btn.textContent;
+      btn.textContent = "✓ 已复制";
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    } catch {
+      ta.select();
+      document.execCommand("copy");
+    }
+  });
+  overlay.querySelector(".debug-export")!.addEventListener("click", () => {
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    a.download = `suitspire-debug-${stamp}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+function buildDebugDump(): string {
+  const lines: string[] = [];
+  const ts = new Date().toISOString();
+  lines.push(`=== Suitspire Debug Dump ===`);
+  lines.push(`Generated: ${ts}`);
+  lines.push(`Game Phase: ${state.phase}`);
+  lines.push(`Floor: ${state.floor}`);
+  lines.push(`Battle Index: ${state.battleIndex}`);
+  lines.push(`Pending Floor Clear: ${state.pendingFloorClear}`);
+  lines.push("");
+
+  // ── 玩家状态 ──
+  const p = state.player;
+  lines.push(`── 玩家 (Player) ──`);
+  lines.push(`HP: ${p.vita} / ${p.vitaMax}`);
+  lines.push(`Turns Elapsed: ${p.turnsElapsed ?? 0}`);
+  lines.push(`Revives Used: ${p.revivesUsed ?? 0}`);
+  lines.push("");
+
+  // 装备 / 防具 / 特性
+  const weapons = p.weapons.map(w => `${CARD_DB[w.defId]?.name ?? w.defId} (scale ${w.scale.toFixed(2)}, uses ${w.usesRemaining ?? "-"})`).join(", ") || "(无)";
+  const armors = p.armors.map(a => `${CARD_DB[a.defId]?.name ?? a.defId} (scale ${a.scale.toFixed(2)}, uses ${a.usesRemaining ?? "-"})`).join(", ") || "(无)";
+  lines.push(`武器: ${weapons}`);
+  lines.push(`防具: ${armors}`);
+  if (p.weaponEnchant) lines.push(`武器附魔: ${p.weaponEnchant} (Lv ${p.weaponEnchantLevel ?? 1})`);
+
+  // 特性按 defId 聚合
+  const perkMap = new Map<string, number>();
+  for (const c of p.perks) perkMap.set(c.defId, (perkMap.get(c.defId) ?? 0) + 1);
+  const perks = Array.from(perkMap.entries()).map(([id, n]) => `${CARD_DB[id]?.name ?? id}×${n}`).join(", ") || "(无)";
+  lines.push(`特性: ${perks}`);
+
+  // 状态
+  if (p.statuses.length > 0) {
+    lines.push(`状态:`);
+    for (const s of p.statuses) {
+      lines.push(`  - ${s.name} (id=${s.id}, stacks=${s.stacks}, duration=${s.duration === -1 ? "永久" : s.duration})`);
+    }
+  } else {
+    lines.push(`状态: (无)`);
+  }
+
+  // 牌库
+  lines.push(`手牌 ${p.hand.length}/10: ${p.hand.map(c => CARD_DB[c.defId]?.name ?? c.defId).join(", ") || "(空)"}`);
+  lines.push(`牌库: ${p.deck.length} 张`);
+  lines.push(`弃牌堆: ${p.discard.length} 张`);
+  if (p.pendingDraws && p.pendingDraws.length > 0) {
+    lines.push(`待消化的强制弃牌候选: ${p.pendingDraws.length} 张`);
+  }
+
+  // 灵魂碎片
+  if (p.fragments) {
+    const frags = Object.entries(p.fragments).filter(([_, n]) => n > 0).map(([r, n]) => `${r}=${n}`).join(", ") || "(无)";
+    lines.push(`灵魂碎片: ${frags}`);
+  }
+  lines.push("");
+
+  // ── 花色专精（仅战斗中可见） ──
+  if (state.battle) {
+    lines.push(`── 花色专精（亲和度）──`);
+    for (const suit of SUITS) {
+      const aff = getSuitAffinity(state.battle, suit);
+      const tier = suitTier(state.battle, suit);
+      const played = p.suitPlayedTotal?.[suit] ?? 0;
+      const consumed = p.suitConsumedTotal?.[suit] ?? 0;
+      lines.push(`  ${SUIT_SYMBOLS[suit]} ${SUIT_THEMES[suit].name}: aff=${aff.toFixed(2)} tier=${tier} | 已出 ${played} | 大招消耗 ${consumed}`);
+    }
+    const active = getActiveSpecialty(state.battle);
+    lines.push(`激活专精: ${active ? SUIT_SYMBOLS[active] : "(无)"}${state.battle.activeSpecialtyOverride ? ` (override=${state.battle.activeSpecialtyOverride})` : ""}`);
+    lines.push("");
+  }
+
+  // ── 战斗状态（敌人） ──
+  if (state.battle) {
+    const b = state.battle;
+    lines.push(`── 战斗 (Battle) ──`);
+    lines.push(`Phase: ${b.phase} | Turn: ${b.turn} | Target Index: ${b.targetIndex} | Floor: ${b.floor}`);
+    lines.push(`Attacked This Turn: ${b.attackedThisTurn ?? false}`);
+    lines.push(`Bow Streak: ${b.bowAttackStreak ?? 0}`);
+    if (b.diceRoll != null) lines.push(`Dice Roll: ${b.diceRoll} | Enemy First: ${b.enemyFirst ?? false}`);
+    lines.push("");
+
+    lines.push(`敌人 (${b.enemies.length}):`);
+    for (let i = 0; i < b.enemies.length; i++) {
+      const e = b.enemies[i];
+      const aliveTag = e.alive ? "" : " [已死]";
+      lines.push(`  [${i}] ${e.name}${aliveTag} | tier=${e.tier ?? "normal"} | race=${e.race}`);
+      lines.push(`      HP ${e.hp}/${e.maxHp} | suit=${SUIT_SYMBOLS[e.suit]} | armor=${e.armor ?? 0}`);
+      lines.push(`      crit ${e.critChance ?? 0}% / dodge ${e.dodgeChance ?? 0}% / AP ${e.actionsPerTurn ?? 1}`);
+      if (e.eliteAbility) lines.push(`      精英特能: ${e.eliteAbility}`);
+      if (e.ai) lines.push(`      AI: ${e.ai}${e.aiState?.phase ? ` (phase ${e.aiState.phase})` : ""}`);
+      if (e.weaponMult != null) lines.push(`      武器倍率: ×${e.weaponMult}`);
+      // intents
+      lines.push(`      Intents (next idx=${e.intentIndex}):`);
+      for (let j = 0; j < e.intents.length; j++) {
+        const it = e.intents[j];
+        const marker = j === e.intentIndex ? " ← next" : "";
+        let desc = `[${j}] ${it.type}: ${it.desc} | value=${it.value}`;
+        if (it.hits && it.hits > 1) desc += ` ×${it.hits} hits`;
+        if (it.debuffId) desc += ` (debuff=${it.debuffId} ${it.debuffName ?? ""}, duration=${it.debuffDuration ?? "-1"})`;
+        if (it.buffId) desc += ` (buff=${it.buffId}, value=${it.buffValue ?? "-"})`;
+        lines.push(`        ${desc}${marker}`);
+      }
+      // 敌人状态
+      if (e.statuses.length > 0) {
+        lines.push(`      状态:`);
+        for (const s of e.statuses) {
+          lines.push(`        - ${s.name} (id=${s.id}, stacks=${s.stacks}, duration=${s.duration === -1 ? "永久" : s.duration})`);
+        }
+      }
+    }
+    lines.push("");
+  }
+
+  // ── 完整日志（最近 200 条）──
+  lines.push(`── 战斗日志 (最近 ${Math.min(200, state.log.length)} 条 / 共 ${state.log.length}) ──`);
+  const recent = state.log.slice(-200);
+  for (let i = 0; i < recent.length; i++) {
+    const e = recent[i];
+    lines.push(`  [${e.kind.padEnd(7)}] ${e.msg}`);
+  }
+
+  return lines.join("\n");
 }
 
 // 专精方块 v3：方形花色 icon，中间显示当前亲和度数字，下到上填充进度（0-15）
@@ -1541,11 +1720,15 @@ function renderNotifBar() {
   const newEntries = state.log.slice(_logRenderedLen);
   _logRenderedLen = state.log.length;
   if (newEntries.length === 0) return;
+  // 取第一条 significant entry — 通常是动作横幅（"蝙蝠 连咬（2×3）"/"▶ 攻击 → 敌 -10"），比末尾的 outcome 详情（"你受到 3 伤"）更有信息量
+  // 但跳过纯描述性的 follow-up（"你受到 X 伤"/"护盾吸收 X"）这类伤害飘字已经表达过的内容
+  const FOLLOW_UP_PREFIXES = ["你受到", "护盾吸收"];
+  const isFollowUp = (msg: string) => FOLLOW_UP_PREFIXES.some(p => msg.startsWith(p));
   const significant = newEntries.filter(e => e.kind !== "system");
-  const entry = significant.length > 0
-    ? significant[significant.length - 1]
-    : newEntries[newEntries.length - 1];
-  showBattleToast(entry.msg, entry.kind);
+  const headline = significant.find(e => !isFollowUp(e.msg))
+    ?? significant[0]
+    ?? newEntries[newEntries.length - 1];
+  showBattleToast(headline.msg, headline.kind);
 }
 
 function showFloatDamage(enemyIdx: number, delta: number) {
