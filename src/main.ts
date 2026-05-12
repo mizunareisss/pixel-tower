@@ -1720,15 +1720,16 @@ function renderNotifBar() {
   const newEntries = state.log.slice(_logRenderedLen);
   _logRenderedLen = state.log.length;
   if (newEntries.length === 0) return;
-  // 取第一条"事件 headline"：动作横幅 / 招式名 / 系统事件，而不是 follow-up 伤害飘字（"你受到 X"、"护盾吸收 X"）
-  // 关键：如果新增的全是 follow-up，**不刷 toast**，让上一条 headline 继续显示。
-  // 否则多段攻击 hits=2 会出现"先闪招式名 → 立刻被'你受到'盖掉"的断层
-  const FOLLOW_UP_PREFIXES = ["你受到", "护盾吸收"];
-  const isFollowUp = (msg: string) => FOLLOW_UP_PREFIXES.some(p => msg.startsWith(p));
+  // 取第一条"事件 headline"：动作横幅 / 招式名 / 系统事件，跳过：
+  //   - follow-up 伤害详情（"你受到 X"、"护盾吸收 X"）— 已经被伤害飘字传达
+  //   - 分隔线（"── X ──" 例如 "── 敌人回合 ──"）— 是日志板布局用，不是事件
+  // 关键：如果新增的全是被跳过类，**不刷 toast**，让上一条 headline 继续显示
+  //   避免多段攻击 hits=2 的"先闪招式 → 立刻被'你受到'盖掉"的断层
+  const SKIP_PREFIXES = ["你受到", "护盾吸收", "──"];
+  const isSkipped = (msg: string) => SKIP_PREFIXES.some(p => msg.startsWith(p));
   const significant = newEntries.filter(e => e.kind !== "system");
-  const headline = significant.find(e => !isFollowUp(e.msg));
+  const headline = significant.find(e => !isSkipped(e.msg));
   if (headline) showBattleToast(headline.msg, headline.kind);
-  // 若 newEntries 全是 follow-up 或 system → 保留上一条 toast 不变
 }
 
 function showFloatDamage(enemyIdx: number, delta: number) {
