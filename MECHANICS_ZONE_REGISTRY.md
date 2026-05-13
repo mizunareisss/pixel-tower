@@ -32,12 +32,13 @@ v0.8.2 重构后，每个机制**归类到一个特定的区**：
 ### 阶段 1 基础区（flat）
 
 ```
-base = (wDef.baseDmg × stackMult + Σ 早期 flat) × floorScale + Σ 后期 flat
+base = ((wDef.baseDmg + warBannerBonus) × stackMult + Σ 早期 flat) × floorScale + Σ 后期 flat
 ```
 
 | 类别 | 进区的具体机制 | 注释 |
 |---|---|---|
 | 武器基础 | `wDef.baseDmg × stackMult [1.0, 1.4, 1.8, 2.2]` | 1-4 件叠加 |
+| ★ v0.8.2 武器修正 | `+ player.warBannerBonus`（在 ×stackMult **内**）| ♠ T1 战旗，每损 N% maxHP +1，cap +M |
 | 早期 flat | `battle_cry +3` | 战吼 status |
 | 早期 flat | `weapon_buff +stacks` | 强化药 it_elixir |
 | 早期 flat | `frenzy +stacks×2` | 激奋 sk_frenzy |
@@ -49,7 +50,7 @@ base = (wDef.baseDmg × stackMult + Σ 早期 flat) × floorScale + Σ 后期 fl
 | 后期 flat | `calc_charge × mul` | mul = arcane_scepter(+3) + e_strategist + ec_focus + arcane_burst(+3) 之和 |
 | 后期 flat | `forbidden_scepter + clubAff × 0.5` | 禁忌权杖 cap +10 |
 | 后期 flat | `knight_charge × bonusPer[stack]` | 骑士铠充能 [3,4,5,6] |
-| 后期 flat | `warblood_perm_atk +stacks` | ec_warblood 永久积累 |
+| 后期 flat | `warblood_perm_atk +stacks` | ec_warblood 永久积累（legacy） |
 
 **加新机制到这里的规则**：固定 +N（无论敌人/状态怎么变，加的都是同一个数）。
 
@@ -77,6 +78,8 @@ addMult = 1 + Σ p_i   （cap 建议 ≤ +250% = addMult 3.5）
 | `e_brawler` | HP<50% | +Lv% | Lv5 +18% |
 | `ec_warblood` | HP<50% | +Lv% | Lv5 +30% |
 | `ec_arcane` | 有染/咒 buff + 本场首攻 | +Lv% | Lv5 +50% |
+| ★ v0.8.2 ♦ T2 连环 | 玩家身上每"种" debuff（毒/血/弱/易/燃） | +Lv% / 种 | Lv3 +8%/种 |
+| ★ v0.8.2 花色大师 | 异色乘数 = Lv%（90/100/120）| -10% / 0% / 替代 +20% | Lv3 给所有花色发同色 +20% |
 
 **加新机制到这里的规则**：百分比加成（+N% / 张 / 满足条件）。**绝不要用 ×N**！
 
@@ -95,8 +98,10 @@ mulMult = ∏ m_j   （cap 建议 ≤ ×4.0）
 | `sharpened` | ×1.5 | 一次消耗（磨刀石）|
 | `double_strike` | ×2 | 一次消耗（旧）|
 | `charged` | ×2.5 | 一次消耗（旧蓄力）|
-| `e_reaper_buff` | ×Lv (1.4-1.75) | 击杀后一次消耗 |
-| `phantom_charge` | ×Lv (1.5-2.3) | 闪避后一次消耗 |
+| `e_reaper_buff` | ×Lv (1.4-1.75) | 击杀后一次消耗（legacy） |
+| `phantom_charge` | ×Lv (1.5-2.3) | 闪避后一次消耗（legacy） |
+| ★ v0.8.2 ♥ T1 猎食者 | ×Lv (1.4 / 1.5 / 1.7) | 消耗 1 huntStack（跨战斗累积）|
+| ★ v0.8.2 ♠ T3 斩首 | ×Lv (2.0 / 2.5 / 3.0) | 消耗 decap_charge（弃≥N张激活，强制 hits=1）|
 
 **加新机制到这里的规则**：**只允许"一次性消耗"的×N**。持续 buff 必须进阶段 2。
 
@@ -177,6 +182,9 @@ HITS_CAP = 8
 | `shadow_double` status | 影袭蓄势 / 不朽战甲 | +1（消耗）|
 | ♦ T2 灵巧连击 | active diamond + tier≥2 | +1（30% roll）|
 | ♦ T1 灵敏 keyword | active diamond + tier≥1 + ♦ 攻 | +1（25% roll）|
+| ★ v0.8.2 ♦ T1 夜行 | status `night_walk` 在场 | +1（开局 N 回合）|
+| ★ v0.8.2 ♦ T3 阴影分身 | status `shadow_clone_active` 在场 | +2（弃≥3 张激活，持续 1/2/3 回合）|
+| ★ v0.8.2 ♠ T2 无影连斩 | status `combo_unlock` 在场 | +1（连续命中 N 次解锁，本场永久）|
 
 ### 阶段 C 倍率区（×，独立乘）
 
@@ -186,11 +194,14 @@ HITS_CAP = 8
 
 **加新机制到倍率区的规则**：极度克制 — 这一区现在只有 1 个来源，新增需严肃评估 cap 风险。
 
-### 阶段 D 上限
+### 阶段 D 上限（含 ♠ T3 强制覆盖）
 
-`hits = min(8, (A + B) × C)`
+`hits = min(8, decap ? 1 : (A + B) × C)`
 
-最坏极限：基础 2 + 加成 2 + 三连击 = (2+2)×3 = 12 → cap 至 8。
+- 普通流程：`hits = min(8, (A + B) × C)`
+- ♠ T3 斩首激活时：`hits = 1`（即使有 hits+X buff，也强制为 1；倍率在阶段 3 区独立消耗）
+
+最坏极限（无斩首）：基础 2 + 加成 6（夜行+分身+连斩+灵敏+灵巧+影袭）= 8 → 触底 hits cap。三连击 ×3 → cap 至 8。
 
 ---
 
@@ -537,3 +548,44 @@ if (base > 0 && final == 0) → BLOCK 动画 + pendingBlockFx++
 - 调 perk / 装备的数值参数
 
 **必须**回来同步更新本表的对应行。否则未来 audit 时找不到机制归属，会重新落入混乱。
+
+---
+
+## v0.8.2 新 14 附魔分区总览
+
+| 附魔 | 流派 | 配方 | 实装区位 | 触发器 |
+|---|---|---|---|---|
+| ench_war_banner ♠T1 战旗 | ♠ | 兽×3 | 阶段 1 基础区（baseDmg + warBannerBonus）| triggerSelfDamageHooks 累损血 |
+| ench_endless_combo ♠T2 连斩 | ♠ | 兽×2+人×2 | Hits 加成区（status: combo_unlock）| 命中 N 次解锁，每场 1 次 |
+| ench_decap ♠T3 斩首 | ♠ | 兽×2+人×2+巨×1 | 阶段 3 倍率区 + Hits 强制=1 | 弃≥N 张激活 |
+| ench_night_walk ♦T1 夜行 | ♦ | 人×3 | Hits 加成区（status: night_walk）| newBattle 挂 status duration=N |
+| ench_chain ♦T2 连环 | ♦ | 人×2+死×2 | 阶段 2 加成区 | 玩家身上每"种" debuff +Lv% |
+| ench_shadow_clone ♦T3 阴影分身 | ♦ | 人×2+死×2+暗×1 | Hits 加成区（status: shadow_clone_active）+ 阶段 1 易伤（自挂）| 弃≥3 张激活，持续 1/2/3 回合 |
+| ench_hunter_heart ♥T1 猎食者 | ♥ | 死×3 | 阶段 3 倍率区 + 阶段 5 后吸血副作用 | 击杀 +1 huntStack（跨战斗），每命中按 N% 吸血 |
+| ench_glutton ♥T2 饕餮 | ♥ | 死×2+兽×2 | 吸血副作用（applyLifesteal helper）| 溢出 maxHP 转护盾（5/3/2 HP : 1 护盾） |
+| ench_blood_anoint ♥T3 血涂 | ♥ | 死×2+兽×2+暗×1 | triggerEnemyKillHooks（damageEnemy 内）| 击杀 +N% × target.maxHp 给 player.vitaMax（本场） |
+| ench_curse_ring ♣T1 咒环 | ♣ | 人×3 | playSkillOrItem 末 + discardHandCards 内 | 出技能 / 主动弃攻击牌 roll N% 摸 1 |
+| ench_curse_shift ♣T2 转嫁 | ♣ | 人×2+兽×2 | playSkillOrItem 末 | 出技能命中（非 self）N% 转 player debuff 给敌 |
+| ench_purge_vortex ♣T3 净化漩涡 | ♣ | 人×2+兽×2+巨×1 | discardHandCards 内 | 单次弃 ≥4 张：+护盾 + 本回合新 DOT 免疫 |
+| ench_element_master 元素大师 | master | 巨×3+暗×3 | DOT 应用 / tick 入口检查 | Lv1/2/3 → 免疫 中毒 / +燃 / +血 |
+| ench_suit_master 花色大师 | master | 巨×3+暗×3 | 阶段 2 花色相性乘数改写 | Lv1/2/3 → 异色 -10% / 0% / 替代 +20% |
+
+### v0.8.2 PlayerState 新字段
+| 字段 | 范围 | 用途 |
+|---|---|---|
+| `huntStacks` | 跨战斗保留 | ♥T1 猎食者 |
+| `warBannerBonus` | 单场（newBattle 重置）| ♠T1 战旗累加 |
+| `warBannerLossAcc` | 单场 | ♠T1 战旗累积已损血用于触发 |
+| `combo` | 单场 | ♠T2 连斩计数 |
+| `comboUnlocked` | 单场 | ♠T2 是否已解锁 |
+| `bloodAnointBonus` | 单场（newBattle 时 vitaMax 减回去）| ♥T3 血涂本场累积 |
+
+### 跨系统事件总线（v0.8.2 Round 2）
+| 入口函数 | 在哪触发 | 监听者 |
+|---|---|---|
+| `triggerSelfDamageHooks(c, amount)` | dealSelfDamage / damagePlayer / DOT tick | took_damage_turn / p_blood_pact / **♠T1 战旗** |
+| `triggerEnemyKillHooks(c, target)` | damageEnemy 内 alive 翻转 + awardFragments 兜底 | 武器击杀回血 / 附魔 onKill / **♥T1 +stack** / **♥T3 +maxHP** |
+| `applyLifesteal(c, amount, source)` | 所有吸血点（武器 / ♥T1 / 血契等）| HP 加 + **♥T2 饕餮溢出转护盾** |
+| `isDotImmuneByElementMaster(player, dot)` | DOT 应用 + tick 入口 | **元素大师** |
+| `isNewDotImmuneByPurgeVortex(player)` | DOT 应用入口 | **♣T3 净化漩涡** 本回合新增 DOT |
+| `discardHandCards(state, uids)` hook | game.ts 主动弃牌 | **♣T1 咒环 / ♣T3 漩涡 / ♠T3 斩首 / ♦T3 分身** 激活
