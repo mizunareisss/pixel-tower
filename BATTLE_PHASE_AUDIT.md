@@ -8,11 +8,24 @@
 
 ## 总览
 
-| 严重度 | 冲突类型 | 数量 |
-|---|---|---|
-| 🔴 严重 | 实战会出 bug，必须修 | 3 |
-| 🟠 潜在 | 数值/体感问题，建议修 | 5 |
-| 🟡 模糊 | 设计选择需要拍板 | 4 |
+| 严重度 | 冲突类型 | 数量 | 状态 |
+|---|---|---|---|
+| 🔴 严重 | 实战会出 bug，必须修 | 3 | ✅ **已修（v0.8.2 Round 1）** |
+| 🟠 潜在 | 数值/体感问题，建议修 | 5 | ⏳ 待修 |
+| 🟡 模糊 | 设计选择需要拍板 | 4 | ⏳ 待拍板 |
+
+**Round 1 修复（已 commit）**：
+- ✅ #1 抽出 `triggerSelfDamageHooks` / `triggerEnemyKillHooks` 在 cards.ts（line ~120）
+- ✅ #1 p_lifetap.onTurnStart 改用 helpers（自损 + 杀敌都走统一路径）
+- ✅ #1 sk_blast.onPlay 改用 helpers
+- ✅ #2 brew_regen 从 P1.5 挪到 P1.1（跟 ♥T1/ec_resilient/life_pouch 并列）
+- ✅ #3 damagePlayer 内 perk callback 改回传 dmg（不传 base）— 完全格挡时反伤跟旧公式行为一致
+
+**Round 2 待办（实装 v0.8.2 新附魔时一并做）**：
+- 武器击杀回血（everlast_fang / blood_blade +20% maxHP）从 onAttack callback 移到 triggerEnemyKillHooks
+- playAttack 内 damageEnemy 后调 triggerEnemyKillHooks（这样攻击击杀也走统一路径）
+- battle.ts 内 awardFragments 内 onKill 调用换成 triggerEnemyKillHooks
+- DOT 处理是否调 triggerSelfDamageHooks（取决于 ♠T1 战旗的设计）
 
 ---
 

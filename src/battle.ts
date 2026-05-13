@@ -1596,6 +1596,11 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
 
   // 特性副作用 onTakeDamage（p_thorns 反伤 / p_blood_pact 攒蓄势 — 这些是副作用不改 dmg）
   // 调用 callback 让它们执行副作用，但 dmg 不接受其返回（dmg 已用分层模型算好）
+  //
+  // ★ v0.8.2 audit 修复 #3：传 dmg（减伤栈结束后但护盾吸收前的值），跟旧公式行为一致。
+  //   之前我误传 base 让反伤偏强（base ≥ dmg），属于 regression。
+  //   完全格挡场景：base=100 → 减伤栈减到 dmg=80 → callback 用 80 算反伤 →
+  //   护盾吸收 80 → 最终 dmg=0（完全格挡 + 非 0 反伤，跟旧公式一致）。
   const seenSideEffect = new Set<string>();
   for (const inst of state.player.perks) {
     if (seenSideEffect.has(inst.defId)) continue;
@@ -1607,10 +1612,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     // 已迁移到阶段 3 的特性（p_tough / p_iron_will）跳过，避免重复减伤
     const SKIP_PERK = new Set(["p_tough", "p_iron_will"]);
     if (eff?.onTakeDamage && !SKIP_PERK.has(inst.defId)) {
-      // 用 base（未减伤前）传入，让副作用基于"原始伤害"计算
-      // 实际旧代码这里用的是层层减伤后的 dmg，但 p_thorns / p_blood_pact 用 d 算反伤/蓄势
-      // 为保持反伤强度，传 base
-      eff.onTakeDamage(ctx, base, cnt);
+      eff.onTakeDamage(ctx, dmg, cnt);
     }
   }
 
@@ -2209,6 +2211,15 @@ function startNewPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) =>
     if (state.player.vita > before) log(`♥ 生命囊：+${state.player.vita - before} HP（${stack * 3}% maxHP）。`, "player");
   }
 
+  // 药剂回血（本场战斗每回合开始 +stacks HP，duration -1 永久）
+  // v0.8.2 audit 修复：从 P1.5 DOT 块挪到 P1.1 主动回血源（跟 ♥T1 / ec_resilient / life_pouch 一起）
+  const brew = state.player.statuses.find(s => s.id === "brew_regen");
+  if (brew && state.player.vita < state.player.vitaMax) {
+    const heal = brew.stacks;
+    state.player.vita = Math.min(state.player.vitaMax, state.player.vita + heal);
+    log(`药剂：+${heal} HP。`, "player");
+  }
+
   // 吸血盾（♥ rare+ 防具）：上回合累积的 draining_charge 在本回合开始全部回血
   const drainCharge = state.player.statuses.find(s => s.id === "draining_charge");
   if (drainCharge && drainCharge.stacks > 0 && state.player.vita < state.player.vitaMax) {
@@ -2290,13 +2301,7 @@ function startNewPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) =>
 
   // 玩家 DOT 结算（中毒 / 燃烧 / 出血 — 每回合开始受伤）
   // 中毒：扣 stacks，stacks-1；副作用：玩家暴击率 -stacks × 3%（cap -30%）
-  // 药剂回血（本场战斗每回合开始 +2 HP，duration -1 永久）
-  const brew = state.player.statuses.find(s => s.id === "brew_regen");
-  if (brew && state.player.vita < state.player.vitaMax) {
-    const heal = brew.stacks;
-    state.player.vita = Math.min(state.player.vitaMax, state.player.vita + heal);
-    log(`药剂：+${heal} HP。`, "player");
-  }
+  // 注：brew_regen 已挪到 P1.1（line ~2210），原位置在此 audit 修复后清空
 
   // 玩家中毒：每回合扣 maxVita × 1% × stacks
   const playerPoison = state.player.statuses.find(s => s.id === "poison");

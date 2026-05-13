@@ -116,6 +116,107 @@ export function dealDirectDamage(ctx: BattleContext, target: EnemyState, n: numb
 }
 
 // ─────────────────────────────────────────────────────────
+// v0.8.2 audit #1 修复：统一损血 / 杀敌路径
+// ─────────────────────────────────────────────────────────
+//
+// 背景：p_lifetap 等自损 / 杀敌操作之前**绕过所有 hook**（不走 damagePlayer / damageEnemy），
+// 导致 p_blood_pact 不蓄势、武器击杀回血不触发、未来的 v0.8.2 新附魔（♠T1 战旗 /
+// ♥T1 猎食者 / ♥T2 灼血 / ♥T3 血涂）也跟着废。
+//
+// 两个 helper 把所有"玩家失血"和"敌人死亡"的副作用集中在一处，
+// 任何自损 / 杀敌操作都应该调用对应的 helper，不再各自硬编码。
+
+/**
+ * 玩家失血副作用集合（任何 player.vita 减少都应调用）
+ *
+ * 触发的 hooks：
+ *   1. took_damage_turn 标记（ec_phalanx "本回合未受伤" 判定用）
+ *   2. p_blood_pact 蓄势（受伤 5% 转下击 +flat）
+ *   3. ★ 未来 ♠T1 血染战旗（损血→武器 baseDmg+1）— 待 v0.8.2 实装
+ *   4. ★ 未来 ♥T2 灼血（损血→敌 burn）— 待 v0.8.2 实装
+ *
+ * 不触发 damagePlayer 的减伤栈 / 护盾吸收（那是"受敌人攻击"路径）。
+ * 这只是"已经决定要扣 X HP"的副作用集合。
+ *
+ * @param c BattleContext
+ * @param amount 失血量（已发生，不会再扣）
+ */
+export function triggerSelfDamageHooks(c: BattleContext, amount: number): void {
+  if (amount <= 0) return;
+
+  // 1. took_damage_turn 标记
+  if (!c.player.statuses.find(s => s.id === "took_damage_turn")) {
+    c.player.statuses.push({ id: "took_damage_turn", name: "本回合受伤", stacks: 1, duration: -1 });
+  }
+
+  // 2. p_blood_pact 蓄势（受伤 5% 转下击 +flat，cap +6/张）
+  const bloodPactStacks = c.player.perks.filter(p => p.defId === "p_blood_pact").length;
+  if (bloodPactStacks > 0) {
+    const add = Math.min(bloodPactStacks * 6, Math.max(0, Math.floor(amount * 0.05 * bloodPactStacks)));
+    if (add > 0) {
+      const existing = c.player.statuses.find(s => s.id === "blood_pact_charge");
+      if (existing) {
+        existing.stacks = Math.min(bloodPactStacks * 6, existing.stacks + add);
+      } else {
+        c.player.statuses.push({ id: "blood_pact_charge", name: "血誓蓄势", stacks: add, duration: -1 });
+      }
+      c.log(`血誓：吸收 ${add} → 下次攻击 +${add}。`, "player");
+    }
+  }
+
+  // 3. ★ TODO v0.8.2 ♠T1 血染战旗：损血累积 → 武器 baseDmg+1
+  // 4. ★ TODO v0.8.2 ♥T2 灼血：损血累积 → 所有活敌 +1 burn
+}
+
+/**
+ * 敌人死亡副作用集合（任何敌人 alive 从 true 变 false 后应调用）
+ *
+ * 触发的 hooks：
+ *   1. 武器击杀回血（everlast_fang / blood_blade +20% maxHP）
+ *   2. 附魔 onKill（e_reaper 等）
+ *   3. ★ 未来 ♥T1 猎食者：huntStacks +1（跨战斗保留）— 待 v0.8.2 实装
+ *   4. ★ 未来 ♥T3 血涂：+N% 敌 maxHP 给玩家 maxHP — 待 v0.8.2 实装
+ *
+ * 内置防重复：用 (target as any)._killHooksTriggered marker。
+ * 多次调用同一已死敌人，只触发一次副作用。
+ *
+ * 注：碎片掉落 / 精英 SR drop 仍走 battle.ts 的 awardFragments（保留原 _fragmentAwarded marker）。
+ * 这里只管"击杀本身"的奖励，不管"战利品分配"。
+ *
+ * @param c BattleContext
+ * @param target 已死的敌人（alive=false）
+ */
+export function triggerEnemyKillHooks(c: BattleContext, target: EnemyState): void {
+  if (target.alive) return;  // 防御：还活着不触发
+  if ((target as any)._killHooksTriggered) return;  // 已触发过则跳过
+  (target as any)._killHooksTriggered = true;
+
+  // 1. 武器击杀回血（everlast_fang / blood_blade +20% maxHP）
+  if (c.player.weapons[0]) {
+    const wDef = CARD_DB[c.player.weapons[0].defId];
+    if (wDef && (wDef.id === "everlast_fang" || wDef.id === "blood_blade")) {
+      const heal = Math.floor(c.player.vitaMax * 0.20);
+      const before = c.player.vita;
+      c.player.vita = Math.min(c.player.vitaMax, c.player.vita + heal);
+      if (c.player.vita > before) {
+        c.log(`${wDef.name} 击杀回血 +${c.player.vita - before}。`, "player");
+      }
+    }
+  }
+
+  // 2. 附魔 onKill（e_reaper 等）
+  if (c.player.weaponEnchant) {
+    const enchant = ENCHANT_EFFECTS[c.player.weaponEnchant];
+    if (enchant?.onKill) {
+      enchant.onKill(c, target);
+    }
+  }
+
+  // 3. ★ TODO v0.8.2 ♥T1 猎食者：c.player.huntStacks += 1 (cap N)
+  // 4. ★ TODO v0.8.2 ♥T3 血涂：c.player.vitaMax += floor(target.maxHp × N%)
+}
+
+// ─────────────────────────────────────────────────────────
 // 攻击牌（4 花色 × 2 张 = 8 张基础攻击）
 // ─────────────────────────────────────────────────────────
 
@@ -1061,8 +1162,14 @@ const SK_BLAST: CardDef = {
     const cut = Math.max(1, Math.round(c.player.vitaMax * 0.05));
     c.player.vita = Math.max(0, c.player.vita - cut);  // 只扣当前 HP，maxHP 不变
     c.log(`爆裂术：自损 ${cut} HP（maxHP 不变）。`, "player");
+    // v0.8.2 audit #1 修复：自损走 triggerSelfDamageHooks
+    triggerSelfDamageHooks(c, cut);
+
     const enemyDmg = Math.max(1, Math.round(c.target.hp * 0.20));
+    const wasAlive = c.target.alive;
     dealDirectDamage(c, c.target, enemyDmg);
+    // v0.8.2 audit #1 修复：杀敌走 triggerEnemyKillHooks
+    if (wasAlive && !c.target.alive) triggerEnemyKillHooks(c, c.target);
   },
 };
 
@@ -1766,9 +1873,19 @@ const PERK_LIFETAP: CardDef = {
       // 自损固定 2%（不随 stack 增长）
       const cost = Math.max(1, Math.floor(c.player.vitaMax * 0.02));
       c.player.vita = Math.max(0, c.player.vita - cost);
+      // v0.8.2 audit #1 修复：自损走 triggerSelfDamageHooks（之前绕过 p_blood_pact /
+      // took_damage_turn 标记，导致多个机制失效）
+      triggerSelfDamageHooks(c, cost);
+
       const t = c.enemies.find(e => e.alive);
       const dmg = Math.max(1, Math.floor(c.player.vitaMax * 0.05 * s));
-      if (t) damageEnemy(t, dmg, c.log, `生命汲取：失 ${cost} HP，${t.name} -${dmg}。`);
+      if (t) {
+        const wasAlive = t.alive;
+        damageEnemy(t, dmg, c.log, `生命汲取：失 ${cost} HP，${t.name} -${dmg}。`);
+        // v0.8.2 audit #1 修复：杀敌走 triggerEnemyKillHooks（之前绕过武器击杀回血 /
+        // 附魔 onKill / 未来 ♥T1 猎食者 / ♥T3 血涂）
+        if (wasAlive && !t.alive) triggerEnemyKillHooks(c, t);
+      }
     },
   },
 };
