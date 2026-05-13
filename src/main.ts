@@ -3692,7 +3692,13 @@ function triggerCardAnimation(def: import("./types.ts").CardDef, targetIdx: numb
       if (hits.length === 0) {
         if (targetEl) playSlashHit(targetEl);
       } else {
+        // 同一 targetIdx 的 hits 算一组（飘字按组居中对齐），不同 target 各自独立
+        const groupTotals: Record<number, number> = {};
+        for (const h of hits) groupTotals[h.targetIdx] = (groupTotals[h.targetIdx] ?? 0) + 1;
+        const groupIdx: Record<number, number> = {};
         hits.forEach((h, i) => {
+          const myIdx = groupIdx[h.targetIdx] ?? 0;
+          groupIdx[h.targetIdx] = myIdx + 1;
           setTimeout(() => {
             const el = document.querySelector(`.enemy-card[data-idx="${h.targetIdx}"]`) as HTMLElement | null;
             if (!el) return;
@@ -3700,7 +3706,7 @@ function triggerCardAnimation(def: import("./types.ts").CardDef, targetIdx: numb
               playDodgeMiss(el);
             } else {
               playSlashHit(el);
-              playDamageFloat(el, h.dmg, h.isCrit, i);
+              playDamageFloat(el, h.dmg, h.isCrit, myIdx, groupTotals[h.targetIdx]);
             }
           }, i * 180);
         });

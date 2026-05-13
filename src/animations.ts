@@ -85,13 +85,19 @@ export function playEquip(targetEl: HTMLElement): void {
   spawn(targetEl, "fx fx-burst fx-yellow", 400);
 }
 
-// ── 伤害数字飘字：从目标位置浮起，随 hit 编号水平偏移避免重叠 ───
+// ── 伤害数字飘字：从目标位置浮起，多 hit 时水平偏移避免重叠 ───
 // 暴击用大字号 + 黄色
-export function playDamageFloat(targetEl: HTMLElement, dmg: number, isCrit: boolean = false, offsetIdx: number = 0): void {
+// offsetIdx 是当前 hit 序号（0-indexed），totalHits 是本次攻击总 hit 数
+// 公式 (i - (n-1)/2) × spacing 保证所有飘字以中心对称：
+//   - 单 hit：offset = 0（居中）
+//   - 双 hit：offset = -11 / +11
+//   - 三 hit：offset = -22 / 0 / +22
+//   - N hit：均匀分布
+export function playDamageFloat(targetEl: HTMLElement, dmg: number, isCrit: boolean = false, offsetIdx: number = 0, totalHits: number = 1): void {
   spawn(targetEl, `fx fx-dmg-float${isCrit ? " fx-dmg-crit" : ""}`, 900, el => {
     el.textContent = isCrit ? `${dmg}!` : String(dmg);
-    // 多 hit 时水平偏移 ±N px 让数字错开
-    const offset = (offsetIdx - 1) * 22;
+    const spacing = 22;
+    const offset = (offsetIdx - (totalHits - 1) / 2) * spacing;
     el.style.left = `calc(50% + ${offset}px)`;
   });
 }
