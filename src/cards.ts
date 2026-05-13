@@ -493,16 +493,16 @@ const DUAL_BLADES: CardDef = {
   id: "dual_blades",
   name: "双刀",  // XLSX v6 改名（之前飞镖）
   category: "equipment",
-  desc: "装备：基础伤害 3，每次攻击为 2 hits。",
+  desc: "装备：基础伤害 4，每次攻击为 2 hits。",
   equipKind: "weapon",
   equipSuit: "diamond",
-  baseDmg: 3,  // XLSX v6: 5 → 3
+  baseDmg: 4,  // v0.8.2 数值微调：3 → 4
   hits: 2,
   equipEffects: [
-    { desc: "基础 3 × 2 次。", stat: "3×2 伤" },
-    { desc: "叠加 ×1.4 × 2 次。", stat: "4.2×2 伤" },
-    { desc: "叠加 ×1.8 × 2 次。", stat: "5.4×2 伤" },
-    { desc: "叠加 ×2.2 × 2 次。", stat: "6.6×2 伤" },
+    { desc: "基础 4 × 2 次。", stat: "4×2 伤" },
+    { desc: "叠加 ×1.4 × 2 次。", stat: "5.6×2 伤" },
+    { desc: "叠加 ×1.8 × 2 次。", stat: "7.2×2 伤" },
+    { desc: "叠加 ×2.2 × 2 次。", stat: "8.8×2 伤" },
   ],
 };
 
@@ -528,16 +528,16 @@ const WIND_BLADE: CardDef = {
   id: "wind_blade",
   name: "风刃",
   category: "equipment",
-  desc: "装备：基础 4，hits=2；本回合闪避后下张攻击 +1 hit。",
+  desc: "装备：基础 5，hits=2；本回合闪避后下张攻击 +1 hit。",
   equipKind: "weapon",
   equipSuit: "diamond",
-  baseDmg: 4,  // XLSX v6: 8 → 4
+  baseDmg: 5,  // v0.8.2 数值微调：4 → 5
   hits: 2,
   equipEffects: [
-    { desc: "基础 4 × 2 + 闪避后 +1 hit。", stat: "4×2 伤" },
-    { desc: "叠加 ×1.4 × 2 + 闪避后 +1 hit。", stat: "5.6×2 伤" },
-    { desc: "叠加 ×1.8 × 2 + 闪避后 +1 hit。", stat: "7.2×2 伤" },
-    { desc: "叠加 ×2.2 × 2 + 闪避后 +1 hit。", stat: "8.8×2 伤" },
+    { desc: "基础 5 × 2 + 闪避后 +1 hit。", stat: "5×2 伤" },
+    { desc: "叠加 ×1.4 × 2 + 闪避后 +1 hit。", stat: "7×2 伤" },
+    { desc: "叠加 ×1.8 × 2 + 闪避后 +1 hit。", stat: "9×2 伤" },
+    { desc: "叠加 ×2.2 × 2 + 闪避后 +1 hit。", stat: "11×2 伤" },
   ],
 };
 
@@ -863,15 +863,15 @@ const REPEATING_BOW: CardDef = {
   id: "repeating_bow",
   name: "连弩",
   category: "equipment",
-  desc: "装备：基础伤害 3，每回合可出多张攻击牌。连续两回合都出了一张以上的攻击时，下一回合无法出攻击牌，再下一回合恢复。",
+  desc: "装备：基础伤害 4，每回合可出多张攻击牌。连续两回合都出了一张以上的攻击时，下一回合无法出攻击牌，再下一回合恢复。",
   equipKind: "weapon",
   equipSuit: "diamond",
-  baseDmg: 3,
+  baseDmg: 4,  // v0.8.2 数值微调：3 → 4
   equipEffects: [
-    { desc: "基础 3，可连续攻击。", stat: "3 伤 连击" },
-    { desc: "叠加 ×1.4，可连续攻击。", stat: "4.2 伤 连击" },
-    { desc: "叠加 ×1.8，可连续攻击。", stat: "5.4 伤 连击" },
-    { desc: "叠加 ×2.2，可连续攻击。", stat: "6.6 伤 连击" },
+    { desc: "基础 4，可连续攻击。", stat: "4 伤 连击" },
+    { desc: "叠加 ×1.4，可连续攻击。", stat: "5.6 伤 连击" },
+    { desc: "叠加 ×1.8，可连续攻击。", stat: "7.2 伤 连击" },
+    { desc: "叠加 ×2.2，可连续攻击。", stat: "8.8 伤 连击" },
   ],
 };
 
@@ -1020,15 +1020,15 @@ const MAGE_ROBE: CardDef = {
   id: "mage_robe",
   name: "法袍",
   category: "equipment",
-  desc: "装备：受击 -1。出技能/道具时额外摸 1 张牌（持续过牌）。",
+  desc: "装备：受击 -1。出技能/道具时 30% 额外摸 1 张牌。",
   equipKind: "armor",
   equipSuit: "club",
   baseReduce: 1,
   equipEffects: [
-    { desc: "受击 -1 + 技能/道具摸 1 张。", stat: "-1 受击 +1摸/技", onTakeDamage: (_c, d) => Math.max(0, d - 1) },
-    { desc: "叠加 ×1.4。", stat: "-1 受击 +1摸/技", onTakeDamage: (_c, d) => Math.max(0, d - 1) },
-    { desc: "叠加 ×1.8。", stat: "-2 受击 +1摸/技", onTakeDamage: (_c, d) => Math.max(0, d - 2) },
-    { desc: "叠加 ×2.2。", stat: "-2 受击 +1摸/技", onTakeDamage: (_c, d) => Math.max(0, d - 2) },
+    { desc: "受击 -1 + 技能/道具 30% 摸 1。", stat: "-1 受击 30%摸1", onTakeDamage: (_c, d) => Math.max(0, d - 1) },
+    { desc: "叠加 ×1.4。", stat: "-1 受击 30%摸1", onTakeDamage: (_c, d) => Math.max(0, d - 1) },
+    { desc: "叠加 ×1.8。", stat: "-2 受击 30%摸1", onTakeDamage: (_c, d) => Math.max(0, d - 2) },
+    { desc: "叠加 ×2.2。", stat: "-2 受击 30%摸1", onTakeDamage: (_c, d) => Math.max(0, d - 2) },
   ],
 };
 

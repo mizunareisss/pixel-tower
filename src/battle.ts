@@ -1244,9 +1244,9 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
     state.player.hand = state.player.hand.filter(c => c.uid !== card.uid);
     dispatchPlayedCardEpicAware(state, card, log);
     accumulateCalcCharge(state, log);
-    if (state.player.armors[0]?.defId === "mage_robe") {
+    if (state.player.armors[0]?.defId === "mage_robe" && Math.random() < 0.30) {
       drawCards(state.player, 1, log);
-      log("法袍：摸 1 张。", "player");
+      log("法袍：摸 1 张（30%）。", "player");
     }
     if (state.player.statuses.find(s => s.id === "combat_rhythm")) {
       drawCards(state.player, 1, log);
