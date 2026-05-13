@@ -45,6 +45,59 @@ export const SUIT_PLAYED_CAP = 100;
 export const GLOBAL_DMG_MULT = 1.0;
 export const GLOBAL_DEF_MULT = 1.0;
 
+// ─── 机制分区注册表（v0.8.2 重构）───────────────────────────────
+// 每个修改伤害的机制都必须明确归类到一个区。详细见
+// /MECHANICS_ZONE_REGISTRY.md。如果你加新机制，先查这个表决定归哪个区。
+//
+// 攻击 6 区（calcAttackDamage 内）：
+//   1a 基础区·早期 flat: battle_cry / weapon_buff / frenzy / heavy_strike /
+//                       war_bow 狙击 / berserker_blade 低血 / blood_pact_charge
+//   1b 楼层 scale: weapons[0].scale（武器创建时按楼层固定）
+//   1c 基础区·后期 flat: calc_charge × mul / 禁忌权杖 / knight_charge /
+//                       ec_warblood perm_atk
+//   2  加成区 (+%): 花色相性 / 玩家虚弱 / 敌人易伤 / ♠T1 / ♥T2 /
+//                  p_bleed / p_insight / p_executioner / p_coldblood /
+//                  p_resonance / p_swift_strike / e_brawler / ec_warblood /
+//                  ec_arcane
+//   3  倍率区 (×): sharpened / double_strike / charged / e_reaper / e_phantom
+//   3.5 阈值附魔 (依赖中间 dmg): e_titan / ec_focus
+//   4  防御区 (armor vs pierce): wDef.pierce / p_armor_break / raider /
+//                                excalibur / ♠T2 / pierce_perm / pierce_bonus /
+//                                pierce_next bypassArmor
+//   5  全局: GLOBAL_DMG_MULT
+//   6  暴击: p_crit（per-attack roll）/ ♦T1 灵敏 keyword（在 playAttack 里）
+//
+//   副作用（不归任何区，但在 callback 触发）:
+//     吸血: dagger / vampire_fang / blood_blade / everlast_fang / ec_lifesteal /
+//          p_vampire / ♥T1 贪婪 keyword
+//     攻击命中 +debuff: battle_staff / giant_hammer / sk_poison_blade /
+//                     sk_curse_blood / sk_blade_slash / ♠T1 锐利 / ♣T1 镇守
+//     击杀触发: everlast_fang / blood_blade / e_reaper（挂 buff）
+//
+// 受击 5 区（damagePlayer 内）：
+//   0  闪避路径 (4 条): dodge_full_round / guaranteed_dodge / dodgeChance /
+//                      enc_runic_immune
+//   1  易伤区: vulnerable +30%
+//   2  固定减伤 (Σ -N): ec_resilient / ec_runic / phalanx_dr / ♣T1 -3 /
+//                     所有防具 onTakeDamage 中的 flat -N（探测路径）
+//   3  减伤倍率 (∏ ×<1): ♥T2 ×0.7 / evasive ×0.7 / p_tough / p_iron_will /
+//                       crown_of_vitality HP<30% ×0.5（hardcode）
+//   4  护盾吸收: fullplate_shield → shield_block
+//   5  全局: GLOBAL_DEF_MULT
+//
+//   受击后副作用（不影响本次受击量）:
+//     combat_belt / knight_plate / soulreaver_plate / immortal_plate /
+//     full_plate (fullplate_pending) / p_blood_pact 蓄势 / p_thorns 反伤 /
+//     thorn_armor / scale_mail 反伤
+//
+// 平行伤害系统（不走 6 区公式，直扣 HP）：
+//   sk_blast / sk_dbl_pummel / sk_chain_bolt / sk_lightning / sk_chroma_wave /
+//   sk_phantom_edge / sk_wrath / sk_shockwave / sk_drain_strike /
+//   sk_blade_slash 等技能直伤 / it_bomb 炸弹 / p_thorns 反伤 / p_lifetap /
+//   thorn_armor / scale_mail 反伤 / sk_counter_stance 反击
+//   → 这些走 damageEnemy() 直接扣血，不吃 armor / vulnerable / 易伤 / 虚弱
+// ──────────────────────────────────────────────────────────
+
 // 每个花色 3 类来源累计（持久化跨战斗）
 //  - 装备同花色：每件 +1.3（武器/防具叠加各算；Epic 装备不算 — 避免装上不同色 Epic 抢走专精）
 //  - 特性同花色：每张 +0.8
@@ -1522,6 +1575,13 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     const reduce = 0.08 * ironS;
     mulReduce *= (1 - reduce);
     mulParts.push(`钢铁意志 ×${(1 - reduce).toFixed(2)}`);
+  }
+  // 生命之冠 HP<30% ×0.5（v0.8.2 拆分自原 callback 内的混合 flat+mul）
+  // 注：原 cards.ts 的 onTakeDamage 已改为纯 flat -reduce，×0.5 在此区独立处理
+  if (state.player.armors[0]?.defId === "crown_of_vitality"
+      && state.player.vita < state.player.vitaMax * 0.30) {
+    mulReduce *= 0.5;
+    mulParts.push("生命之冠·危机 ×0.5");
   }
 
   dmg = Math.max(0, Math.floor(dmg * mulReduce));

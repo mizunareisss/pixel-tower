@@ -3,6 +3,32 @@
 // - 4 武器 / 4 防具（手牌中的装备牌，出牌后进常驻区）
 // - 12 技能 / 6 道具
 // - 9 特性
+//
+// ─── 修改 callback 时的区分层注意事项（v0.8.2 重构后）──────────
+// 攻击伤害走 6 区分层（见 battle.ts calcAttackDamage 注释）：
+//   阶段 1 基础区（flat）/ 阶段 2 加成区（+%）/ 阶段 3 倍率区（×）
+//   阶段 4 防御区（pierce vs armor）/ 阶段 5 全局 / 阶段 6 暴击
+// 受击走 5 区分层（见 battle.ts damagePlayer 注释）。
+//
+// callback 的"归区规则"：
+//   - equipEffect.onAttack 中改 d 的：现在被 battle.ts 选择性调用，
+//     具体看 SKIP_WEAPON_CALLBACK 和 SKIP_ENCHANT_CALLBACK 列表。
+//   - equipEffect.onTakeDamage 中改 d 的：被 battle.ts 当作 flat 减伤探测。
+//     ⚠ 如果你想在 onTakeDamage 里加 ×N 倍率，**必须**在 battle.ts 的
+//     阶段 3 减伤倍率区里 hardcode 处理（参考 crown_of_vitality 的拆分实装）。
+//     单 callback 内混合 flat + mul 会被 battle.ts 当 flat，丢失 mul 性质！
+//   - perkEffect.onDealDamage / onTakeDamage 类：核心 perk 已经在 battle.ts
+//     里硬编码进对应区（见 SKIP_PERK 列表），callback 保留作为 cards.ts 内
+//     的"机制文档"，runtime 行为不再走 callback。改 perk 数值时要同时改
+//     cards.ts（文档）和 battle.ts（实战），保持两边同步。
+//   - 副作用类 callback（吸血/反伤/上 status/摸牌等）：不修改 d，battle.ts
+//     会调用 callback 触发副作用，但忽略 return。安全。
+//
+// 平行伤害系统（不走 6 区公式）：
+//   - dealDirectDamage / damageEnemy：直扣 HP，不吃 armor/vuln/buff
+//   - sk_blast / it_bomb / sk_chain_bolt / p_thorns 反伤 / sk_counter_stance 等
+//   - 这是有意的"非武器伤害"维度，不需要进 6 区
+// ────────────────────────────────────────────────────────────
 
 import type {
   CardDef,
@@ -684,6 +710,12 @@ const LEATHER_ARMOR: CardDef = {
 };
 
 // ♥ 偏生存防具：低血量受击大幅减半 + 战斗结束自动回血
+//
+// 区分层归属（v0.8.2 公式重构后）：
+//   - flat -reduce 部分        → 受击阶段 2 固定减伤（走 callback 探测路径）
+//   - HP<30% ×0.5 危机减伤部分 → 受击阶段 3 减伤倍率（在 battle.ts damagePlayer 内 hardcode）
+// 拆分原因：原本一个 callback 同时返回 flat - reduce 后再 × 0.5 = 混合两种运算，
+//   不符合"区内同质"原则，且未来加新机制时容易撞数值。现 callback 只 return d-reduce 纯 flat。
 const CROWN_OF_VITALITY: CardDef = {
   id: "crown_of_vitality",
   name: "生命之冠",
@@ -696,14 +728,8 @@ const CROWN_OF_VITALITY: CardDef = {
     const mk = (reduce: number) => ({
       desc: `受击 -${reduce}。HP < 30% 时受击额外 ×0.5。`,
       stat: `-${reduce} 受击 危机×0.5`,
-      onTakeDamage: (c: BattleContext, d: number) => {
-        let nd = Math.max(0, d - reduce);
-        if (c.player.vita < c.player.vitaMax * 0.30) {
-          nd = Math.floor(nd * 0.5);
-          c.log(`生命之冠·危机：受击 ×0.5（${d}→${nd}）。`, "player");
-        }
-        return nd;
-      },
+      // 只做 flat -reduce；×0.5 由 battle.ts damagePlayer 阶段 3 处理
+      onTakeDamage: (_c: BattleContext, d: number) => Math.max(0, d - reduce),
     });
     return [mk(2), mk(3), mk(4), mk(5)] as [EquipEffect, EquipEffect, EquipEffect, EquipEffect];
   })(),
