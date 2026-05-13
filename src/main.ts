@@ -4013,8 +4013,11 @@ function openCodex() {
   function renderTab(cat: string) {
     const content = document.getElementById("codex-content");
     if (!content) return;
+    // 附魔 tab 走表格布局，覆盖默认 grid
+    content.classList.toggle("codex-content-block", cat === "enchant");
     if (cat === "enchant") {
-      // v0.8.2 commit C：图鉴展示新 14 附魔（流派 12 按花色 + 大师 2 单独 section）
+      // v0.8.2 commit C → 表格版（每附魔一行 + 3 档横向对齐）：
+      // 表格 5 列：附魔（含 tier + 配方）| Lv 1 | Lv 2 | Lv 3
       const branchOrder: Suit[] = ["spade", "diamond", "heart", "club"];
       const branchEnchants = new Map<Suit, EnchantId[]>();
       for (const s of branchOrder) branchEnchants.set(s, []);
@@ -4022,70 +4025,76 @@ function openCodex() {
         const b = ENCHANT_RECIPES[eid].branch;
         if (b !== null) branchEnchants.get(b)?.push(eid);
       }
-      // 流派组内按 T1 → T2 → T3 排序
       const tierOrder: Record<string, number> = { T1: 0, T2: 1, T3: 2 };
       for (const list of branchEnchants.values()) {
         list.sort((a, b) => (tierOrder[ENCHANT_RECIPES[a].tier ?? "T1"] - tierOrder[ENCHANT_RECIPES[b].tier ?? "T1"]));
       }
 
-      const renderEnchantCard = (eid: EnchantId): string => {
+      const renderRow = (eid: EnchantId): string => {
         const r = ENCHANT_RECIPES[eid];
         const cat = getEnchantCategory(eid);
         const tierLabel = r.tier ?? (cat === "master" ? "大师" : "");
+        const tierBadgeClass = cat === "master" ? "codex-tier-master"
+          : r.tier === "T3" ? "codex-tier-t3"
+          : r.tier === "T2" ? "codex-tier-t2"
+          : "codex-tier-t1";
         const costStr = Object.entries(r.cost)
-          .map(([rc, n]) => `${FRAGMENT_ICONS[rc as EnemyRace]}${FRAGMENT_NAMES[rc as EnemyRace]} ×${n}`)
+          .map(([rc, n]) => `${FRAGMENT_ICONS[rc as EnemyRace]}×${n}`)
           .join(" + ");
-        const tierClass = cat === "master" ? " codex-enchant-ultimate"
-          : r.tier === "T3" ? " codex-enchant-rare"
-          : "";
         const maxLv = getEnchantMaxLevel(eid);
-        // 全档展示
-        const tierLines = Array.from({ length: maxLv }, (_, i) => i + 1).map(lv =>
-          `<div class="codex-enchant-tier">Lv ${lv}：${escapeHTML(getEnchantDescAt(eid, lv))}</div>`
-        ).join("");
+        const cols = Array.from({ length: 3 }, (_, i) => {
+          const lv = i + 1;
+          if (lv > maxLv) return `<td class="codex-ench-cell codex-ench-cell-na">—</td>`;
+          return `<td class="codex-ench-cell"><span class="codex-ench-lv">Lv ${lv}</span>${escapeHTML(getEnchantDescAt(eid, lv))}</td>`;
+        }).join("");
         return `
-          <div class="codex-card codex-enchant${tierClass}">
-            <div class="codex-card-head">
-              <span class="codex-card-name">${ENCHANT_NAMES[eid]}</span>
-              <span class="codex-cat">${tierLabel}</span>
-            </div>
-            ${tierLines}
-            <div class="codex-card-cost">配方：${costStr}（同附魔重附升 Lv，最高 Lv ${maxLv}）</div>
-          </div>
+          <tr>
+            <td class="codex-ench-name">
+              <div class="codex-ench-name-row">
+                <span class="codex-ench-name-text">${escapeHTML(ENCHANT_NAMES[eid])}</span>
+                <span class="codex-ench-tier ${tierBadgeClass}">${tierLabel}</span>
+              </div>
+              <div class="codex-ench-cost">${costStr}</div>
+            </td>
+            ${cols}
+          </tr>
         `;
       };
+
+      const renderSection = (title: string, color: string, sym: string, list: EnchantId[]) => `
+        <div class="codex-ench-section">
+          <div class="codex-ench-section-head" style="color:${color}">
+            <span class="codex-ench-section-sym">${sym}</span>
+            <span class="codex-ench-section-name">${escapeHTML(title)}</span>
+            <span class="codex-ench-section-count">（${list.length}）</span>
+          </div>
+          <table class="codex-ench-table">
+            <colgroup>
+              <col style="width:24%">
+              <col><col><col>
+            </colgroup>
+            <thead>
+              <tr>
+                <th>附魔 / 配方</th>
+                <th>Lv 1</th>
+                <th>Lv 2</th>
+                <th>Lv 3</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map(renderRow).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
 
       const branchHtml = branchOrder.map(suit => {
         const list = branchEnchants.get(suit)!;
         const theme = SUIT_THEMES[suit];
-        const sym = SUIT_SYMBOLS[suit];
-        return `
-          <div class="codex-enchant-branch">
-            <div class="codex-enchant-branch-head" style="color:${theme.color}">
-              <span class="codex-enchant-branch-sym">${sym}</span>
-              <span class="codex-enchant-branch-name">${theme.name}</span>
-              <span class="codex-enchant-branch-count">（${list.length}）</span>
-            </div>
-            <div class="codex-enchant-branch-list">
-              ${list.map(renderEnchantCard).join("")}
-            </div>
-          </div>
-        `;
+        return renderSection(theme.name, theme.color, SUIT_SYMBOLS[suit], list);
       }).join("");
 
-      // 大师附魔单独 section
-      const masterHtml = `
-        <div class="codex-enchant-branch">
-          <div class="codex-enchant-branch-head" style="color:#c868ff">
-            <span class="codex-enchant-branch-sym">★</span>
-            <span class="codex-enchant-branch-name">大师附魔（F6+ 解锁）</span>
-            <span class="codex-enchant-branch-count">（${ENCHANTS_MASTER.length}）</span>
-          </div>
-          <div class="codex-enchant-branch-list">
-            ${ENCHANTS_MASTER.map(renderEnchantCard).join("")}
-          </div>
-        </div>
-      `;
+      const masterHtml = renderSection("大师附魔（F6+ 解锁）", "#c868ff", "★", ENCHANTS_MASTER);
 
       content.innerHTML = branchHtml + masterHtml;
       return;

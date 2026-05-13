@@ -2659,6 +2659,117 @@ h2.lose::before { display: none; }
   padding-left: 8px;
   border-left: 2px solid rgba(245, 197, 24, 0.3);
 }
+
+/* ── v0.8.2 附魔图鉴：表格布局 ─────────────────────────── */
+#codex-content.codex-content-block {
+  display: block;
+  padding: 8px 12px;
+}
+.codex-ench-section {
+  margin-bottom: 18px;
+}
+.codex-ench-section-head {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 900; font-size: 13px;
+  padding: 6px 4px;
+  border-bottom: 1px solid #333;
+  margin-bottom: 6px;
+}
+.codex-ench-section-sym { font-size: 16px; }
+.codex-ench-section-count { color: var(--gray); font-size: 11px; font-weight: 400; }
+
+.codex-ench-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 11px;
+}
+.codex-ench-table thead th {
+  background: #181420;
+  color: var(--yellow);
+  font-weight: 700; font-size: 10px;
+  text-align: left;
+  padding: 6px 8px;
+  border: 1px solid #2a2530;
+  letter-spacing: 0.05em;
+}
+.codex-ench-table tbody td {
+  border: 1px solid #2a2530;
+  padding: 7px 8px;
+  vertical-align: top;
+  word-break: break-word;
+  line-height: 1.5;
+  color: #c0c4cb;
+}
+.codex-ench-name {
+  background: rgba(245, 197, 24, 0.04);
+}
+.codex-ench-name-row {
+  display: flex; align-items: center; gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.codex-ench-name-text {
+  color: var(--yellow);
+  font-weight: 900;
+  font-size: 12px;
+}
+.codex-ench-tier {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 2px;
+  letter-spacing: 0.05em;
+  border: 1px solid;
+}
+.codex-tier-t1 { color: #8fcf6e; border-color: rgba(143, 207, 110, 0.4); background: rgba(143, 207, 110, 0.08); }
+.codex-tier-t2 { color: #67b3e3; border-color: rgba(103, 179, 227, 0.4); background: rgba(103, 179, 227, 0.08); }
+.codex-tier-t3 { color: #e3a667; border-color: rgba(227, 166, 103, 0.4); background: rgba(227, 166, 103, 0.08); }
+.codex-tier-master { color: #c868ff; border-color: rgba(200, 104, 255, 0.5); background: rgba(200, 104, 255, 0.1); }
+.codex-ench-cost {
+  font-size: 10px;
+  color: #9aa0a8;
+  line-height: 1.4;
+}
+.codex-ench-cell {
+  font-size: 10.5px;
+}
+.codex-ench-cell-na {
+  color: #555;
+  text-align: center;
+}
+.codex-ench-lv {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  color: #6b95c4;
+  background: rgba(107, 149, 196, 0.12);
+  padding: 1px 4px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: 1px;
+}
+
+/* 窄屏（≤ 480px）: 单列堆叠 — 附魔名 + 3 档纵向展示 */
+@media (max-width: 480px) {
+  .codex-ench-table,
+  .codex-ench-table thead,
+  .codex-ench-table tbody,
+  .codex-ench-table tr,
+  .codex-ench-table td,
+  .codex-ench-table th { display: block; width: auto !important; }
+  .codex-ench-table thead { display: none; }
+  .codex-ench-table tr {
+    margin-bottom: 8px;
+    border: 1px solid #2a2530;
+  }
+  .codex-ench-table tbody td { border: none; border-bottom: 1px dashed #2a2530; }
+  .codex-ench-table tbody td:last-child { border-bottom: none; }
+  .codex-ench-cell::before {
+    content: attr(data-lv);
+    display: inline;
+  }
+}
 .codex-origin {
   display: inline-block;
   font-size: 9px;
