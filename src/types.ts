@@ -110,7 +110,7 @@ export interface StatusMeta {
 export const STATUS_META: Record<string, StatusMeta> = {
   // ── 玩家 buff ──────────────────────────────────────────────
   battle_cry:     { name: "战吼", desc: "本回合所有攻击 +3 伤。\n来源：技能 sk_battle_cry「战吼」。", kind: "buff" },
-  evasive:        { name: "屏息", desc: "本回合受到伤害 ×0.7（-30%）；与闪避概率独立。\n来源：技能 sk_evasive「屏息」。", kind: "buff" },
+  evasive:        { name: "懒惰", desc: "本回合受到伤害 ×0.7（-30%）；与闪避概率独立。\n来源：技能 sk_evasive「懒惰」。", kind: "buff" },
   sharpened:      { name: "磨刀", desc: "下一张攻击伤害 ×1.5。\n来源：道具 it_whetstone「磨刀石」。", kind: "buff" },
   weapon_buff:    { name: "强化药", desc: "本场战斗武器伤害 +stacks。\n来源：道具 it_elixir「强化药」。", kind: "buff" },
   shield_block:   { name: "护盾", desc: "吸收下次受到的 stacks 点伤害。\n来源：技能 sk_aegis「铁壁」/ ♣ T1「镇守」keyword（♣ 攻击命中触发，每回合 -1 衰减）/ ♣ T2「反应装甲」/ 装备「木盾杖」「重铠」反震 / 附魔「重甲列阵」未受伤奖励 / ♦ 大招「影子杀手」三连之后。", kind: "buff" },

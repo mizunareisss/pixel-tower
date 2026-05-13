@@ -1209,7 +1209,7 @@ const SK_FRENZY: CardDef = {
 };
 
 const SK_EVASIVE: CardDef = {
-  id: "sk_evasive", name: "屏息", category: "skill", target: "self",
+  id: "sk_evasive", name: "懒惰", category: "skill", target: "self",
   desc: "本回合受到的伤害 -30%。",
   onPlay: (c) => { addStatus(c.player, "evasive", "屏息", 1, 1); c.log("屏息：本回合伤害 -30%。", "player"); },
 };
@@ -1567,10 +1567,10 @@ const IT_ELIXIR: CardDef = {
 // 烟雾弹：临时闪避 buff
 const IT_SMOKE: CardDef = {
   id: "it_smoke", name: "烟雾弹", category: "item", target: "self",
-  desc: "5 回合内闪避概率 +30%。",
+  desc: "3 回合内闪避概率 +30%。",
   onPlay: (c) => {
-    addStatus(c.player, "smoke_dodge", "烟雾", 30, 5);
-    c.log("烟雾弹：闪避 +30%（5 回合）。", "player");
+    addStatus(c.player, "smoke_dodge", "烟雾", 30, 3);
+    c.log("烟雾弹：闪避 +30%（3 回合）。", "player");
   },
 };
 
