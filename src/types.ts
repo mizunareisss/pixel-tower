@@ -5,7 +5,7 @@
 // ─── 版本号 ────────────────────────────────────────────────
 // 显示在汉堡菜单顶部 + 对应同版本号的 GAME_MECHANICS_vX.Y.Z.md
 // 发新版时同步 bump 这个常量 + 重命名机制文档
-export const APP_VERSION = "0.8.1";
+export const APP_VERSION = "0.8.2";
 
 export type Suit = "spade" | "diamond" | "heart" | "club";
 export const SUIT_SYMBOLS: Record<Suit, string> = {
