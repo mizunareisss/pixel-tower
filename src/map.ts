@@ -65,11 +65,14 @@ interface NodeTypeWeights {
 function midLayerWeights(floor: number, layerIdx: number, totalMidLayers: number): NodeTypeWeights {
   // 越靠近末端，elite 越多；事件 / 商人 / 铁匠铺保持稀有
   const lastLayerBoost = layerIdx === totalMidLayers - 1 ? 1.5 : 1;
+  // v0.8.2 修复：前两个中间层（layerIdx 0 / 1）禁 elite —— 防止新手玩家
+  // 开局没装备没特性时被第一步 elite 当场打死（F1-F3 尤其敏感）
+  const firstStepsNoElite = layerIdx <= 1 && floor <= 3;
   // 第 1 关：以战斗为主，几乎无事件
   if (floor === 1) {
     return {
       battle: 80,
-      elite:  Math.round(12 * lastLayerBoost),
+      elite:  firstStepsNoElite ? 0 : Math.round(12 * lastLayerBoost),
       event:  4,
       forge:  0,
       shop:   0,
@@ -77,7 +80,7 @@ function midLayerWeights(floor: number, layerIdx: number, totalMidLayers: number
   }
   return {
     battle: 60,
-    elite:  Math.round(14 * lastLayerBoost),
+    elite:  firstStepsNoElite ? 0 : Math.round(14 * lastLayerBoost),
     event:  12,
     forge:  floor >= 2 ? 7 : 0,
     shop:   floor >= 2 ? 6 : 0,
