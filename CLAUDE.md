@@ -43,6 +43,11 @@ pixel-tower/
 - `main` — 稳定，对应 Netlify 部署
 - `dev` — 日常开发，所有 commit 先进 dev
 - `feature/xxx` — 大改用 feature 分支，做完合 dev
+- `feature/debug-console` — **特殊**：调试控制台浮窗（🐞 chip / backtick 开关）。
+  - 永远跟 dev 同步（dev 有更新就 rebase / merge 进来）
+  - **永远不合进 dev / main**
+  - 调试时手动 `git checkout feature/debug-console` 跑本地预览
+  - 只有 dev 才能合进 main；这个分支是"私房工具"，永不上线
 
 ### 协作者工作流
 
