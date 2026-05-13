@@ -633,10 +633,13 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     addParts.push("虚弱 -30%");
   }
 
-  // 敌人易伤 +30%
-  if (ctx.target.statuses.find(s => s.id === "vulnerable")) {
-    addMult += 0.30;
-    addParts.push(`${ctx.target.name} 易伤 +30%`);
+  // 敌人易伤：基础 +30%，每多 1 层 +1%（cap +10%，即 11+ 层算满）
+  const enVuln = ctx.target.statuses.find(s => s.id === "vulnerable");
+  if (enVuln) {
+    const extra = Math.min(0.10, Math.max(0, enVuln.stacks - 1) * 0.01);
+    const total = 0.30 + extra;
+    addMult += total;
+    addParts.push(`${ctx.target.name} 易伤 ×${enVuln.stacks} +${Math.round(total * 100)}%`);
   }
 
   // ♠ T1 锋锐 +15%
@@ -1682,9 +1685,13 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
   let dmg = base;
   const ctx = getCtx(state, log);
 
-  if (state.player.statuses.find(s => s.id === "vulnerable")) {
-    dmg = Math.floor(dmg * 1.3);
-    log("易伤：伤害 ×1.3。", "enemy");
+  // 玩家易伤：基础 ×1.3，每多 1 层 +1%（cap +10%，即 11+ 层 ×1.40）
+  const plVuln = state.player.statuses.find(s => s.id === "vulnerable");
+  if (plVuln) {
+    const extra = Math.min(0.10, Math.max(0, plVuln.stacks - 1) * 0.01);
+    const mult = 1.30 + extra;
+    dmg = Math.floor(dmg * mult);
+    log(`易伤 ×${plVuln.stacks}：伤害 ×${mult.toFixed(2)}。`, "enemy");
   }
 
   // ╔══════════════════════════════════════════════════════════╗

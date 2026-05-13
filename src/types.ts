@@ -124,7 +124,7 @@ export const STATUS_META: Record<string, StatusMeta> = {
   // ── 玩家 debuff ────────────────────────────────────────────
   poison:     { name: "中毒", desc: "每回合扣 maxHP × 1% × stacks，每回合 stacks -1。副作用：暴击率 -stacks × 5%（cap -50%）。\n来源：敌人 debuff intent / 技能毒刃 / 毒血 / 道具箭毒蛙 / 诅咒漩涡 等。", kind: "debuff" },
   weak:       { name: "虚弱", desc: "攻击伤害 ×0.7（-30% 固定，stacks 只决定 duration）。\n来源：敌人 debuff intent / 技能虚弱箭 / 群体虚弱 / 恐惧术。", kind: "debuff" },
-  vulnerable: { name: "易伤", desc: "受到伤害 ×1.3（+30% 固定，stacks 只决定 duration）。\n来源：敌人 debuff intent / 技能双重打击 / 恐惧术 / 诅咒漩涡 / ♣ T2「反应装甲」/ ♣ 大招群体禁咒。", kind: "debuff" },
+  vulnerable: { name: "易伤", desc: "受到伤害 ×1.3 基础 + 每多 1 层 +1%（cap +10%，即 11+ 层 ×1.40）。\n来源：敌人 debuff intent / 技能双重打击 / 恐惧术 / 诅咒漩涡 / ♣ T2「反应装甲」/ ♣ 大招群体禁咒 / 附魔幻影。", kind: "debuff" },
   burn:       { name: "燃烧", desc: "每回合扣 maxHP × 2% × stacks，持续 duration 回合（无副作用）。\n来源：技能 sk_fire_wall「火墙」。", kind: "debuff" },
   bleed:      { name: "出血", desc: "每回合扣当前 HP × 5% × stacks。施加在玩家身上时副作用：闪避率 -stacks × 5%（cap -50%）。\n来源：技能流血咒 / 利刃 / 神锋无影 / 道具抗凝血 / ♠ T1「锐利」keyword（♠ 攻击 45% 概率）。", kind: "debuff" },
   rend:       { name: "撕裂（已废弃）", desc: "（旧版状态，现在撕裂技能直接扣 armor，不再走 status）。", kind: "debuff" },
