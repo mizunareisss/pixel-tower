@@ -15,7 +15,7 @@ import type {
   Suit,
 } from "./types.ts";
 import { HAND_LIMIT, DRAW_PER_TURN, SUIT_SYMBOLS, SUITS, getEnchantParam } from "./types.ts";
-import { CARD_DB, suitMultiplier, damageEnemy, ENCHANT_EFFECTS, EPIC_USES_PER_BATTLE, REWARD_CARD_POOL_BASE, REWARD_CARD_POOL_AOE, makeInstance } from "./cards.ts";
+import { CARD_DB, suitMultiplier, damageEnemy, ENCHANT_EFFECTS, EPIC_USES_PER_BATTLE, REWARD_CARD_POOL_BASE, REWARD_CARD_POOL_AOE, makeInstance, triggerEnemyKillHooks, dealSelfDamage } from "./cards.ts";
 import { selectAIIntent } from "./bossAI.ts";
 
 // 检查玩家是否有染色/持咒 buff，返回强制使用的花色
@@ -914,38 +914,61 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
 
   // 注：禁忌权杖旧版本回合 ♣ 计数已废弃（改为读 ♣ 亲和度，见 calcAttackDamage）
 
-  // 武器 hits（双刀 hits=2）+ 影袭额外 +1 hit
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  Hits 独立分区（v0.8.2 Round 2-C）                       ║
+  // ║  4 段分层：基础 → 加成 → 倍率 → 上限                     ║
+  // ╚══════════════════════════════════════════════════════════╝
+  // 旧公式 `(weaponHits + shadowBonus + diamondBonus) * tripleMult` 在
+  // 极端叠 buff 下可达 5×3=15 hits，伤害模型彻底崩坏。新模型显式 cap 8。
+  //
+  //   阶段 A 基础区  ─ 武器 hits（dual_blades=2，wind_blade=2 等；默认 1）
+  //   阶段 B 加成区  ─ 加性 +1（影袭 / ♦T1 灵敏 25% / ♦T2 灵巧连击 30%）
+  //   阶段 C 倍率区  ─ 乘性 ×N（仅 ♦ 大招 三连击 ×3，独此一家）
+  //   阶段 D 上限    ─ HITS_CAP = 8，硬封顶
+  const HITS_CAP = 8;
   const weaponDef = state.player.weapons[0] ? CARD_DB[state.player.weapons[0].defId] : null;
-  const weaponHits = weaponDef?.hits ?? 1;
+
+  // 阶段 A 基础区
+  const hitsBase = weaponDef?.hits ?? 1;
+
+  // 阶段 B 加成区
+  let hitsBonus = 0;
+  // 影袭（shadow_double）+1
   const shadow = state.player.statuses.find(s => s.id === "shadow_double");
-  const shadowBonus = shadow ? 1 : 0;
   if (shadow) {
+    hitsBonus += 1;
     log("影袭：本次攻击 +1 hit。", "player");
     state.player.statuses = state.player.statuses.filter(s => s.id !== "shadow_double");
   }
-  // ♦ T2 灵巧连击：30% 概率额外 +1 hit（与 T1 keyword 叠加，两个独立 roll）
-  // ♦ T1 keyword 灵敏：♦ 攻击 25% 额外 +1 hit（独立 roll，可与 T2 叠）
-  let diamondBonus = 0;
+  // ♦ T2 灵巧连击：30% +1
   const dSuitActive = getActiveSpecialty(state);
   const dTier = dSuitActive === "diamond" ? suitTier(state, "diamond") : 0;
   if (dSuitActive === "diamond" && dTier >= 2 && Math.random() < 0.30) {
-    diamondBonus += 1;
+    hitsBonus += 1;
     log("♦ 灵巧连击：+1 hit（T2 30%）。", "player");
   }
+  // ♦ T1 keyword 灵敏：♦ 攻击 25% +1
   if (dSuitActive === "diamond" && dTier >= 1 && baseSuit === "diamond" && Math.random() < 0.25) {
-    diamondBonus += 1;
+    hitsBonus += 1;
     log("♦ 灵敏 keyword：+1 hit（25%）。", "player");
   }
-  // ♦ 大招 影子杀手：本次攻击 hits ×3（一次性）
-  let tripleMult = 1;
+
+  // 阶段 C 倍率区
+  let hitsMult = 1;
   const triple = state.player.statuses.find(s => s.id === "triple_strike");
   if (triple) {
-    tripleMult = 3;
+    hitsMult = 3;
     state.player.statuses = state.player.statuses.filter(s => s.id !== "triple_strike");
     log("♦ 影子杀手：本次攻击三连击！", "player");
   }
-  const hits = (weaponHits + shadowBonus + diamondBonus) * tripleMult;
-  if (weaponHits > 1) log(`${weaponDef?.name} hits ×${weaponHits}。`, "player");
+
+  // 阶段 D 上限：(基础 + 加成) × 倍率，硬封顶 HITS_CAP
+  const hitsRaw = (hitsBase + hitsBonus) * hitsMult;
+  const hits = Math.min(HITS_CAP, hitsRaw);
+  if (hits < hitsRaw) {
+    log(`hits 触上限：${hitsRaw} → ${HITS_CAP}（cap）。`, "player");
+  }
+  if (hitsBase > 1) log(`${weaponDef?.name} hits ×${hitsBase}。`, "player");
 
   const weaponId = state.player.weapons[0]?.defId;
   for (let i = 0; i < hits; i++) {
@@ -966,7 +989,9 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
     }
     dmg = Math.floor(dmg);
     log(`▶ 攻击 ${SUIT_SYMBOLS[def.attackSuit!]} → ${target.name} -${dmg}。`, "player");
-    damageEnemy(target, dmg, log);
+    // v0.8.2 Round 2-A：传 ctx 让 damageEnemy 在 alive 翻转时自动 emit "敌人死亡"
+    // 事件，触发武器击杀回血 / 附魔 onKill / 未来 ♥T1 猎食者 / ♥T3 血涂
+    damageEnemy(target, dmg, log, undefined, getCtx(state, log));
 
     // ♠ 锐利 keyword：♠ 攻击命中 45% 概率施加 1 层出血（2 回合）
     const sSuitNow = getActiveSpecialty(state);
@@ -1028,9 +1053,10 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
     if (weaponId === "chain_blade") {
       const splashByStack = [3, 4, 5, 6];
       const splash = splashByStack[Math.min(state.player.weapons.length, 4) - 1] ?? 3;
+      const splashCtx = getCtx(state, log);
       for (const e of state.enemies) {
         if (!e.alive || e === target) continue;
-        damageEnemy(e, splash, log, `链刃溅射：${e.name} -${splash}。`);
+        damageEnemy(e, splash, log, `链刃溅射：${e.name} -${splash}。`, splashCtx);
       }
     }
   }
@@ -1734,7 +1760,8 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     if (state.player.statuses.find(s => s.id === "counter_stance") && attackerEnemy?.alive) {
       const reflect = Math.floor(dmg * 0.5);
       if (reflect > 0) {
-        damageEnemy(attackerEnemy, reflect, log, `反击姿态：${attackerEnemy.name} -${reflect}。`);
+        // v0.8.2 Round 2-A：传 ctx 让 alive 翻转时自动触发 onKill 事件
+        damageEnemy(attackerEnemy, reflect, log, `反击姿态：${attackerEnemy.name} -${reflect}。`, getCtx(state, log));
       }
     }
 
@@ -2045,11 +2072,13 @@ function* enemyTurnSteps(state: BattleState, log: (m: string, k?: LogKind) => vo
     if (!enemy.alive) continue;
 
     // DoT 结算（time_stop 也走）
+    // v0.8.2 Round 2-A：DOT 也走杀敌事件总线 — 中毒/燃烧/出血 killshot 也能给击杀奖励
     let didDot = false;
+    const dotCtx = getCtx(state, log);
     const poison = enemy.statuses.find(s => s.id === "poison");
     if (poison && poison.stacks > 0) {
       const dmg = Math.max(1, Math.ceil(enemy.maxHp * 0.01 * poison.stacks));
-      damageEnemy(enemy, dmg, log, `${enemy.name} 中毒 -${dmg}（${poison.stacks}× 1% maxHP）。`);
+      damageEnemy(enemy, dmg, log, `${enemy.name} 中毒 -${dmg}（${poison.stacks}× 1% maxHP）。`, dotCtx);
       poison.stacks--;
       if (poison.stacks <= 0) enemy.statuses = enemy.statuses.filter(s => s.id !== "poison");
       didDot = true;
@@ -2057,13 +2086,13 @@ function* enemyTurnSteps(state: BattleState, log: (m: string, k?: LogKind) => vo
     const burn = enemy.statuses.find(s => s.id === "burn");
     if (burn && burn.stacks > 0 && burn.duration > 0) {
       const dmg = Math.max(1, Math.ceil(enemy.maxHp * 0.02 * burn.stacks));
-      damageEnemy(enemy, dmg, log, `${enemy.name} 燃烧 -${dmg}（${burn.stacks}× 2% maxHP）。`);
+      damageEnemy(enemy, dmg, log, `${enemy.name} 燃烧 -${dmg}（${burn.stacks}× 2% maxHP）。`, dotCtx);
       didDot = true;
     }
     const bleed = enemy.statuses.find(s => s.id === "bleed");
     if (bleed && bleed.stacks > 0 && bleed.duration > 0 && enemy.alive) {
       const dmg = Math.max(1, Math.floor(enemy.hp * 0.05 * bleed.stacks));
-      damageEnemy(enemy, dmg, log, `${enemy.name} 出血 -${dmg}。`);
+      damageEnemy(enemy, dmg, log, `${enemy.name} 出血 -${dmg}。`, dotCtx);
       didDot = true;
     }
     // 有 DoT 才插一个 step（让玩家先看到 DoT 伤害再看招式）
@@ -2303,12 +2332,14 @@ function startNewPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) =>
   // 中毒：扣 stacks，stacks-1；副作用：玩家暴击率 -stacks × 3%（cap -30%）
   // 注：brew_regen 已挪到 P1.1（line ~2210），原位置在此 audit 修复后清空
 
+  // v0.8.2 Round 2-B：玩家 DOT 走 dealSelfDamage 统一入口（事件总线）
+  // 这样 took_damage_turn 标记 + p_blood_pact 蓄势 + 未来 ♠T1 战旗 等都会自动触发
+  const dotPlayerCtx = getCtx(state, log);
   // 玩家中毒：每回合扣 maxVita × 1% × stacks
   const playerPoison = state.player.statuses.find(s => s.id === "poison");
   if (playerPoison && playerPoison.stacks > 0) {
     const dmg = Math.max(1, Math.ceil(state.player.vitaMax * 0.01 * playerPoison.stacks));
-    state.player.vita = Math.max(0, state.player.vita - dmg);
-    log(`你中毒 -${dmg} HP（${playerPoison.stacks}× 1% maxHP；暴击 -${Math.min(50, playerPoison.stacks * 5)}%）。`, "enemy");
+    dealSelfDamage(dotPlayerCtx, dmg, `你中毒 -${dmg} HP（${playerPoison.stacks}× 1% maxHP；暴击 -${Math.min(50, playerPoison.stacks * 5)}%）。`);
     playerPoison.stacks--;
     if (playerPoison.stacks <= 0) state.player.statuses = state.player.statuses.filter(s => s.id !== "poison");
   }
@@ -2316,15 +2347,13 @@ function startNewPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) =>
   const playerBurn = state.player.statuses.find(s => s.id === "burn");
   if (playerBurn && playerBurn.stacks > 0 && playerBurn.duration !== 0) {
     const dmg = Math.max(1, Math.ceil(state.player.vitaMax * 0.02 * playerBurn.stacks));
-    state.player.vita = Math.max(0, state.player.vita - dmg);
-    log(`你燃烧 -${dmg} HP（${playerBurn.stacks}× 2% maxHP）。`, "enemy");
+    dealSelfDamage(dotPlayerCtx, dmg, `你燃烧 -${dmg} HP（${playerBurn.stacks}× 2% maxHP）。`);
   }
   // 出血：扣 当前HP × 5% × stacks，duration-1；副作用：玩家闪避率 -stacks × 5%
   const playerBleed = state.player.statuses.find(s => s.id === "bleed");
   if (playerBleed && playerBleed.stacks > 0 && playerBleed.duration !== 0) {
     const dmg = Math.max(1, Math.floor(state.player.vita * 0.05 * playerBleed.stacks));
-    state.player.vita = Math.max(0, state.player.vita - dmg);
-    log(`你出血 -${dmg} HP（闪避 -${Math.min(50, playerBleed.stacks * 5)}%）。`, "enemy");
+    dealSelfDamage(dotPlayerCtx, dmg, `你出血 -${dmg} HP（闪避 -${Math.min(50, playerBleed.stacks * 5)}%）。`);
   }
   if (state.player.vita <= 0) { state.phase = "lost"; log("✗ HP 耗尽。", "lose"); return; }
 
@@ -2372,14 +2401,11 @@ function awardFragments(state: BattleState, log: (m: string, k?: LogKind) => voi
         state.player.fragments[race] = (state.player.fragments[race] ?? 0) + 1;
         log(`掉落：${race} 灵魂碎片 +1。`, "win");
       }
-      // 附魔 onKill 触发
-      if (state.player.weaponEnchant) {
-        const enchant = ENCHANT_EFFECTS[state.player.weaponEnchant];
-        if (enchant?.onKill) {
-          const ctx = getCtx(state, log);
-          enchant.onKill(ctx, e);
-        }
-      }
+      // v0.8.2 Round 2-A：用 triggerEnemyKillHooks 兜底触发"敌人死亡"事件
+      // （damageEnemy 不带 ctx 的旧调用方走这条路径；带 ctx 的已经在 alive 翻转时
+      // 触发过了，会被 _killHooksTriggered marker 跳过）
+      const ctx = getCtx(state, log);
+      triggerEnemyKillHooks(ctx, e);
       // 精英额外掉落：随机一张 SR 卡进 buffer，战斗胜利后玩家手动选接受/弃掉（不含 Boss，Boss 走 epic 保底）
       if (e.tier === "elite") {
         const srPool = getEliteSRDropPool(state.floor);

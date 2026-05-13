@@ -92,8 +92,22 @@ export function healVita(ctx: BattleContext, n: number) {
 
 // ── 通用：减敌人 HP + 击杀判定 ───────────────────────────
 // 反伤、技能直伤、特性伤害都走这里，保证 alive=false 触发
-export function damageEnemy(target: EnemyState, n: number, log: (m: string, k?: LogKind) => void, msg?: string) {
+//
+// v0.8.2 Round 2-A：新增可选 ctx 参数。传入则在 alive 翻转时自动 emit
+// "敌人死亡"事件（triggerEnemyKillHooks），各副作用（武器击杀回血 /
+// 附魔 onKill / 未来 ♥T1 猎食者 / ♥T3 血涂）由事件总线统一调度。
+//
+// 没传 ctx 的调用方走兜底路径（awardFragments 在 checkBattleEnd 扫尸时
+// 也会兜底触发，因 _killHooksTriggered marker 不会重复）。
+export function damageEnemy(
+  target: EnemyState,
+  n: number,
+  log: (m: string, k?: LogKind) => void,
+  msg?: string,
+  ctx?: BattleContext,
+) {
   if (!target.alive || n <= 0) return;
+  const wasAlive = target.alive;
   target.hp = Math.max(0, target.hp - n);
   if (msg) log(msg, "player");
   if (target.hp <= 0) {
@@ -106,13 +120,15 @@ export function damageEnemy(target: EnemyState, n: number, log: (m: string, k?: 
     }
     target.alive = false;
     log(`★ 击败 ${target.name}！`, "win");
+    // 事件总线：敌人死亡 → 武器击杀回血 / 附魔 onKill / v0.8.2 ♥T1/♥T3
+    if (ctx && wasAlive) triggerEnemyKillHooks(ctx, target);
   }
 }
 
 // ── 直接对敌方造成伤害（无视武器，用于技能/道具） ───
 export function dealDirectDamage(ctx: BattleContext, target: EnemyState, n: number) {
   const dmg = Math.max(0, Math.round(n * (ctx.slotScale ?? 1)));
-  damageEnemy(target, dmg, ctx.log, `对 ${target.name} 造成 ${dmg} 点伤害。`);
+  damageEnemy(target, dmg, ctx.log, `对 ${target.name} 造成 ${dmg} 点伤害。`, ctx);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -166,6 +182,33 @@ export function triggerSelfDamageHooks(c: BattleContext, amount: number): void {
 
   // 3. ★ TODO v0.8.2 ♠T1 血染战旗：损血累积 → 武器 baseDmg+1
   // 4. ★ TODO v0.8.2 ♥T2 灼血：损血累积 → 所有活敌 +1 burn
+}
+
+/**
+ * 玩家自损统一入口（Round 2-B）
+ *
+ * 任何主动自损操作（p_lifetap / sk_blast / 血契 / 未来的自损流卡）都应调用此函数，
+ * 而不是手动 `c.player.vita -= cost` + `triggerSelfDamageHooks`。
+ *
+ * 流程：
+ *   1. 扣 HP（不会扣到负，最低 0）
+ *   2. log（如有 reason）
+ *   3. emit "玩家失血" 事件（triggerSelfDamageHooks）
+ *
+ * **不**走 damagePlayer 的 5 区减伤栈 —— 那是"被敌人攻击"路径，
+ * 自损不吃护盾 / 减伤 / 闪避，自损量即为最终损失量。
+ *
+ * @param c BattleContext
+ * @param amount 自损量（≥1 才生效）
+ * @param reason 可选日志字符串（"血契：自损 3 HP" 之类）
+ */
+export function dealSelfDamage(c: BattleContext, amount: number, reason?: string): void {
+  if (amount <= 0) return;
+  const cut = Math.min(amount, c.player.vita);  // 不扣到负
+  c.player.vita = Math.max(0, c.player.vita - amount);
+  if (reason) c.log(reason, "player");
+  // 即使 cut < amount（HP 不够扣满），事件按 cut 实际损失量触发
+  triggerSelfDamageHooks(c, cut);
 }
 
 /**
@@ -317,11 +360,8 @@ const BLOOD_BLADE: CardDef = {
           ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + heal);
           ctx.log(`血裂刃吸血 ${heal}。`, "player");
         }
-        if (ctx.target.alive && ctx.target.hp - d <= 0) {
-          const bonus = Math.floor(ctx.player.vitaMax * 0.20);
-          ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + bonus);
-          ctx.log(`血裂刃击杀回血 ${bonus}。`, "player");
-        }
+        // v0.8.2 Round 2-A：击杀回血 +20% maxHP 已迁移到 triggerEnemyKillHooks
+        // （在 damageEnemy 内 alive 翻转时统一触发）
         return d;
       },
     });
@@ -426,11 +466,8 @@ const EVERLAST_FANG: CardDef = {
           ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + heal);
           ctx.log(`永生之牙吸血 ${heal}。`, "player");
         }
-        if (ctx.target.alive && ctx.target.hp - d <= 0) {
-          const bonus = Math.floor(ctx.player.vitaMax * 0.20);
-          ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + bonus);
-          ctx.log(`永生之牙击杀回血 ${bonus}。`, "player");
-        }
+        // v0.8.2 Round 2-A：击杀回血 +20% maxHP 已迁移到 triggerEnemyKillHooks
+        // （在 damageEnemy 内 alive 翻转时统一触发）
         return d;
       },
     });
@@ -858,7 +895,7 @@ const THORN_ARMOR: CardDef = {
         // 第 1 hit 反 base，第 2 hit 反 base * 1.1，第 3 hit 反 base * 1.2，...
         const reflect = Math.floor(base * (1 + 0.10 * (hitNum - 1)));
         const t = c.enemies.find(e => e.alive);
-        if (t && reflect > 0) damageEnemy(t, reflect, c.log, `反伤甲（×${hitNum}）→ ${t.name} -${reflect}。`);
+        if (t && reflect > 0) damageEnemy(t, reflect, c.log, `反伤甲（×${hitNum}）→ ${t.name} -${reflect}。`, c);
         return d;
       },
     });
@@ -965,13 +1002,13 @@ const SCALE_MAIL: CardDef = {
   baseReduce: 2,
   equipEffects: [
     { desc: "-2 受击 + 反伤 2。", stat: "-2 受击 反伤2",
-      onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 2, c.log, `鳞甲反伤 ${t.name} -2。`); return Math.max(0, d - 2); } },
+      onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 2, c.log, `鳞甲反伤 ${t.name} -2。`, c); return Math.max(0, d - 2); } },
     { desc: "-3 受击 + 反伤 3。", stat: "-3 受击 反伤3",
-      onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 3, c.log, `鳞甲反伤 ${t.name} -3。`); return Math.max(0, d - 3); } },
+      onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 3, c.log, `鳞甲反伤 ${t.name} -3。`, c); return Math.max(0, d - 3); } },
     { desc: "-4 受击 + 反伤 4。", stat: "-4 受击 反伤4",
-      onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 4, c.log, `鳞甲反伤 ${t.name} -4。`); return Math.max(0, d - 4); } },
+      onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 4, c.log, `鳞甲反伤 ${t.name} -4。`, c); return Math.max(0, d - 4); } },
     { desc: "-5 受击 + 反伤 5。", stat: "-5 受击 反伤5",
-      onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 5, c.log, `鳞甲反伤 ${t.name} -5。`); return Math.max(0, d - 5); } },
+      onTakeDamage: (c, d) => { const t = c.enemies.find(e => e.alive); if (t) damageEnemy(t, 5, c.log, `鳞甲反伤 ${t.name} -5。`, c); return Math.max(0, d - 5); } },
   ],
 };
 
@@ -1159,17 +1196,13 @@ const SK_BLAST: CardDef = {
   id: "sk_blast", name: "爆裂术", category: "skill", target: "single",
   desc: "自损 5% 生命上限的血量（不降低生命上限），对目标造成其当前 HP 20% 的直接伤害。",
   onPlay: (c) => {
+    // v0.8.2 Round 2-B：自损走 dealSelfDamage 统一入口（事件总线）
     const cut = Math.max(1, Math.round(c.player.vitaMax * 0.05));
-    c.player.vita = Math.max(0, c.player.vita - cut);  // 只扣当前 HP，maxHP 不变
-    c.log(`爆裂术：自损 ${cut} HP（maxHP 不变）。`, "player");
-    // v0.8.2 audit #1 修复：自损走 triggerSelfDamageHooks
-    triggerSelfDamageHooks(c, cut);
+    dealSelfDamage(c, cut, `爆裂术：自损 ${cut} HP（maxHP 不变）。`);
 
+    // 杀敌走 dealDirectDamage → damageEnemy（内部 ctx 自动触发 onKill 事件）
     const enemyDmg = Math.max(1, Math.round(c.target.hp * 0.20));
-    const wasAlive = c.target.alive;
     dealDirectDamage(c, c.target, enemyDmg);
-    // v0.8.2 audit #1 修复：杀敌走 triggerEnemyKillHooks
-    if (wasAlive && !c.target.alive) triggerEnemyKillHooks(c, c.target);
   },
 };
 
@@ -1482,9 +1515,9 @@ const SK_BLOOD_PACT: CardDef = {
   onPlay: (c) => {
     const cost = Math.min(5, c.player.vita - 1);
     if (cost <= 0) { c.log("血契：HP 不足。", "system"); return; }
-    c.player.vita -= cost;
+    // v0.8.2 Round 2-B：自损走 dealSelfDamage 统一入口
+    dealSelfDamage(c, cost, `血契：自损 ${cost} HP，本回合吸血 +20%。`);
     addStatus(c.player, "blood_pact", "血契", 20, 1);
-    c.log(`血契：自损 ${cost} HP，本回合吸血 +20%。`, "player");
   },
 };
 
@@ -1495,7 +1528,7 @@ const SK_DRAIN_STRIKE: CardDef = {
   onPlay: (c) => {
     // nerf：35% → 25% 真伤；下回合不能攻击 → 下两回合（cost ↑↑）
     const dmg = Math.max(1, Math.floor(c.target.hp * 0.25));
-    damageEnemy(c.target, dmg, c.log, `汲血斩：${c.target.name} -${dmg}（真伤）。`);
+    damageEnemy(c.target, dmg, c.log, `汲血斩：${c.target.name} -${dmg}（真伤）。`, c);
     const before = c.player.vita;
     c.player.vita = Math.min(c.player.vitaMax, c.player.vita + dmg);
     if (c.player.vita > before) c.log(`汲血：回 ${c.player.vita - before} HP。`, "player");
@@ -1588,7 +1621,7 @@ const SK_DRAIN_WAVE: CardDef = {
       if (!e.alive) continue;
       const dmg = Math.min(Math.max(1, Math.ceil(e.maxHp * 0.05)), e.hp);
       totalHeal += dmg;
-      damageEnemy(e, dmg, c.log, `吸血潮：${e.name} -${dmg}。`);
+      damageEnemy(e, dmg, c.log, `吸血潮：${e.name} -${dmg}。`, c);
     }
     if (totalHeal > 0) {
       const before = c.player.vita;
@@ -1840,7 +1873,7 @@ const PERK_THORNS: CardDef = {
       const pct = Math.min(0.80, 0.10 * s);
       const reflect = Math.floor(d * pct);
       const t = c.enemies.find(e => e.alive);
-      if (t && reflect > 0) damageEnemy(t, reflect, c.log, `荆棘：${t.name} -${reflect}。`);
+      if (t && reflect > 0) damageEnemy(t, reflect, c.log, `荆棘：${t.name} -${reflect}。`, c);
       return d;
     },
   },
@@ -1870,22 +1903,14 @@ const PERK_LIFETAP: CardDef = {
     unitDesc: "每回合 -2% 最大 HP（固定），伤敌 = 最大 HP × 5%（每张）",
     summary: (s) => `-2% HP / 回 → 伤敌 ${s * 5}% HP`,
     onTurnStart: (c, s) => {
-      // 自损固定 2%（不随 stack 增长）
+      // v0.8.2 Round 2-B：自损走 dealSelfDamage 统一入口
       const cost = Math.max(1, Math.floor(c.player.vitaMax * 0.02));
-      c.player.vita = Math.max(0, c.player.vita - cost);
-      // v0.8.2 audit #1 修复：自损走 triggerSelfDamageHooks（之前绕过 p_blood_pact /
-      // took_damage_turn 标记，导致多个机制失效）
-      triggerSelfDamageHooks(c, cost);
+      dealSelfDamage(c, cost, `生命汲取：失 ${cost} HP。`);
 
+      // 杀敌：damageEnemy 接 ctx，alive 翻转时自动触发 onKill 事件总线
       const t = c.enemies.find(e => e.alive);
       const dmg = Math.max(1, Math.floor(c.player.vitaMax * 0.05 * s));
-      if (t) {
-        const wasAlive = t.alive;
-        damageEnemy(t, dmg, c.log, `生命汲取：失 ${cost} HP，${t.name} -${dmg}。`);
-        // v0.8.2 audit #1 修复：杀敌走 triggerEnemyKillHooks（之前绕过武器击杀回血 /
-        // 附魔 onKill / 未来 ♥T1 猎食者 / ♥T3 血涂）
-        if (wasAlive && !t.alive) triggerEnemyKillHooks(c, t);
-      }
+      if (t) damageEnemy(t, dmg, c.log, `生命汲取：${t.name} -${dmg}。`, c);
     },
   },
 };

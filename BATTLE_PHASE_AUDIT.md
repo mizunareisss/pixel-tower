@@ -21,11 +21,19 @@
 - ✅ #2 brew_regen 从 P1.5 挪到 P1.1（跟 ♥T1/ec_resilient/life_pouch 并列）
 - ✅ #3 damagePlayer 内 perk callback 改回传 dmg（不传 base）— 完全格挡时反伤跟旧公式行为一致
 
-**Round 2 待办（实装 v0.8.2 新附魔时一并做）**：
-- 武器击杀回血（everlast_fang / blood_blade +20% maxHP）从 onAttack callback 移到 triggerEnemyKillHooks
-- playAttack 内 damageEnemy 后调 triggerEnemyKillHooks（这样攻击击杀也走统一路径）
-- battle.ts 内 awardFragments 内 onKill 调用换成 triggerEnemyKillHooks
-- DOT 处理是否调 triggerSelfDamageHooks（取决于 ♠T1 战旗的设计）
+**Round 2 修复（已 commit）**：
+- ✅ `damageEnemy()` 接受可选 `ctx` 参数，alive 翻转时**内置**触发 `triggerEnemyKillHooks`（事件总线入口）
+- ✅ everlast_fang / blood_blade onAttack 里的 inline "击杀回血 +20% maxHP" 删除（已被 triggerEnemyKillHooks 接管）
+- ✅ playAttack hit loop / chain_blade splash / 反击姿态 的 damageEnemy 调用全部传 ctx
+- ✅ DOT（敌人中毒 / 燃烧 / 出血）的 damageEnemy 调用传 ctx — DOT 击杀也能触发武器击杀回血 / 附魔 onKill
+- ✅ awardFragments 用 `triggerEnemyKillHooks` 兜底（marker 防重复，无 ctx 老路径走这里）
+- ✅ 新增 `dealSelfDamage(c, amount, reason)` 统一自损入口；p_lifetap / sk_blast / sk_blood_pact 改用它
+- ✅ 玩家 DOT（中毒 / 燃烧 / 出血扣 HP）走 `dealSelfDamage` — took_damage_turn / p_blood_pact 蓄势 自动触发
+- ✅ Hits 独立分区 + cap 8 — 旧 `(weaponHits + bonuses) × tripleMult` 无上限，最坏 15 hits，现 cap 8
+
+**Round 2 残留（v0.8.2 附魔实装时再做）**：
+- ♠T1 血染战旗 / ♥T1 猎食者 / ♥T2 灼血 / ♥T3 血涂 — 监听 `triggerSelfDamageHooks` 或 `triggerEnemyKillHooks`
+- damagePlayer 内 perk onTakeDamage 循环 vs `triggerSelfDamageHooks` 的语义边界（敌人攻击路径 vs 自损路径）— 当前是两条平行管道，长期可考虑统一
 
 ---
 
@@ -133,6 +141,8 @@ if (eff?.onTakeDamage && !SKIP_PERK.has(inst.defId)) {
 - 加 hits cap（如 `hits = min(8, ...)`）
 - 或把 triple_strike 从 ×3 改成 +N 加法（这样 hits = 加法和，没乘积）
 - 推荐 cap 8
+
+**✅ Round 2 已修**：hits 改为独立 4 段分区（基础 / 加成 / 倍率 / 上限），硬封顶 8。详见 `MECHANICS_ZONE_REGISTRY.md` § Hits 分区。
 
 ---
 

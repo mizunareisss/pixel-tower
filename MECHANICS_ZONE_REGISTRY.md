@@ -155,6 +155,45 @@ dmg × GLOBAL_DMG_MULT   （默认 1.0）
 
 ---
 
+## Hits 分区（v0.8.2 Round 2-C）
+
+```
+hits = min(HITS_CAP, (基础 + Σ 加成) × ∏ 倍率)
+HITS_CAP = 8
+```
+
+**为什么独立成区**：旧公式 `(weaponHits + bonuses) * tripleMult` 没上限，叠满 buff 后 5×3=15 hits，单回合伤害不可控。Round 2 把 hits 拎出来做分区，硬封顶 8。
+
+### 阶段 A 基础区（flat）
+
+| 来源 | 数值 | 注释 |
+|---|---|---|
+| `wDef.hits` | 默认 1 / dual_blades 2 / wind_blade 2 | 武器定义 |
+
+### 阶段 B 加成区（+N，加法）
+
+| 来源 | 触发条件 | 数值 |
+|---|---|---|
+| `shadow_double` status | 影袭蓄势 / 不朽战甲 | +1（消耗）|
+| ♦ T2 灵巧连击 | active diamond + tier≥2 | +1（30% roll）|
+| ♦ T1 灵敏 keyword | active diamond + tier≥1 + ♦ 攻 | +1（25% roll）|
+
+### 阶段 C 倍率区（×，独立乘）
+
+| 来源 | 数值 | 注释 |
+|---|---|---|
+| `triple_strike` (♦ 大招 影子杀手) | ×3 | 一次性消耗 |
+
+**加新机制到倍率区的规则**：极度克制 — 这一区现在只有 1 个来源，新增需严肃评估 cap 风险。
+
+### 阶段 D 上限
+
+`hits = min(8, (A + B) × C)`
+
+最坏极限：基础 2 + 加成 2 + 三连击 = (2+2)×3 = 12 → cap 至 8。
+
+---
+
 ## 受击伤害公式（敌人 → 玩家）— 5 区
 
 ```
