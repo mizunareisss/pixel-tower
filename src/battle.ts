@@ -506,9 +506,15 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
   if (warBannerBonus > 0) log(`♠ 血染战旗：baseDmg +${warBannerBonus}。`, "player");
 
   // 临时 buff（直加）
-  if (player.statuses.find(s => s.id === "battle_cry")) base += 3;
+  if (player.statuses.find(s => s.id === "battle_cry")) {
+    base += 3;
+    log(`战吼 +3。`, "player");
+  }
   const wb = player.statuses.find(s => s.id === "weapon_buff");
-  if (wb) base += wb.stacks;
+  if (wb) {
+    base += wb.stacks;
+    log(`强化药 +${wb.stacks}。`, "player");
+  }
   const frenzy = player.statuses.find(s => s.id === "frenzy");
   if (frenzy) {
     base += frenzy.stacks * 2;
@@ -525,9 +531,11 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
   // 这些在旧公式里走 onAttack callback，重构后硬编码进基础区
   if (wDef.id === "war_bow" && ctx.target.hp > Math.floor(ctx.target.maxHp * 0.5)) {
     base += 3;
+    log(`战弓狙击 +3（敌 HP > 50%）。`, "player");
   }
   if (wDef.id === "berserker_blade" && player.vita < Math.floor(player.vitaMax * 0.5)) {
     base += 4;
+    log(`狂剑 +4（HP < 50%）。`, "player");
   }
 
   // p_blood_pact：受击转化的 +N flat（一次性，消耗 blood_pact_charge）

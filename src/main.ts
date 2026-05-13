@@ -57,7 +57,7 @@ import { NODE_TYPE_META, getReachableNodes } from "./map.ts";
 import { SUIT_SYMBOLS, SUITS, isRedSuit, FIGHTS_PER_FLOOR, STATUS_META, RACES, FRAGMENT_NAMES, FRAGMENT_ICONS,
   ENCHANTS_TRADITION, ENCHANTS_MASTER, ENCHANTS_ALL_NEW,
   ENCHANT_NAMES, ENCHANT_RECIPES, ENCHANT_TABLE_META, RACE_NAMES, isRareRace,
-  getEnchantMaxLevel, getEnchantCategory,
+  getEnchantMaxLevel, getEnchantCategory, getEnchantParam,
   getEnchantDescAt,
   SUIT_TIER_NAMES, SUIT_TIER_DESCS, SUIT_THEMES, APP_VERSION } from "./types.ts";
 import type { EnemyRace, Suit, EnchantId } from "./types.ts";
@@ -1708,6 +1708,27 @@ function computeStatusEffectiveText(id: string, stacks: number): string | null {
     case "enemy_atk_buff":   return `敌人下次攻击 +${stacks} 伤害`;
     case "enemy_next_hits":  return `敌人下次攻击 +${stacks} hits`;
     case "enemy_sacrifice":  return `敌人下次攻击 +${stacks}% 伤害`;
+    // v0.8.2 新附魔真 status
+    case "night_walk":            return "所有攻击 hits +1（持续期间）";
+    case "shadow_clone_active":   return "所有攻击 hits +2（持续期间）";
+    case "combo_unlock":          return "本场战斗永久 hits +1（已解锁）";
+    case "decap_charge":          return "下次攻击 hits 强制 = 1，但伤害 ×M（M 按附魔 Lv：2.0/2.5/3.0）";
+    case "purge_vortex_dot_immune": return "本回合新增的中毒/燃烧/出血对你无效（已存在的正常 tick）";
+    // v0.8.2 附魔字段伪 status（buildVirtualEnchantStatuses 注入）
+    case "_enchant_hunt": {
+      const cap = p.weaponEnchant === "ench_hunter_heart" ? getEnchantParam(p, 2) : 0;
+      const mult = p.weaponEnchant === "ench_hunter_heart" ? getEnchantParam(p, 1) / 100 : 0;
+      return `下次攻击自动消耗 1 stack，伤害 ×${mult.toFixed(2)}。当前 stack ${stacks}${cap ? ` / cap ${cap}` : ""}`;
+    }
+    case "_enchant_war_banner": {
+      const cap = p.weaponEnchant === "ench_war_banner" ? getEnchantParam(p, 1) : 0;
+      return `武器 baseDmg 永久 +${stacks}${cap ? ` / cap +${cap}` : ""}（本场战斗，新战斗清零）`;
+    }
+    case "_enchant_combo": {
+      const trigger = p.weaponEnchant === "ench_endless_combo" ? getEnchantParam(p, 0) : 0;
+      return `本场连续命中 ${stacks}${trigger ? ` / ${trigger}` : ""} 次（出技能/未命中重置；达触发数永久 hits +1）`;
+    }
+    case "_enchant_blood_anoint": return `本场已 +${stacks} 最大 HP（每击杀敌人继续累积，新战斗清零）`;
   }
   return null;
 }
