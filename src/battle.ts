@@ -150,11 +150,14 @@ export function getActiveSpecialty(state: BattleState): Suit | null {
   }));
   const maxAff = Math.max(...entries.map(e => e.a));
   if (maxAff < 5) return null;
+  // ★ override 优先：只要 override 花色仍 ≥ 5（Tier 1 门槛），就用 override，
+  // 不要求并列最高。释放大招后原专精消耗 8 暂时低于其他花色，但仍锁定原专精。
+  if (state.activeSpecialtyOverride) {
+    const ovr = entries.find(e => e.s === state.activeSpecialtyOverride);
+    if (ovr && ovr.a >= 5) return ovr.s;
+  }
   const tied = entries.filter(e => e.a === maxAff);
   if (tied.length === 1) return tied[0].s;
-  if (state.activeSpecialtyOverride && tied.some(t => t.s === state.activeSpecialtyOverride)) {
-    return state.activeSpecialtyOverride;
-  }
   tied.sort((x, y) => y.p - x.p || SUITS.indexOf(x.s) - SUITS.indexOf(y.s));
   return tied[0].s;
 }

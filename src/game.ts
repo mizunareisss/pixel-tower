@@ -1037,6 +1037,9 @@ export function releaseSuitUltimate(state: GameState, suit: Suit): boolean {
 
   // 大招消耗 8 亲和度（持久化到 suitConsumedTotal，跨战不归零，让大招真正吃 build 成本）
   consumeSuitAffinity(state.battle, suit, 8);
+  // 修复：消耗后原专精会暂时低于其他花色，自动切换 + 切不回去（手动切换要求并列最高）。
+  // 锁定 override 为大招花色，getActiveSpecialty 优先用 override（aff ≥ 5 时）。
+  state.battle.activeSpecialtyOverride = suit;
   log(`大招 ${suit}：消耗 8 亲和（永久），亲和度需重新积累方可再次释放。`, "system");
   return true;
 }
