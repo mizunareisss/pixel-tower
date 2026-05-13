@@ -2,6 +2,11 @@
 // 卡牌系统：手牌 + 牌库 + 弃牌堆
 // 常驻区：特性 + 武器（一款，可叠 4） + 防具（一款，可叠 4）
 
+// ─── 版本号 ────────────────────────────────────────────────
+// 显示在汉堡菜单顶部 + 对应同版本号的 GAME_MECHANICS_vX.Y.Z.md
+// 发新版时同步 bump 这个常量 + 重命名机制文档
+export const APP_VERSION = "0.8.0";
+
 export type Suit = "spade" | "diamond" | "heart" | "club";
 export const SUIT_SYMBOLS: Record<Suit, string> = {
   spade: "♠", diamond: "♦", heart: "♥", club: "♣",
