@@ -232,12 +232,21 @@ export const FRAGMENT_ICONS: Record<EnemyRace, string> = {
 
 export const RACES: EnemyRace[] = ["beast", "humanoid", "undead", "giant", "dark"];
 
-// ── 附魔系统 v2（5 普通 + 8 复合 = 13 个）────────────────
-// 设计宗旨：附魔是中后期"补全 / 特化 build"的层级，单件数值控制在 15-30%
-// 普通附魔（人/兽/不死）单种族 ×3 → ~15% 增益
-// 稀少附魔（巨怪/暗影）单种族 ×3 → ~25% 增益（强档）
-// 复合附魔 = 2 种族×2 碎片；含稀少 = 中档；双稀少 = 究极
+// ── 附魔系统 v2（旧 13 legacy + v0.8.2 新 14 = 27 个）────
+//
+// **legacy 13**（v0.7-v0.8.1）：5 单普通 + 8 复合，每个 5 档（Lv1-5）
+//   仍在 dev / main 实装运行；待新 14 完整迁移后会全部删除（见 ENCHANT_REDESIGN_WIP_v0.8.2.md）
+//
+// **新 14**（v0.8.2 重设计，目前为骨架，未启用）：
+//   - **传统流派 12**（4 流派 × T1/T2/T3）— 替换旧 13 的"数值放大器"思路
+//     T1 单普通 ×3 / T2 双普通 ×2 各 / T3 双普通 ×2 各 + 稀有 ×1
+//   - **大师 2**（双稀有 ×3 各）— F6+ 高级铁匠铺独占的"游戏后期解放工具"
+//     与流派附魔共用 weaponEnchant 槽位，定位独立
+//
+// 所有新附魔 3 档（Lv1-3），各自有 maxLevel 通过 getEnchantMaxLevel() 取，
+// 不再依赖 ENCHANT_MAX_LEVEL 全局常量（保留兼容，仅给 legacy 用）。
 export type EnchantId =
+  // ─── legacy 13（旧）────────────────────────────────────────
   // 普通（5）：单种族 ×3
   | "e_brawler"      // 兽 ×3 — ♠ 特化
   | "e_strategist"   // 人型 ×3 — ♣ 特化
@@ -252,9 +261,30 @@ export type EnchantId =
   | "ec_lifesteal"   // 不死×2 + 暗影×2 — ♥ 强化
   | "ec_resilient"   // 兽×2 + 不死×2 — ♥ 互补
   | "ec_arcane"      // 人型×2 + 暗影×2 — ♣ 强化
-  | "ec_runic";      // 人型×2 + 巨怪×2 — ♣ 互补
+  | "ec_runic"       // 人型×2 + 巨怪×2 — ♣ 互补
+  // ─── v0.8.2 流派附魔 12（新，骨架）────────────────────────
+  // ♠ 莽夫流：兽(主) / 人(副) / 巨(副稀)
+  | "ench_war_banner"      // ♠ T1「血染战旗」(兽 ×3) — 损血累积武器 baseDmg+1
+  | "ench_endless_combo"   // ♠ T2「无影连斩」(兽 ×2 + 人 ×2) — 连击解锁永久 hits+1
+  | "ench_decap"           // ♠ T3「斩首」(兽 ×2 + 人 ×2 + 巨 ×1) — 主动按钮强制 hits=1 换 ×M
+  // ♦ 暗影流：人(主) / 死(副) / 暗(副稀)
+  | "ench_night_walk"      // ♦ T1「夜行」(人 ×3) — 前 N 回合 hits+1
+  | "ench_chain"           // ♦ T2「连环」(人 ×2 + 死 ×2) — 自身每层 debuff +N%
+  | "ench_shadow_clone"    // ♦ T3「阴影分身」(人 ×2 + 死 ×2 + 暗 ×1) — 主动按钮 hits+2 + 自易伤
+  // ♥ 红心流：死(主) / 兽(副) / 暗(副稀)
+  | "ench_hunter_heart"    // ♥ T1「猎食者之心」(死 ×3) — 吸血 + 击杀单次 ×M（跨战斗 stack）
+  | "ench_glutton"         // ♥ T2「饕餮」(死 ×2 + 兽 ×2) — 吸血溢出转护盾
+  | "ench_blood_anoint"    // ♥ T3「血涂」(死 ×2 + 兽 ×2 + 暗 ×1) — 击杀 +N% maxHP 永久（本场）
+  // ♣ 法术流：人(主) / 兽(副) / 巨(副稀)
+  | "ench_curse_ring"      // ♣ T1「咒环」(人 ×3) — 出技能/主动弃攻击 roll 摸 1
+  | "ench_curse_shift"     // ♣ T2「转嫁」(人 ×2 + 兽 ×2) — 技能命中 roll 转 debuff（替换旧"转嫁"设计）
+  | "ench_purge_vortex"    // ♣ T3「净化漩涡」(人 ×2 + 兽 ×2 + 巨 ×1) — 单次弃 ≥4 张时护盾+免疫新 DOT
+  // ─── v0.8.2 大师附魔 2（新，骨架，F6+ 独占）──────────────
+  | "ench_element_master"  // 元素大师 (巨 ×3 + 暗 ×3) — DOT 免疫递进
+  | "ench_suit_master";    // 花色大师 (巨 ×3 + 暗 ×3) — 花色惩罚减/免
 
 export const ENCHANT_NAMES: Record<EnchantId, string> = {
+  // legacy 13
   e_brawler:    "强袭",
   e_strategist: "算计",
   e_reaper:     "收割",
@@ -268,6 +298,22 @@ export const ENCHANT_NAMES: Record<EnchantId, string> = {
   ec_resilient: "守护契",
   ec_arcane:    "秘法回响",
   ec_runic:     "符文护盾",
+  // v0.8.2 流派 12
+  ench_war_banner:    "血染战旗",
+  ench_endless_combo: "无影连斩",
+  ench_decap:         "斩首",
+  ench_night_walk:    "夜行",
+  ench_chain:         "连环",
+  ench_shadow_clone:  "阴影分身",
+  ench_hunter_heart:  "猎食者之心",
+  ench_glutton:       "饕餮",
+  ench_blood_anoint:  "血涂",
+  ench_curse_ring:    "咒环",
+  ench_curse_shift:   "转嫁",
+  ench_purge_vortex:  "净化漩涡",
+  // v0.8.2 大师 2
+  ench_element_master: "元素大师",
+  ench_suit_master:    "花色大师",
 };
 
 // 注：旧的 ENCHANT_DESCS（固定描述）已删除（v0.8.1）。
@@ -275,41 +321,112 @@ export const ENCHANT_NAMES: Record<EnchantId, string> = {
 //   保留双源易让后续 reviewer 误以为 UI 拉错描述。
 
 // 附魔配方
+//
+// v0.8.2 新增 category / tier / maxLevel 字段：
+//   - category "legacy": 旧 13 个，5 档，UI 用 ENCHANTS list 老路径
+//   - category "tradition": 新 12 流派，3 档，T1/T2/T3 配方梯度
+//   - category "master": 新 2 大师，3 档，F6+ 独占
+//   - branch=null 表示与流派无关（仅 master 用）
+export type EnchantCategory = "legacy" | "tradition" | "master";
+export type EnchantTier = "T1" | "T2" | "T3";
+
 export interface EnchantRecipe {
   kind: "single" | "composite";
   cost: Partial<Record<EnemyRace, number>>;
-  branch: Suit;                              // 流派归属（UI 分组用）
-  variant: "specialize" | "complement";      // 强化 / 互补
+  branch: Suit | null;                       // 流派归属（UI 分组用），master 为 null
+  variant: "specialize" | "complement";      // 强化 / 互补（legacy 兼容；新附魔统一标 "specialize"）
   hasRare: boolean;                          // 含稀少种族（巨怪/暗影）→ 强档
-  doubleRare?: boolean;                      // 双稀少（究极）
+  doubleRare?: boolean;                      // 双稀少（究极 / 大师）
+  // v0.8.2 新字段（legacy 可省略，默认 legacy / 5 档）
+  category?: EnchantCategory;                // legacy / tradition / master
+  tier?: EnchantTier;                        // tradition 才有 T1/T2/T3
+  maxLevel?: number;                         // 省略默认 5（legacy）；新附魔填 3
+  shopGate?: number;                         // 商店解锁楼层（master 填 6）
 }
 
 export const ENCHANT_RECIPES: Record<EnchantId, EnchantRecipe> = {
-  // 普通附魔（5）
-  e_brawler:    { kind: "single",    cost: { beast:    3 }, branch: "spade",   variant: "specialize", hasRare: false },
-  e_strategist: { kind: "single",    cost: { humanoid: 3 }, branch: "club",    variant: "specialize", hasRare: false },
-  e_reaper:     { kind: "single",    cost: { undead:   3 }, branch: "heart",   variant: "specialize", hasRare: false },
-  e_titan:      { kind: "single",    cost: { giant:    3 }, branch: "spade",   variant: "specialize", hasRare: true  },
-  e_phantom:    { kind: "single",    cost: { dark:     3 }, branch: "diamond", variant: "specialize", hasRare: true  },
-  // 复合附魔（8）
-  ec_warblood:  { kind: "composite", cost: { beast:    2, giant: 2    }, branch: "spade",   variant: "specialize", hasRare: true  },
-  ec_phalanx:   { kind: "composite", cost: { beast:    2, humanoid: 2 }, branch: "spade",   variant: "complement", hasRare: false },
-  ec_swift:     { kind: "composite", cost: { dark:     2, giant: 2    }, branch: "diamond", variant: "specialize", hasRare: true,  doubleRare: true },
-  ec_focus:     { kind: "composite", cost: { undead:   2, humanoid: 2 }, branch: "diamond", variant: "complement", hasRare: false },
-  ec_lifesteal: { kind: "composite", cost: { undead:   2, dark: 2     }, branch: "heart",   variant: "specialize", hasRare: true  },
-  ec_resilient: { kind: "composite", cost: { beast:    2, undead: 2   }, branch: "heart",   variant: "complement", hasRare: false },
-  ec_arcane:    { kind: "composite", cost: { humanoid: 2, dark: 2     }, branch: "club",    variant: "specialize", hasRare: true  },
-  ec_runic:     { kind: "composite", cost: { humanoid: 2, giant: 2    }, branch: "club",    variant: "complement", hasRare: true  },
+  // ─── legacy 13（旧，5 档）─────────────────────────────────
+  e_brawler:    { kind: "single",    cost: { beast:    3 }, branch: "spade",   variant: "specialize", hasRare: false, category: "legacy" },
+  e_strategist: { kind: "single",    cost: { humanoid: 3 }, branch: "club",    variant: "specialize", hasRare: false, category: "legacy" },
+  e_reaper:     { kind: "single",    cost: { undead:   3 }, branch: "heart",   variant: "specialize", hasRare: false, category: "legacy" },
+  e_titan:      { kind: "single",    cost: { giant:    3 }, branch: "spade",   variant: "specialize", hasRare: true,  category: "legacy" },
+  e_phantom:    { kind: "single",    cost: { dark:     3 }, branch: "diamond", variant: "specialize", hasRare: true,  category: "legacy" },
+  ec_warblood:  { kind: "composite", cost: { beast:    2, giant: 2    }, branch: "spade",   variant: "specialize", hasRare: true,  category: "legacy" },
+  ec_phalanx:   { kind: "composite", cost: { beast:    2, humanoid: 2 }, branch: "spade",   variant: "complement", hasRare: false, category: "legacy" },
+  ec_swift:     { kind: "composite", cost: { dark:     2, giant: 2    }, branch: "diamond", variant: "specialize", hasRare: true,  doubleRare: true, category: "legacy" },
+  ec_focus:     { kind: "composite", cost: { undead:   2, humanoid: 2 }, branch: "diamond", variant: "complement", hasRare: false, category: "legacy" },
+  ec_lifesteal: { kind: "composite", cost: { undead:   2, dark: 2     }, branch: "heart",   variant: "specialize", hasRare: true,  category: "legacy" },
+  ec_resilient: { kind: "composite", cost: { beast:    2, undead: 2   }, branch: "heart",   variant: "complement", hasRare: false, category: "legacy" },
+  ec_arcane:    { kind: "composite", cost: { humanoid: 2, dark: 2     }, branch: "club",    variant: "specialize", hasRare: true,  category: "legacy" },
+  ec_runic:     { kind: "composite", cost: { humanoid: 2, giant: 2    }, branch: "club",    variant: "complement", hasRare: true,  category: "legacy" },
+
+  // ─── v0.8.2 流派 12（3 档）───────────────────────────────
+  // ♠ 莽夫流（主兽 / 副人 / 副稀巨）
+  ench_war_banner:    { kind: "single",    cost: { beast:    3 },                         branch: "spade",   variant: "specialize", hasRare: false, category: "tradition", tier: "T1", maxLevel: 3 },
+  ench_endless_combo: { kind: "composite", cost: { beast:    2, humanoid: 2 },            branch: "spade",   variant: "specialize", hasRare: false, category: "tradition", tier: "T2", maxLevel: 3 },
+  ench_decap:         { kind: "composite", cost: { beast:    2, humanoid: 2, giant: 1 },  branch: "spade",   variant: "specialize", hasRare: true,  category: "tradition", tier: "T3", maxLevel: 3 },
+  // ♦ 暗影流（主人 / 副死 / 副稀暗）
+  ench_night_walk:    { kind: "single",    cost: { humanoid: 3 },                         branch: "diamond", variant: "specialize", hasRare: false, category: "tradition", tier: "T1", maxLevel: 3 },
+  ench_chain:         { kind: "composite", cost: { humanoid: 2, undead: 2 },              branch: "diamond", variant: "specialize", hasRare: false, category: "tradition", tier: "T2", maxLevel: 3 },
+  ench_shadow_clone:  { kind: "composite", cost: { humanoid: 2, undead: 2, dark: 1 },     branch: "diamond", variant: "specialize", hasRare: true,  category: "tradition", tier: "T3", maxLevel: 3 },
+  // ♥ 红心流（主死 / 副兽 / 副稀暗）
+  ench_hunter_heart:  { kind: "single",    cost: { undead:   3 },                         branch: "heart",   variant: "specialize", hasRare: false, category: "tradition", tier: "T1", maxLevel: 3 },
+  ench_glutton:       { kind: "composite", cost: { undead:   2, beast: 2 },               branch: "heart",   variant: "specialize", hasRare: false, category: "tradition", tier: "T2", maxLevel: 3 },
+  ench_blood_anoint:  { kind: "composite", cost: { undead:   2, beast: 2, dark: 1 },      branch: "heart",   variant: "specialize", hasRare: true,  category: "tradition", tier: "T3", maxLevel: 3 },
+  // ♣ 法术流（主人 / 副兽 / 副稀巨）
+  ench_curse_ring:    { kind: "single",    cost: { humanoid: 3 },                         branch: "club",    variant: "specialize", hasRare: false, category: "tradition", tier: "T1", maxLevel: 3 },
+  ench_curse_shift:   { kind: "composite", cost: { humanoid: 2, beast: 2 },               branch: "club",    variant: "specialize", hasRare: false, category: "tradition", tier: "T2", maxLevel: 3 },
+  ench_purge_vortex:  { kind: "composite", cost: { humanoid: 2, beast: 2, giant: 1 },     branch: "club",    variant: "specialize", hasRare: true,  category: "tradition", tier: "T3", maxLevel: 3 },
+
+  // ─── v0.8.2 大师 2（3 档，双稀有，F6+ 独占）─────────────
+  // 跟流派无关（branch: null）；UI 单独分类显示
+  ench_element_master: { kind: "composite", cost: { giant: 3, dark: 3 }, branch: null, variant: "specialize", hasRare: true, doubleRare: true, category: "master", maxLevel: 3, shopGate: 6 },
+  ench_suit_master:    { kind: "composite", cost: { giant: 3, dark: 3 }, branch: null, variant: "specialize", hasRare: true, doubleRare: true, category: "master", maxLevel: 3, shopGate: 6 },
 };
 
+// legacy 附魔列表 — 仍然是 main.ts / events.ts / game.ts 当前消费的 UI / 商店源
+// commit C 之后将切换到 ENCHANTS_TRADITION + ENCHANTS_MASTER
 export const ENCHANTS: EnchantId[] = [
   "e_brawler", "e_strategist", "e_reaper", "e_titan", "e_phantom",
   "ec_warblood", "ec_phalanx", "ec_swift", "ec_focus",
   "ec_lifesteal", "ec_resilient", "ec_arcane", "ec_runic",
 ];
 
-// 附魔 5 档逐步升级 — 同一附魔每次铁匠铺重附消耗等额配方 + Lv +1，至 Lv5 满级
+// v0.8.2 流派附魔 12（commit C 切换 UI 后启用）
+export const ENCHANTS_TRADITION: EnchantId[] = [
+  // ♠
+  "ench_war_banner", "ench_endless_combo", "ench_decap",
+  // ♦
+  "ench_night_walk", "ench_chain", "ench_shadow_clone",
+  // ♥
+  "ench_hunter_heart", "ench_glutton", "ench_blood_anoint",
+  // ♣
+  "ench_curse_ring", "ench_curse_shift", "ench_purge_vortex",
+];
+
+// v0.8.2 大师附魔 2（commit C 切换 UI 后启用）
+export const ENCHANTS_MASTER: EnchantId[] = [
+  "ench_element_master", "ench_suit_master",
+];
+
+// 全部 v0.8.2 新附魔（流派 + 大师），UI 切换时用
+export const ENCHANTS_ALL_NEW: EnchantId[] = [
+  ...ENCHANTS_TRADITION,
+  ...ENCHANTS_MASTER,
+];
+
+// legacy 附魔的固定 5 档（保留兼容；新附魔通过 getEnchantMaxLevel() 查 recipe）
 export const ENCHANT_MAX_LEVEL = 5;
+
+// 读某个附魔的 max level（legacy 5 / 新附魔 3）
+export function getEnchantMaxLevel(id: EnchantId): number {
+  return ENCHANT_RECIPES[id]?.maxLevel ?? ENCHANT_MAX_LEVEL;
+}
+
+// 读某个附魔的分类
+export function getEnchantCategory(id: EnchantId): EnchantCategory {
+  return ENCHANT_RECIPES[id]?.category ?? "legacy";
+}
 
 // 各档参数表。index = level - 1。每个附魔的参数槽数量不同，按各自语义读取。
 // 注：所有 ENCHANT_EFFECTS / battle.ts 内的硬编码数值都应该读这个表。
@@ -318,14 +435,15 @@ export const ENCHANT_MAX_LEVEL = 5;
 //   - Lv1 ≈ 旧固定值的 0.85-0.95×（起点不弱）
 //   - Lv3 ≈ 旧固定值
 //   - Lv5 ≤ 旧固定值的 1.5×（硬上限，不能更高）
+// v0.8.2 新附魔的 ENCHANT_LEVEL_PARAMS 全部占位 [[0],[0],[0]]，
+// 等用户更新数值后 commit E 统一填。占位状态下 battle.ts 内 hook 走默认分支不生效。
 export const ENCHANT_LEVEL_PARAMS: Record<EnchantId, readonly number[][]> = {
-  // 普通（单种族 ×3）
+  // ─── legacy 5 档（旧）────────────────────────────────────
   e_brawler:    [[10], [12], [14], [16], [18]],                        // [HP<50% 攻击 +N%]（旧 12 → Lv5 18 = 1.50×）
   e_strategist: [[2],  [2],  [2],  [3],  [3]],                          // [每非攻击牌下张 +N]（旧 2 → Lv5 3 = 1.50×）
   e_reaper:     [[140],[150],[160],[165],[175]],                        // [击杀后下次 ×(N/100)]（旧 150 → Lv5 175 ≈ bonus +50%→+75% = 1.50×）
   e_titan:      [[22], [25], [28], [32], [37]],                         // [≥8% maxHP +N%]（旧 25 → Lv5 37 = 1.48×）
   e_phantom:    [[170,2],[180,3],[200,3],[220,4],[250,4]],               // [闪避后 ×(N/100), 易伤 +M]（旧 200/3 → Lv5 250 = bonus 1.50× / vuln 4 = 1.33×）
-  // 复合（×2+×2）
   ec_warblood:  [[18,1,4],[20,1,5],[22,1,5],[26,1,6],[30,2,7]],          // [HP<50% +N%, perStep, cap]（旧 20/-/5 → Lv5 30/2/7 = 1.50× / cap 1.40×）
   ec_phalanx:   [[1,3,4],[1,3,5],[1,4,5],[1,4,6],[1,4,7]],               // [每张 -N, cap -M, 下回合护盾 K]（旧 1/-3/5 → Lv5 1/-4/7 = 1.33× / 1.40×）
   ec_swift:     [[9,4,22,1],[10,5,25,1],[11,5,28,1],[13,6,33,1],[15,7,40,1]], // [闪避 +N%, 闪后 +M%, cap K%, 易伤 L]（旧 10/5/30/1 → Lv5 15/7/40/1 = 1.50/1.40/1.33×）
@@ -334,11 +452,36 @@ export const ENCHANT_LEVEL_PARAMS: Record<EnchantId, readonly number[][]> = {
   ec_resilient: [[2,2,1],[2,2,1],[2,2,1],[3,2,1],[3,3,2]],               // [受击 -N, HP>80% 再 -M, 每回合 +K HP]（旧 2/2/1 → Lv5 3/3/2 = 1.50/1.50/2×）
   ec_arcane:    [[25],[28],[30],[38],[45]],                              // [染/咒首攻 +N%]（旧 30 → Lv5 45 = 1.50×）
   ec_runic:     [[2,100],[3,100],[3,100],[4,100],[4,100]],               // [受击 -N, 首次受击 -M%（100% = 完全免疫）]（旧 3/100 → Lv5 4/100 = 1.33×）
+
+  // ─── v0.8.2 流派 12（3 档，TODO 数值占位）─────────────────
+  // 待用户更新数值表后 commit E 统一填
+  // ♠
+  ench_war_banner:    [[0,0],[0,0],[0,0]],                              // TODO [损血门槛%, cap +N]
+  ench_endless_combo: [[0],[0],[0]],                                    // TODO [触发连击数]
+  ench_decap:         [[0,0],[0,0],[0,0]],                              // TODO [每场激活次数, 倍率×100]
+  // ♦
+  ench_night_walk:    [[0],[0],[0]],                                    // TODO [持续回合]
+  ench_chain:         [[0],[0],[0]],                                    // TODO [每层 +N%]
+  ench_shadow_clone:  [[0,0],[0,0],[0,0]],                              // TODO [易伤层 +M, 每场激活次数]
+  // ♥
+  ench_hunter_heart:  [[0,0,0],[0,0,0],[0,0,0]],                        // TODO [吸血%, 击杀×倍率×100, stack cap]
+  ench_glutton:       [[0,0],[0,0],[0,0]],                              // TODO [转化率×100, 护盾 cap]
+  ench_blood_anoint:  [[0],[0],[0]],                                    // TODO [击杀转化%]
+  // ♣
+  ench_curse_ring:    [[0],[0],[0]],                                    // TODO [摸牌触发率%]
+  ench_curse_shift:   [[0],[0],[0]],                                    // TODO [转移触发率%]
+  ench_purge_vortex:  [[0,0],[0,0],[0,0]],                              // TODO [触发门槛(=4), 护盾层数(=3)] — 实际硬编码逻辑，参数仅供描述
+
+  // ─── v0.8.2 大师 2（3 档，TODO 数值占位）──────────────────
+  ench_element_master: [[0],[0],[0]],                                   // TODO [免疫 DOT 数量：1/2/3]
+  ench_suit_master:    [[0],[0],[0]],                                   // TODO [异色乘数×100：90/100/120]
 } as const;
 
-// 工具：读当前 player 的附魔档位（默认 1，clamp 到 [1, 5]）
+// 工具：读当前 player 的附魔档位（默认 1，clamp 到该附魔的 maxLevel）
 export function getEnchantLevel(player: PlayerState): number {
-  return Math.max(1, Math.min(ENCHANT_MAX_LEVEL, player.weaponEnchantLevel ?? 1));
+  const id = player.weaponEnchant;
+  const max = id ? getEnchantMaxLevel(id) : ENCHANT_MAX_LEVEL;
+  return Math.max(1, Math.min(max, player.weaponEnchantLevel ?? 1));
 }
 
 // 工具：读当前附魔指定参数槽的值
@@ -367,6 +510,22 @@ export function getEnchantDescAt(id: EnchantId, level: number): string {
     case "ec_resilient": return `受击 -${p[0]}；HP > 80% 时受击再 -${p[1]}；每回合开始 +${p[2]} HP。`;
     case "ec_arcane":    return `每出 1 张非攻击牌额外摸 1（每回合 cap 3）；持咒/染色 buff 在场时首次攻击 +${p[0]}%。`;
     case "ec_runic":     return `受击 -${p[0]}；每场首次受击 ${p[1] >= 100 ? "完全免疫" : "-" + p[1] + "%"}；${lv >= 5 ? "中毒/燃烧/出血对你无效。" : "（Lv5 解锁 DOT 免疫）"}`;
+    // ─── v0.8.2 流派 12（数值占位，等 commit E 填）─────────
+    case "ench_war_banner":    return `（设计中）每损 N% maxHP 永久武器 baseDmg +1（本场战斗，cap +M）。`;
+    case "ench_endless_combo": return `（设计中）连续命中 N 次攻击后永久解锁 hits +1（本场战斗，每场仅 1 次）。`;
+    case "ench_decap":         return `（设计中）本场可激活 N 次「斩首」：下次攻击强制 hits=1 但伤害 ×M。`;
+    case "ench_night_walk":    return `（设计中）战斗开局进入夜行：前 N 回合所有攻击 hits +1。`;
+    case "ench_chain":         return `（设计中）玩家身上每 1 层 debuff，所有攻击 +N%。`;
+    case "ench_shadow_clone":  return `（设计中）本场可激活 N 次「分身」：本回合 hits +2 + 自易伤 M 层。`;
+    case "ench_hunter_heart":  return `（设计中）攻击命中吸血 N%；击杀后挂"猎杀" stack，下次攻击 ×M 倍消耗（stack 可累积，跨战斗）。`;
+    case "ench_glutton":       return `（设计中）玩家吸血时，溢出 maxHP 的部分转化为临时护盾。`;
+    case "ench_blood_anoint":  return `（设计中）玩家击杀敌人时，该敌人 maxHP × N% 永久 +为玩家 maxHP（本场战斗）。`;
+    case "ench_curse_ring":    return `（设计中）出 1 张技能牌 / 主动弃 1 张攻击牌（爆牌不算），N% 概率摸 1 张。`;
+    case "ench_curse_shift":   return `（设计中）每出 1 张技能牌命中时，N% 概率把玩家身上一个随机 debuff 转移给敌人（层数一并转移）。`;
+    case "ench_purge_vortex":  return `（设计中）单次主动弃手牌 ≥4 张时：3 层临时护盾 + 本回合内新增的中毒/燃烧/出血效果无效。`;
+    // ─── v0.8.2 大师 2 ──────────────────────────────────────
+    case "ench_element_master": return `（设计中）DOT 递进免疫：Lv1 中毒 / Lv2 +燃烧 / Lv3 +出血（全 DOT 免疫）。`;
+    case "ench_suit_master":    return `（设计中）Lv1 异色惩罚 -10% / Lv2 异色无惩罚 / Lv3 所有攻击牌强制视作同色（享受 +20% 增益）。`;
   }
 }
 
@@ -495,7 +654,19 @@ export interface PlayerState {
 
   // 武器槽附魔（绑定武器槽，换武器时保留）
   weaponEnchant?: EnchantId;
-  weaponEnchantLevel?: number;  // 1-5，铁匠铺多次附同样的会升 Lv（消耗等额配方）；换不同附魔重置为 1
+  weaponEnchantLevel?: number;  // legacy 1-5 / 新附魔 1-3（用 getEnchantMaxLevel(id) 取上限）
+
+  // ─── v0.8.2 附魔跨战斗 / 单场字段（commit B 启用）──────
+  // ♥ T1 猎食者之心：击杀累积"猎杀" stack，下次攻击 ×M 消耗。**跨战斗保留**（不进 statuses）
+  huntStacks?: number;
+  // ♠ T1 血染战旗：每损 N% maxHP，武器 baseDmg 永久 +1（**本场战斗**累积，newBattle 重置）
+  warBannerBonus?: number;
+  // ♠ T1 血染战旗：本场累积已损失的 maxHP %（小数 0-1），用来跨多次损血累计计 +1 触发点
+  warBannerLossPct?: number;
+  // ♠ T2 无影连斩：当前连续命中数（被打断 = 出技能/道具/未命中 → 重置）
+  combo?: number;
+  // ♠ T3 斩首 / ♦ T3 阴影分身 / ♥ T1 猎食者：本场各 active 附魔的剩余可用次数（newBattle 重置）
+  enchantActiveLeft?: number;
 
   // 整局 1 次的复活机制（不灭之心）已使用次数；不在 statuses 里因为状态会战斗间清空
   revivesUsed?: number;

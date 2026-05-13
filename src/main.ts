@@ -3912,7 +3912,10 @@ function openCodex() {
       const branchOrder: Suit[] = ["spade", "diamond", "heart", "club"];
       const branchEnchants = new Map<Suit, EnchantId[]>();
       for (const s of branchOrder) branchEnchants.set(s, []);
-      for (const eid of ENCHANTS) branchEnchants.get(ENCHANT_RECIPES[eid].branch)!.push(eid);
+      for (const eid of ENCHANTS) {
+        const b = ENCHANT_RECIPES[eid].branch;
+        if (b !== null) branchEnchants.get(b)?.push(eid);  // v0.8.2 master 附魔 branch=null，跳过；commit C UI 切换时单独分组
+      }
       // 每组内按 kind 排序：single → composite，再按 hasRare 升序（普通 → 强档 → 究极）
       for (const list of branchEnchants.values()) {
         list.sort((a, b) => {

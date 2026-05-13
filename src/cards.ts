@@ -2641,4 +2641,25 @@ export const ENCHANT_EFFECTS: Record<EnchantId, EnchantEffect> = {
   // 受击 -3；每场首次受击免疫；中毒/燃烧/出血对你无效
   // 实装：damagePlayer 减伤 + 免疫；newBattle 时给玩家 enc_runic_immune + enc_dot_immune
   ec_runic: { id: "ec_runic" },
+
+  // ─── v0.8.2 流派 12（骨架，commit B 在 battle.ts 内 hardcode hook）─
+  // 所有新附魔都不走 ENCHANT_EFFECTS callback，因为它们需要的 hook 点
+  // （damageEnemy / damagePlayer / startNewPlayerTurn / playAttack / discardHandCards）
+  // 比 onAttack / onKill 多很多。统一在 battle.ts 内按 weaponEnchant id 硬编码分支。
+  ench_war_banner:    { id: "ench_war_banner" },
+  ench_endless_combo: { id: "ench_endless_combo" },
+  ench_decap:         { id: "ench_decap" },
+  ench_night_walk:    { id: "ench_night_walk" },
+  ench_chain:         { id: "ench_chain" },
+  ench_shadow_clone:  { id: "ench_shadow_clone" },
+  ench_hunter_heart:  { id: "ench_hunter_heart" },
+  ench_glutton:       { id: "ench_glutton" },
+  ench_blood_anoint:  { id: "ench_blood_anoint" },
+  ench_curse_ring:    { id: "ench_curse_ring" },
+  ench_curse_shift:   { id: "ench_curse_shift" },
+  ench_purge_vortex:  { id: "ench_purge_vortex" },
+
+  // ─── v0.8.2 大师 2（骨架）─────────────────────────────────
+  ench_element_master: { id: "ench_element_master" },
+  ench_suit_master:    { id: "ench_suit_master" },
 };
