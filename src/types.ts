@@ -154,13 +154,13 @@ export const STATUS_META: Record<string, StatusMeta> = {
   blood_pact:    { name: "血契", desc: "本回合内所有攻击吸血 +20%。\n来源：技能 sk_blood_pact「血契」。", kind: "buff" },
   arcane_burst:  { name: "奥术爆裂", desc: "本回合每张非攻击牌使下张攻击 +3。\n来源：技能 sk_arcane_burst「奥术爆裂」。", kind: "buff" },
   brew_regen:    { name: "药剂", desc: "本场战斗内每回合开始 +stacks HP。\n来源：道具 it_brew「药剂」。", kind: "buff" },
-  no_skill:      { name: "技能锁", desc: "本回合不能再出技能牌。\n来源：道具 it_quick_draw「速摸」副作用。", kind: "neutral" },
+  no_skill:      { name: "技能锁", desc: "本回合不能再出技能牌。\n来源：道具 it_quick_draw「贪婪」副作用。", kind: "neutral" },
   no_attack:     { name: "蓄力中", desc: "本回合（或两回合）无法出攻击牌。\n来源：技能 sk_drain_strike「汲血斩」后摇 2 回合 / 旧 sk_charge（已删）。", kind: "neutral" },
   pierce_bonus:  { name: "穿甲斩", desc: "下张攻击额外 +stacks pierce（用一次清除）。\n来源：技能 sk_pierce_strike「穿甲斩」。", kind: "buff" },
   pierce_perm:   { name: "穿甲油", desc: "持续 duration 回合内武器 +stacks pierce。\n来源：道具 it_pierce_oil「穿甲油」（3 回合 +3 pierce）。", kind: "buff" },
   frenzy:        { name: "激奋", desc: "每打出 1 张攻击牌后 stacks +1，下次攻击 +stacks × 2 伤；3 回合后失效。\n来源：技能 sk_frenzy「激奋」。", kind: "buff" },
   combat_rhythm: { name: "战斗节奏", desc: "本回合内每打 1 张牌额外摸 1 张。\n来源：技能 sk_rhythm「战斗节奏」。", kind: "buff" },
-  time_stop:     { name: "时停", desc: "敌人下一回合无法行动（DoT 仍结算）。\n来源：技能 sk_time_stop「时停」。", kind: "buff" },
+  time_stop:     { name: "时停", desc: "敌人下一回合无法行动（DoT 仍结算）。\n来源：技能 sk_time_stop「“世界 THE WORLD”」。", kind: "buff" },
 
   // ── 闪避 / 穿甲系统 ───────────────────────────────────────
   smoke_dodge:      { name: "烟雾", desc: "闪避概率 +stacks%，剩余 duration 回合。\n来源：道具 it_smoke「烟雾弹」/ 技能 sk_evasion_burst「灵巧爆发」（复用此 status）。", kind: "buff" },
@@ -205,7 +205,7 @@ export const STATUS_META: Record<string, StatusMeta> = {
   _enchant_hunt:         { name: "猎杀印记", desc: "下次攻击自动消耗 1 stack，伤害 ×N（按猎食者 Lv：1.4/1.5/1.7）。stacks 跨战斗保留。\n来源：附魔 ench_hunter_heart「猎食者之心」（♥ T1，击杀敌人 +1，cap 2/3/3）。", kind: "buff" },
   _enchant_war_banner:   { name: "血染战旗", desc: "武器 baseDmg 已永久 +stacks（本场战斗，新战斗清零）。每损 N% maxHP 触发一次 +1。\n来源：附魔 ench_war_banner「血染战旗」（♠ T1）。", kind: "buff" },
   _enchant_combo:        { name: "连击进度", desc: "本场连续命中 stacks 次。达到触发数（按附魔 Lv：5/3/2）后永久 hits +1。出技能/道具/未命中会重置。\n来源：附魔 ench_endless_combo「无影连斩」（♠ T2，未解锁前的进度）。", kind: "neutral" },
-  _enchant_blood_anoint: { name: "血涂积累", desc: "本场战斗累计已给玩家 +stacks 最大 HP（每击杀敌人 +N% × target.maxHp，N 按 Lv：5/8/10）。新战斗清零。\n来源：附魔 ench_blood_anoint「血涂」（♥ T3）。", kind: "buff" },
+  _enchant_blood_anoint: { name: "嫉妒积累", desc: "本场战斗累计已给玩家 +stacks 最大 HP（每击杀敌人 +N% × target.maxHp，N 按 Lv：5/8/10）。新战斗清零。\n来源：附魔 ench_blood_anoint「嫉妒」（♥ T3）。", kind: "buff" },
   // ── 吸血盾 / 反伤甲 ──
   draining_charge:   { name: "吸血盾蓄势", desc: "已累积 stacks 点延迟回血，下回合开始时全部回给玩家。\n来源：装备「吸血盾」受击触发。", kind: "buff" },
   thorn_chain:       { name: "反伤连击", desc: "本回合已累计受击 stacks 次（用于反伤甲计算每 hit +10% 反伤）。每回合开始清零。\n来源：装备「反伤甲」受击触发。", kind: "neutral" },
@@ -319,10 +319,10 @@ export const ENCHANT_NAMES: Record<EnchantId, string> = {
   ench_chain:         "连环",
   ench_shadow_clone:  "阴影分身",
   ench_hunter_heart:  "猎食者之心",
-  ench_glutton:       "饕餮",
-  ench_blood_anoint:  "血涂",
+  ench_glutton:       "暴食",
+  ench_blood_anoint:  "嫉妒",
   ench_curse_ring:    "咒环",
-  ench_curse_shift:   "转嫁",
+  ench_curse_shift:   "傲慢",
   ench_purge_vortex:  "净化漩涡",
   // v0.8.2 大师 2
   ench_element_master: "元素大师",

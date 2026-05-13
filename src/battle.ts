@@ -959,7 +959,7 @@ export function playCard(state: BattleState, cardUid: string, log: (m: string, k
   }
   // 速摸触发的"本回合技能锁"
   if (def.category === "skill" && state.player.statuses.find(s => s.id === "no_skill")) {
-    log(`本回合已使用速摸，不能再出技能。`, "system");
+    log(`本回合已使用贪婪，不能再出技能。`, "system");
     return false;
   }
 
@@ -1375,7 +1375,7 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
               recvCand.statuses.push({ id: dbf.id, name: dbf.name, stacks: dbf.stacks, duration: dbf.duration });
             }
             state.player.statuses = state.player.statuses.filter(s => s !== dbf);
-            log(`♣ 转嫁：把「${dbf.name}」×${dbf.stacks} 转移给 ${recvCand.name}（${pct}%）。`, "player");
+            log(`♣ 傲慢：把「${dbf.name}」×${dbf.stacks} 转移给 ${recvCand.name}（${pct}%）。`, "player");
           }
         }
       }

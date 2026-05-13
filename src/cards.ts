@@ -259,7 +259,7 @@ export function applyLifesteal(c: BattleContext, amount: number, source: string)
         if (add > 0) {
           if (ex) ex.stacks = curStacks + add;
           else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: add, duration: -1 });
-          c.log(`♥ 饕餮：溢出 ${overflow} HP → +${add} 护盾（cap ${cap}）。`, "player");
+          c.log(`♥ 暴食：溢出 ${overflow} HP → +${add} 护盾（cap ${cap}）。`, "player");
         }
       }
     }
@@ -353,7 +353,7 @@ export function triggerEnemyKillHooks(c: BattleContext, target: EnemyState): voi
     const gain = Math.max(1, Math.floor(target.maxHp * pct));
     c.player.vitaMax += gain;
     c.player.bloodAnointBonus = (c.player.bloodAnointBonus ?? 0) + gain;
-    c.log(`♥ 血涂：击杀 ${target.name} → +${gain} maxHP（本场累计 +${c.player.bloodAnointBonus}）。`, "player");
+    c.log(`♥ 嫉妒：击杀 ${target.name} → +${gain} maxHP（本场累计 +${c.player.bloodAnointBonus}）。`, "player");
   }
 }
 
@@ -756,7 +756,7 @@ const KATANA: CardDef = {
 
 const GIANT_HAMMER: CardDef = {
   id: "giant_hammer",
-  name: "巨锤",
+  name: "暴怒",
   category: "equipment",
   desc: "装备：基础伤害 8，单次伤害达到目标最大 HP 的 25% 时，按 50% 概率沉默 1 回合。已沉默时不刷新或叠加。",
   equipKind: "weapon",
@@ -770,7 +770,7 @@ const GIANT_HAMMER: CardDef = {
         && !c.target.statuses.find(s => s.id === "silenced")
       ) {
         c.target.statuses.push({ id: "silenced", name: "沉默", stacks: 1, duration: 1 });
-        c.log(`巨锤沉默：${c.target.name} 沉默 1 回合（25% maxHP 触发）。`, "player");
+        c.log(`暴怒沉默：${c.target.name} 沉默 1 回合（25% maxHP 触发）。`, "player");
       }
       return d;
     };
@@ -861,7 +861,7 @@ const ARCANE_SCEPTER: CardDef = {
 // 连弩：每回合可出多张攻击牌。连续 2 回合出超过 1 张攻击 → 第 3 回合「枪管过热」整回合无法攻击，第 4 回合恢复
 const REPEATING_BOW: CardDef = {
   id: "repeating_bow",
-  name: "连弩",
+  name: "诸葛连弩",
   category: "equipment",
   desc: "装备：基础伤害 4，每回合可出多张攻击牌。连续 2 回合都出过 ≥2 张攻击时，下一回合整回合无法出攻击牌（枪管过热），再下一回合恢复。单回合只出 1 张不算过热。",
   equipKind: "weapon",
@@ -1391,7 +1391,7 @@ const SK_RHYTHM: CardDef = {
 
 // 时停：敌人下一整个回合无法行动（DoT 仍结算）
 const SK_TIME_STOP: CardDef = {
-  id: "sk_time_stop", name: "时停", category: "skill", target: "self",
+  id: "sk_time_stop", name: "“世界 THE WORLD”", category: "skill", target: "self",
   desc: "敌人下一回合无法行动（中毒/燃烧/出血等持续效果仍结算）。",
   onPlay: (c) => {
     addStatus(c.player, "time_stop", "时停", 1, 1);
@@ -1650,12 +1650,12 @@ const SK_MIND_BLADE: CardDef = {
 
 // 道具：速摸 — 消耗本回合不能再出技能 → 立刻摸 3 张
 const IT_QUICK_DRAW: CardDef = {
-  id: "it_quick_draw", name: "速摸", category: "item", target: "self",
+  id: "it_quick_draw", name: "贪婪", category: "item", target: "self",
   desc: "立刻摸 3 张牌；本回合内不能再出技能牌。",
   onPlay: (c) => {
     (c as any)._drawN = ((c as any)._drawN ?? 0) + 3;
     addStatus(c.player, "no_skill", "技能锁", 1, 1);
-    c.log("速摸：摸 3 张，本回合不能再出技能。", "player");
+    c.log("贪婪：摸 3 张，本回合不能再出技能。", "player");
   },
 };
 
@@ -1888,7 +1888,7 @@ const PERK_DODGE: CardDef = {
 };
 
 const PERK_REGEN: CardDef = {
-  id: "p_regen", name: "再生", category: "perk",
+  id: "p_regen", name: "色欲", category: "perk",
   desc: "每张：每回合回最大 HP × 3%（向下取整，最少 1）。",
   defaultSuit: "heart",
   perkEffect: {
@@ -1898,7 +1898,7 @@ const PERK_REGEN: CardDef = {
       const heal = Math.max(1, Math.floor(c.player.vitaMax * 0.03 * s));
       const before = c.player.vita;
       c.player.vita = Math.min(c.player.vitaMax, c.player.vita + heal);
-      if (c.player.vita > before) c.log(`再生：回 ${c.player.vita - before} HP。`, "player");
+      if (c.player.vita > before) c.log(`色欲：回 ${c.player.vita - before} HP。`, "player");
     },
   },
 };
