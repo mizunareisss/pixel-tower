@@ -15,7 +15,7 @@ import type {
   Suit,
 } from "./types.ts";
 import { HAND_LIMIT, DRAW_PER_TURN, SUIT_SYMBOLS, SUITS, getEnchantParam } from "./types.ts";
-import { CARD_DB, suitMultiplier, damageEnemy, ENCHANT_EFFECTS, EPIC_USES_PER_BATTLE, REWARD_CARD_POOL_BASE, REWARD_CARD_POOL_AOE, makeInstance, triggerEnemyKillHooks, dealSelfDamage } from "./cards.ts";
+import { CARD_DB, suitMultiplier, damageEnemy, ENCHANT_EFFECTS, EPIC_USES_PER_BATTLE, REWARD_CARD_POOL_BASE, REWARD_CARD_POOL_AOE, makeInstance, triggerEnemyKillHooks, dealSelfDamage, applyLifesteal, isDotImmuneByElementMaster, isNewDotImmuneByPurgeVortex } from "./cards.ts";
 import { selectAIIntent } from "./bossAI.ts";
 
 // 检查玩家是否有染色/持咒 buff，返回强制使用的花色
@@ -355,6 +355,26 @@ export function newBattle(player: PlayerState, enemies: EnemyState[], floor: num
     }
   }
 
+  // ─── v0.8.2 单场字段重置 + 战斗起始 buff ───────────────────
+  // 跨战斗保留的：huntStacks（♥ T1 猎食者）
+  // 单场字段：warBannerBonus / warBannerLossAcc / combo / comboUnlocked / bloodAnointBonus
+  // 血涂 ♥ T3：本场累积的 +maxHP 恢复（vitaMax 减回去，vita 也别超过新 vitaMax）
+  if ((player.bloodAnointBonus ?? 0) > 0) {
+    player.vitaMax = Math.max(1, player.vitaMax - player.bloodAnointBonus!);
+    player.vita = Math.min(player.vita, player.vitaMax);
+  }
+  player.warBannerBonus = 0;
+  player.warBannerLossAcc = 0;
+  player.combo = 0;
+  player.comboUnlocked = false;
+  player.bloodAnointBonus = 0;
+
+  // ♦ T1 夜行：开局挂 night_walk status, duration = N 回合
+  if (player.weaponEnchant === "ench_night_walk") {
+    const dur = getEnchantParam(player, 0);  // 1 / 2 / 3
+    player.statuses.push({ id: "night_walk", name: "夜行", stacks: 1, duration: dur });
+  }
+
   return {
     phase: "playerTurn",
     turn: 1,
@@ -479,7 +499,10 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
   // ╔══════════════════════════════════════════════════════════╗
   // ║  阶段 1a: 基础区 — 武器 + 早期 flat add                   ║
   // ╚══════════════════════════════════════════════════════════╝
-  let base = (wDef.baseDmg ?? 0) * stackMult;
+  // v0.8.2 ♠ T1 血染战旗：武器 baseDmg 永久 +N（本场战斗累积，新战斗清零）
+  const warBannerBonus = (player.weaponEnchant === "ench_war_banner" ? (player.warBannerBonus ?? 0) : 0);
+  let base = ((wDef.baseDmg ?? 0) + warBannerBonus) * stackMult;
+  if (warBannerBonus > 0) log(`♠ 血染战旗：baseDmg +${warBannerBonus}。`, "player");
 
   // 临时 buff（直加）
   if (player.statuses.find(s => s.id === "battle_cry")) base += 3;
@@ -574,13 +597,33 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
   const addParts: string[] = [];
 
   // 花色相性（×1.2 → +20% / ×1.0 → 0% / ×0.8 → -20%）
+  // v0.8.2 花色大师：调整异色乘数。Lv1 90% → -10%；Lv2 100% → 0%；Lv3 120% → 也 +20%（同色待遇扩散）
   const suitMult = suitMultiplier(actualAttackSuit, ctx.target.suit);
-  if (suitMult > 1.0) {
-    addMult += 0.20;
-    addParts.push("克制 +20%");
-  } else if (suitMult < 1.0) {
-    addMult -= 0.20;
-    addParts.push("异色 -20%");
+  if (player.weaponEnchant === "ench_suit_master") {
+    const pct = getEnchantParam(player, 0);  // 90 / 100 / 120
+    if (suitMult > 1.0) {
+      addMult += 0.20;
+      addParts.push("克制 +20%");
+    } else if (suitMult < 1.0) {
+      // 异色路径走花色大师 override
+      const offset = (pct - 100) / 100;  // 90 → -0.10 / 100 → 0 / 120 → +0.20
+      addMult += offset;
+      addParts.push(`花色大师 ${offset >= 0 ? "+" : ""}${Math.round(offset * 100)}%`);
+    } else {
+      // suitMult === 1.0（中立色）— 也按花色大师档位享受同色 +20%（Lv3 才生效）
+      if (pct >= 120) {
+        addMult += 0.20;
+        addParts.push("花色大师 +20%");
+      }
+    }
+  } else {
+    if (suitMult > 1.0) {
+      addMult += 0.20;
+      addParts.push("克制 +20%");
+    } else if (suitMult < 1.0) {
+      addMult -= 0.20;
+      addParts.push("异色 -20%");
+    }
   }
 
   // 玩家虚弱 -30%
@@ -674,6 +717,19 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     }
   }
 
+  // v0.8.2 ♦ T2 连环：玩家身上每 1 "种" debuff（毒/血/弱/易/燃），所有攻击 +N%
+  // "种"不"层"：同一类 status 算 1 种，不论 stacks 多少
+  if (player.weaponEnchant === "ench_chain") {
+    const DEBUFF_TYPES = ["poison", "burn", "bleed", "weak", "vulnerable"];
+    const kinds = DEBUFF_TYPES.filter(id => player.statuses.find(s => s.id === id)).length;
+    if (kinds > 0) {
+      const perKind = getEnchantParam(player, 0) / 100;  // 4 / 6 / 8 → 0.04 / 0.06 / 0.08
+      const bonus = perKind * kinds;
+      addMult += bonus;
+      addParts.push(`♦ 连环 +${Math.round(bonus * 100)}%（${kinds} 种 debuff）`);
+    }
+  }
+
   // ╔══════════════════════════════════════════════════════════╗
   // ║  阶段 3: 倍率区 — ×X 独立乘                              ║
   // ╚══════════════════════════════════════════════════════════╝
@@ -720,6 +776,27 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
       mulMult *= mult;
       mulParts.push(`幻影 ×${mult.toFixed(2)}`);
       player.statuses = player.statuses.filter(s => s.id !== "phantom_charge");
+    }
+  }
+
+  // v0.8.2 ♥ T1 猎食者之心：消耗 1 个猎杀 stack → ×M
+  // huntStacks 跨战斗保留（不在 statuses 内，避免 newBattle 清除）
+  if (player.weaponEnchant === "ench_hunter_heart" && (player.huntStacks ?? 0) > 0) {
+    const mult = getEnchantParam(player, 1) / 100;  // 140 / 150 / 170 → 1.4 / 1.5 / 1.7
+    mulMult *= mult;
+    mulParts.push(`♥ 猎食者 ×${mult.toFixed(2)}`);
+    player.huntStacks = (player.huntStacks ?? 0) - 1;
+  }
+
+  // v0.8.2 ♠ T3 斩首：消耗 decap_charge → ×M
+  // hits 强制 = 1 已在 hits 分区处理
+  if (player.weaponEnchant === "ench_decap") {
+    const decapCharge = player.statuses.find(s => s.id === "decap_charge");
+    if (decapCharge) {
+      const mult = getEnchantParam(player, 1) / 100;  // 200 / 250 / 300 → 2.0 / 2.5 / 3.0
+      mulMult *= mult;
+      mulParts.push(`♠ 斩首 ×${mult.toFixed(1)}`);
+      player.statuses = player.statuses.filter(s => s.id !== "decap_charge");
     }
   }
 
@@ -952,6 +1029,20 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
     hitsBonus += 1;
     log("♦ 灵敏 keyword：+1 hit（25%）。", "player");
   }
+  // v0.8.2 ♦ T1 夜行：开局 N 回合 hits +1（status: night_walk，duration 由 newBattle 挂）
+  if (state.player.statuses.find(s => s.id === "night_walk")) {
+    hitsBonus += 1;
+    log("♦ 夜行：本次攻击 +1 hit。", "player");
+  }
+  // v0.8.2 ♦ T3 阴影分身：分身激活期间，每次攻击 hits +2（status: shadow_clone_active）
+  if (state.player.statuses.find(s => s.id === "shadow_clone_active")) {
+    hitsBonus += 2;
+    log("♦ 阴影分身：本次攻击 +2 hits。", "player");
+  }
+  // v0.8.2 ♠ T2 无影连斩：解锁后永久 +1（status: combo_unlock）
+  if (state.player.statuses.find(s => s.id === "combo_unlock")) {
+    hitsBonus += 1;
+  }
 
   // 阶段 C 倍率区
   let hitsMult = 1;
@@ -963,12 +1054,19 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
   }
 
   // 阶段 D 上限：(基础 + 加成) × 倍率，硬封顶 HITS_CAP
-  const hitsRaw = (hitsBase + hitsBonus) * hitsMult;
+  let hitsRaw = (hitsBase + hitsBonus) * hitsMult;
+  // v0.8.2 ♠ T3 斩首：激活时强制 hits = 1（即使有 hits+X buff，也只能为 1）
+  // 倍率在 calcAttackDamage 阶段 3 区独立消耗
+  const decapCharge = state.player.statuses.find(s => s.id === "decap_charge");
+  if (decapCharge) {
+    hitsRaw = 1;
+    log("♠ 斩首激活：本次 hits 强制 = 1。", "player");
+  }
   const hits = Math.min(HITS_CAP, hitsRaw);
   if (hits < hitsRaw) {
     log(`hits 触上限：${hitsRaw} → ${HITS_CAP}（cap）。`, "player");
   }
-  if (hitsBase > 1) log(`${weaponDef?.name} hits ×${hitsBase}。`, "player");
+  if (hitsBase > 1 && !decapCharge) log(`${weaponDef?.name} hits ×${hitsBase}。`, "player");
 
   const weaponId = state.player.weapons[0]?.defId;
   for (let i = 0; i < hits; i++) {
@@ -978,6 +1076,8 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
     const enemyDodge = getEnemyDodgeChance(target);
     if (enemyDodge > 0 && Math.random() * 100 < enemyDodge) {
       log(`✗ ${target.name} 闪避（${enemyDodge}%）！`, "enemy");
+      // v0.8.2 ♠ T2 无影连斩：未命中 → 连击中断重置
+      state.player.combo = 0;
       continue;
     }
     let dmg = calcAttackDamage(state, baseSuit, log);
@@ -992,6 +1092,24 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
     // v0.8.2 Round 2-A：传 ctx 让 damageEnemy 在 alive 翻转时自动 emit "敌人死亡"
     // 事件，触发武器击杀回血 / 附魔 onKill / 未来 ♥T1 猎食者 / ♥T3 血涂
     damageEnemy(target, dmg, log, undefined, getCtx(state, log));
+
+    // v0.8.2 ♥ T1 猎食者之心：每 hit 命中吸血 N%
+    if (state.player.weaponEnchant === "ench_hunter_heart" && dmg > 0) {
+      const pct = getEnchantParam(state.player, 0);  // 8 / 10 / 12
+      const heal = Math.max(1, Math.floor(dmg * pct / 100));
+      applyLifesteal(getCtx(state, log), heal, "♥ 猎食者吸血");
+    }
+
+    // v0.8.2 ♠ T2 无影连斩：命中 +1 connect；达到触发数 → 解锁永久 +1 hit
+    if (state.player.weaponEnchant === "ench_endless_combo") {
+      state.player.combo = (state.player.combo ?? 0) + 1;
+      const trigger = getEnchantParam(state.player, 0);  // 5 / 3 / 2
+      if (!state.player.comboUnlocked && state.player.combo >= trigger) {
+        state.player.comboUnlocked = true;
+        state.player.statuses.push({ id: "combo_unlock", name: "无影连斩解锁", stacks: 1, duration: -1 });
+        log(`♠ 无影连斩：连续命中 ${state.player.combo}，永久解锁 hits +1。`, "player");
+      }
+    }
 
     // ♠ 锐利 keyword：♠ 攻击命中 45% 概率施加 1 层出血（2 回合）
     const sSuitNow = getActiveSpecialty(state);
@@ -1208,6 +1326,58 @@ function playSkillOrItem(state: BattleState, card: CardInstance, def: CardDef, l
       log("秘法回响：摸 1 张。", "player");
       if (ex) ex.stacks += 1;
       else state.player.statuses.push({ id: "arcane_draws", name: "秘法摸牌", stacks: 1, duration: 1 });
+    }
+  }
+
+  // ─── v0.8.2 出技能 / 道具触发的附魔 hooks ────────────────
+  if (def.category === "skill") {
+    // ♣ T1 咒环：出技能 N% 概率摸 1
+    if (state.player.weaponEnchant === "ench_curse_ring") {
+      const pct = getEnchantParam(state.player, 0);  // 20 / 30 / 50
+      if (Math.random() * 100 < pct) {
+        drawCards(state.player, 1, log);
+        log(`♣ 咒环：触发 → 摸 1 张（${pct}%）。`, "player");
+      }
+    }
+
+    // ♣ T2 转嫁：技能命中 N% 概率把玩家身上 1 个 debuff 转给目标
+    // 命中规则：target=single → c.target；target=all → 随机一只活敌；target=self → 不触发
+    if (state.player.weaponEnchant === "ench_curse_shift" && def.target !== "self") {
+      const pct = getEnchantParam(state.player, 0);  // 30 / 45 / 60
+      if (Math.random() * 100 < pct) {
+        const DEBUFF_TYPES = ["poison", "burn", "bleed", "weak", "vulnerable"];
+        const playerDebuffs = state.player.statuses.filter(s => DEBUFF_TYPES.includes(s.id));
+        if (playerDebuffs.length > 0) {
+          const dbf = playerDebuffs[Math.floor(Math.random() * playerDebuffs.length)];
+          // 选目标
+          let recvCand: EnemyState | null = null;
+          if (def.target === "single") recvCand = state.enemies[state.targetIndex] ?? null;
+          else if (def.target === "all") {
+            const alive = state.enemies.filter(e => e.alive);
+            recvCand = alive.length > 0 ? alive[Math.floor(Math.random() * alive.length)] : null;
+          }
+          if (recvCand && recvCand.alive) {
+            // 整体转移：从玩家移除，敌人侧累加
+            const exist = recvCand.statuses.find(s => s.id === dbf.id);
+            if (exist) {
+              exist.stacks += dbf.stacks;
+              if (dbf.duration > 0) exist.duration = Math.max(exist.duration, dbf.duration);
+            } else {
+              recvCand.statuses.push({ id: dbf.id, name: dbf.name, stacks: dbf.stacks, duration: dbf.duration });
+            }
+            state.player.statuses = state.player.statuses.filter(s => s !== dbf);
+            log(`♣ 转嫁：把「${dbf.name}」×${dbf.stacks} 转移给 ${recvCand.name}（${pct}%）。`, "player");
+          }
+        }
+      }
+    }
+  }
+
+  // v0.8.2 ♠ T2 无影连斩：出技能 / 道具 → 连击中断
+  if (state.player.weaponEnchant === "ench_endless_combo") {
+    if ((state.player.combo ?? 0) > 0) {
+      log(`♠ 连斩：出非攻击牌 → 连击中断（${state.player.combo} → 0）。`, "player");
+      state.player.combo = 0;
     }
   }
 
@@ -1933,6 +2103,16 @@ function* executeIntent(
       log(`${prefix}${enemy.name} 试图施加「${name}」，被符文护盾化解。`, "player");
       return;
     }
+    // v0.8.2 元素大师：递进 DOT 免疫
+    if (isDot && isDotImmuneByElementMaster(state.player, id as "poison" | "burn" | "bleed")) {
+      log(`${prefix}${enemy.name} 试图施加「${name}」，被元素大师无效化。`, "player");
+      return;
+    }
+    // v0.8.2 ♣ T3 净化漩涡：本回合"新增"DOT 无效（已存在的正常 tick）
+    if (isDot && isNewDotImmuneByPurgeVortex(state.player) && !state.player.statuses.find(s => s.id === id)) {
+      log(`${prefix}${enemy.name} 试图施加「${name}」，被净化漩涡净化（本回合新增 DOT 无效）。`, "player");
+      return;
+    }
     const existing = state.player.statuses.find(s => s.id === id);
     if (existing) {
       existing.stacks += stacks;
@@ -2334,26 +2514,39 @@ function startNewPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) =>
 
   // v0.8.2 Round 2-B：玩家 DOT 走 dealSelfDamage 统一入口（事件总线）
   // 这样 took_damage_turn 标记 + p_blood_pact 蓄势 + 未来 ♠T1 战旗 等都会自动触发
+  // v0.8.2 元素大师：tick 前检查免疫（**已存在的 DOT 也免疫 tick**，跟"新增"分开）
   const dotPlayerCtx = getCtx(state, log);
   // 玩家中毒：每回合扣 maxVita × 1% × stacks
   const playerPoison = state.player.statuses.find(s => s.id === "poison");
   if (playerPoison && playerPoison.stacks > 0) {
-    const dmg = Math.max(1, Math.ceil(state.player.vitaMax * 0.01 * playerPoison.stacks));
-    dealSelfDamage(dotPlayerCtx, dmg, `你中毒 -${dmg} HP（${playerPoison.stacks}× 1% maxHP；暴击 -${Math.min(50, playerPoison.stacks * 5)}%）。`);
+    if (isDotImmuneByElementMaster(state.player, "poison")) {
+      log(`元素大师：中毒 tick 无效。`, "player");
+    } else {
+      const dmg = Math.max(1, Math.ceil(state.player.vitaMax * 0.01 * playerPoison.stacks));
+      dealSelfDamage(dotPlayerCtx, dmg, `你中毒 -${dmg} HP（${playerPoison.stacks}× 1% maxHP；暴击 -${Math.min(50, playerPoison.stacks * 5)}%）。`);
+    }
     playerPoison.stacks--;
     if (playerPoison.stacks <= 0) state.player.statuses = state.player.statuses.filter(s => s.id !== "poison");
   }
   // 玩家燃烧：每回合扣 maxVita × 2% × stacks
   const playerBurn = state.player.statuses.find(s => s.id === "burn");
   if (playerBurn && playerBurn.stacks > 0 && playerBurn.duration !== 0) {
-    const dmg = Math.max(1, Math.ceil(state.player.vitaMax * 0.02 * playerBurn.stacks));
-    dealSelfDamage(dotPlayerCtx, dmg, `你燃烧 -${dmg} HP（${playerBurn.stacks}× 2% maxHP）。`);
+    if (isDotImmuneByElementMaster(state.player, "burn")) {
+      log(`元素大师：燃烧 tick 无效。`, "player");
+    } else {
+      const dmg = Math.max(1, Math.ceil(state.player.vitaMax * 0.02 * playerBurn.stacks));
+      dealSelfDamage(dotPlayerCtx, dmg, `你燃烧 -${dmg} HP（${playerBurn.stacks}× 2% maxHP）。`);
+    }
   }
   // 出血：扣 当前HP × 5% × stacks，duration-1；副作用：玩家闪避率 -stacks × 5%
   const playerBleed = state.player.statuses.find(s => s.id === "bleed");
   if (playerBleed && playerBleed.stacks > 0 && playerBleed.duration !== 0) {
-    const dmg = Math.max(1, Math.floor(state.player.vita * 0.05 * playerBleed.stacks));
-    dealSelfDamage(dotPlayerCtx, dmg, `你出血 -${dmg} HP（闪避 -${Math.min(50, playerBleed.stacks * 5)}%）。`);
+    if (isDotImmuneByElementMaster(state.player, "bleed")) {
+      log(`元素大师：出血 tick 无效。`, "player");
+    } else {
+      const dmg = Math.max(1, Math.floor(state.player.vita * 0.05 * playerBleed.stacks));
+      dealSelfDamage(dotPlayerCtx, dmg, `你出血 -${dmg} HP（闪避 -${Math.min(50, playerBleed.stacks * 5)}%）。`);
+    }
   }
   if (state.player.vita <= 0) { state.phase = "lost"; log("✗ HP 耗尽。", "lose"); return; }
 

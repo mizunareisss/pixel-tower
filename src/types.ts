@@ -453,28 +453,27 @@ export const ENCHANT_LEVEL_PARAMS: Record<EnchantId, readonly number[][]> = {
   ec_arcane:    [[25],[28],[30],[38],[45]],                              // [染/咒首攻 +N%]（旧 30 → Lv5 45 = 1.50×）
   ec_runic:     [[2,100],[3,100],[3,100],[4,100],[4,100]],               // [受击 -N, 首次受击 -M%（100% = 完全免疫）]（旧 3/100 → Lv5 4/100 = 1.33×）
 
-  // ─── v0.8.2 流派 12（3 档，TODO 数值占位）─────────────────
-  // 待用户更新数值表后 commit E 统一填
+  // ─── v0.8.2 流派 12（3 档）────────────────────────────────
   // ♠
-  ench_war_banner:    [[0,0],[0,0],[0,0]],                              // TODO [损血门槛%, cap +N]
-  ench_endless_combo: [[0],[0],[0]],                                    // TODO [触发连击数]
-  ench_decap:         [[0,0],[0,0],[0,0]],                              // TODO [每场激活次数, 倍率×100]
+  ench_war_banner:    [[10, 3], [8, 5], [6, 7]],                        // [损血门槛%, cap +N]
+  ench_endless_combo: [[5], [3], [2]],                                  // [触发连击数]
+  ench_decap:         [[5, 200], [4, 250], [3, 300]],                   // [弃牌单次门槛, 倍率×100]
   // ♦
-  ench_night_walk:    [[0],[0],[0]],                                    // TODO [持续回合]
-  ench_chain:         [[0],[0],[0]],                                    // TODO [每层 +N%]
-  ench_shadow_clone:  [[0,0],[0,0],[0,0]],                              // TODO [易伤层 +M, 每场激活次数]
+  ench_night_walk:    [[1], [2], [3]],                                  // [开局夜行持续回合]
+  ench_chain:         [[4], [6], [8]],                                  // [每"种" debuff +N%]
+  ench_shadow_clone:  [[3, 1], [2, 2], [1, 3]],                         // [易伤层 +M, 分身持续回合 = 易伤持续回合]（弃牌单次门槛固定 3）
   // ♥
-  ench_hunter_heart:  [[0,0,0],[0,0,0],[0,0,0]],                        // TODO [吸血%, 击杀×倍率×100, stack cap]
-  ench_glutton:       [[0,0],[0,0],[0,0]],                              // TODO [转化率×100, 护盾 cap]
-  ench_blood_anoint:  [[0],[0],[0]],                                    // TODO [击杀转化%]
+  ench_hunter_heart:  [[8, 140, 2], [10, 150, 3], [12, 170, 3]],        // [吸血%, 击杀消耗后 ×倍率×100, 猎杀 stack cap]
+  ench_glutton:       [[5, 2], [3, 3], [2, 5]],                         // [每 N HP 溢出换 1 护盾, 护盾 cap]
+  ench_blood_anoint:  [[5], [8], [10]],                                 // [击杀 +N% × target.maxHp 给 player.vitaMax（本场战斗内累积，新战斗清零）]
   // ♣
-  ench_curse_ring:    [[0],[0],[0]],                                    // TODO [摸牌触发率%]
-  ench_curse_shift:   [[0],[0],[0]],                                    // TODO [转移触发率%]
-  ench_purge_vortex:  [[0,0],[0,0],[0,0]],                              // TODO [触发门槛(=4), 护盾层数(=3)] — 实际硬编码逻辑，参数仅供描述
+  ench_curse_ring:    [[20], [30], [50]],                               // [摸牌触发率%]
+  ench_curse_shift:   [[30], [45], [60]],                               // [技能命中→转移 debuff 触发率%]
+  ench_purge_vortex:  [[4, 3], [4, 4], [4, 5]],                         // [弃牌单次门槛固定 4, 临时护盾层数 3/4/5]
 
-  // ─── v0.8.2 大师 2（3 档，TODO 数值占位）──────────────────
-  ench_element_master: [[0],[0],[0]],                                   // TODO [免疫 DOT 数量：1/2/3]
-  ench_suit_master:    [[0],[0],[0]],                                   // TODO [异色乘数×100：90/100/120]
+  // ─── v0.8.2 大师 2（3 档）─────────────────────────────────
+  ench_element_master: [[1], [2], [3]],                                 // [免疫 DOT 数量：1=毒 / 2=毒+燃 / 3=毒+燃+血]
+  ench_suit_master:    [[90], [100], [120]],                            // [异色乘数 ×100：90% / 100% / 120%（120% = 给所有花色发同色 +20% 增益）]
 } as const;
 
 // 工具：读当前 player 的附魔档位（默认 1，clamp 到该附魔的 maxLevel）
@@ -510,22 +509,30 @@ export function getEnchantDescAt(id: EnchantId, level: number): string {
     case "ec_resilient": return `受击 -${p[0]}；HP > 80% 时受击再 -${p[1]}；每回合开始 +${p[2]} HP。`;
     case "ec_arcane":    return `每出 1 张非攻击牌额外摸 1（每回合 cap 3）；持咒/染色 buff 在场时首次攻击 +${p[0]}%。`;
     case "ec_runic":     return `受击 -${p[0]}；每场首次受击 ${p[1] >= 100 ? "完全免疫" : "-" + p[1] + "%"}；${lv >= 5 ? "中毒/燃烧/出血对你无效。" : "（Lv5 解锁 DOT 免疫）"}`;
-    // ─── v0.8.2 流派 12（数值占位，等 commit E 填）─────────
-    case "ench_war_banner":    return `（设计中）每损 N% maxHP 永久武器 baseDmg +1（本场战斗，cap +M）。`;
-    case "ench_endless_combo": return `（设计中）连续命中 N 次攻击后永久解锁 hits +1（本场战斗，每场仅 1 次）。`;
-    case "ench_decap":         return `（设计中）本场可激活 N 次「斩首」：下次攻击强制 hits=1 但伤害 ×M。`;
-    case "ench_night_walk":    return `（设计中）战斗开局进入夜行：前 N 回合所有攻击 hits +1。`;
-    case "ench_chain":         return `（设计中）玩家身上每 1 层 debuff，所有攻击 +N%。`;
-    case "ench_shadow_clone":  return `（设计中）本场可激活 N 次「分身」：本回合 hits +2 + 自易伤 M 层。`;
-    case "ench_hunter_heart":  return `（设计中）攻击命中吸血 N%；击杀后挂"猎杀" stack，下次攻击 ×M 倍消耗（stack 可累积，跨战斗）。`;
-    case "ench_glutton":       return `（设计中）玩家吸血时，溢出 maxHP 的部分转化为临时护盾。`;
-    case "ench_blood_anoint":  return `（设计中）玩家击杀敌人时，该敌人 maxHP × N% 永久 +为玩家 maxHP（本场战斗）。`;
-    case "ench_curse_ring":    return `（设计中）出 1 张技能牌 / 主动弃 1 张攻击牌（爆牌不算），N% 概率摸 1 张。`;
-    case "ench_curse_shift":   return `（设计中）每出 1 张技能牌命中时，N% 概率把玩家身上一个随机 debuff 转移给敌人（层数一并转移）。`;
-    case "ench_purge_vortex":  return `（设计中）单次主动弃手牌 ≥4 张时：3 层临时护盾 + 本回合内新增的中毒/燃烧/出血效果无效。`;
+    // ─── v0.8.2 流派 12 ───────────────────────────────────
+    case "ench_war_banner":    return `每损 ${p[0]}% 最大 HP（自损或受击），武器 baseDmg 永久 +1（本场战斗，cap +${p[1]}）。`;
+    case "ench_endless_combo": return `本场战斗连续命中 ${p[0]} 次攻击后（被打断 = 出技能/道具/未命中），永久解锁 hits +1（每场仅 1 次）。`;
+    case "ench_decap":         return `单次主动弃手牌 ≥${p[0]} 张时激活「斩首」：下次攻击强制 hits=1 但伤害 ×${(p[1]/100).toFixed(1)}。`;
+    case "ench_night_walk":    return `战斗开局进入「夜行」：前 ${p[0]} 回合所有攻击 hits +1。`;
+    case "ench_chain":         return `玩家身上每 1 种 debuff（毒/血/弱/易/燃），所有攻击 +${p[0]}%（按"种"计，不按层）。`;
+    case "ench_shadow_clone":  return `单次主动弃手牌 ≥3 张时激活「分身」：本攻击 hits +2，持续 ${p[1]} 回合；激活时一次性给玩家 +${p[0]} 层易伤（持续 ${p[1]} 回合）。`;
+    case "ench_hunter_heart":  return `攻击命中吸血 ${p[0]}%；击杀敌人后攒 1 个"猎杀" stack（cap ${p[2]}，可跨战斗），下次攻击自动消耗 1 stack 并 ×${(p[1]/100).toFixed(2)}。`;
+    case "ench_glutton":       return `玩家吸血时，超过 maxHP 的溢出部分按 ${p[0]} HP : 1 护盾 转化为临时护盾（cap ${p[1]}）。`;
+    case "ench_blood_anoint":  return `玩家击杀敌人时，该敌人最大 HP × ${p[0]}% 永久 +为玩家 maxHP（本场战斗，新战斗清零）。`;
+    case "ench_curse_ring":    return `每出 1 张技能牌 / 每主动弃 1 张攻击牌（爆牌不算），${p[0]}% 概率额外摸 1 张。`;
+    case "ench_curse_shift":   return `每出 1 张技能牌命中时，${p[0]}% 概率把玩家身上一个随机 debuff 转移给敌人（层数 + 持续时间一并转移）。`;
+    case "ench_purge_vortex":  return `单次主动弃手牌 ≥${p[0]} 张时：生成 ${p[1]} 层临时护盾 + 本回合内新增的中毒/燃烧/出血效果无效（已存在的正常结算）。`;
     // ─── v0.8.2 大师 2 ──────────────────────────────────────
-    case "ench_element_master": return `（设计中）DOT 递进免疫：Lv1 中毒 / Lv2 +燃烧 / Lv3 +出血（全 DOT 免疫）。`;
-    case "ench_suit_master":    return `（设计中）Lv1 异色惩罚 -10% / Lv2 异色无惩罚 / Lv3 所有攻击牌强制视作同色（享受 +20% 增益）。`;
+    case "ench_element_master": {
+      const list = ["中毒", "中毒 + 燃烧", "中毒 + 燃烧 + 出血"];
+      return `DOT 免疫：${list[Math.min(2, p[0] - 1)]} 对你无效。`;
+    }
+    case "ench_suit_master": {
+      const pct = p[0];
+      if (pct === 90)  return `攻击牌异色伤害惩罚减轻为 -10%（同色 +20% 不变）。`;
+      if (pct === 100) return `攻击牌异色伤害惩罚归 0（同色 +20% 不变）。`;
+      return `攻击牌花色相性增益扩散：所有花色都享受同色 +20% 增益（攻击牌本身花色不变，keyword 仍按实际花色判定）。`;
+    }
   }
 }
 
@@ -661,12 +668,14 @@ export interface PlayerState {
   huntStacks?: number;
   // ♠ T1 血染战旗：每损 N% maxHP，武器 baseDmg 永久 +1（**本场战斗**累积，newBattle 重置）
   warBannerBonus?: number;
-  // ♠ T1 血染战旗：本场累积已损失的 maxHP %（小数 0-1），用来跨多次损血累计计 +1 触发点
-  warBannerLossPct?: number;
+  // ♠ T1 血染战旗：本场累积已损失的 HP（绝对值，用于跨多次损血计 +1 触发点）
+  warBannerLossAcc?: number;
   // ♠ T2 无影连斩：当前连续命中数（被打断 = 出技能/道具/未命中 → 重置）
   combo?: number;
-  // ♠ T3 斩首 / ♦ T3 阴影分身 / ♥ T1 猎食者：本场各 active 附魔的剩余可用次数（newBattle 重置）
-  enchantActiveLeft?: number;
+  // ♠ T2 无影连斩：本场是否已解锁永久 +1 hit（每场仅 1 次）
+  comboUnlocked?: boolean;
+  // ♥ T3 血涂：本场战斗内通过血涂累积的 maxHP 量（newBattle 时 vitaMax 减回去恢复原值）
+  bloodAnointBonus?: number;
 
   // 整局 1 次的复活机制（不灭之心）已使用次数；不在 statuses 里因为状态会战斗间清空
   revivesUsed?: number;

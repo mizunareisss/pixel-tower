@@ -37,6 +37,7 @@ import type {
   Suit,
   StatusEffect,
   EnemyState,
+  PlayerState,
   LogKind,
   EnchantId,
   CardRarity,
@@ -180,8 +181,89 @@ export function triggerSelfDamageHooks(c: BattleContext, amount: number): void {
     }
   }
 
-  // 3. ★ TODO v0.8.2 ♠T1 血染战旗：损血累积 → 武器 baseDmg+1
-  // 4. ★ TODO v0.8.2 ♥T2 灼血：损血累积 → 所有活敌 +1 burn
+  // 3. v0.8.2 ♠ T1 血染战旗：每损 N% maxHP，武器 baseDmg 永久 +1（本场，cap +M）
+  if (c.player.weaponEnchant === "ench_war_banner") {
+    const threshPct = getEnchantParam(c.player, 0);  // 10 / 8 / 6
+    const capBonus = getEnchantParam(c.player, 1);   // 3 / 5 / 7
+    c.player.warBannerLossAcc = (c.player.warBannerLossAcc ?? 0) + amount;
+    const threshHp = Math.max(1, Math.floor(c.player.vitaMax * threshPct / 100));
+    while (c.player.warBannerLossAcc >= threshHp && (c.player.warBannerBonus ?? 0) < capBonus) {
+      c.player.warBannerLossAcc -= threshHp;
+      c.player.warBannerBonus = (c.player.warBannerBonus ?? 0) + 1;
+      c.log(`♠ 血染战旗：武器 baseDmg +1（累计 +${c.player.warBannerBonus} / cap +${capBonus}）。`, "player");
+    }
+    // cap 满后 loss 不再累积（防止溢出）
+    if ((c.player.warBannerBonus ?? 0) >= capBonus) c.player.warBannerLossAcc = 0;
+  }
+}
+
+/**
+ * v0.8.2 元素大师 — 检查玩家应用 DOT 时是否免疫
+ *
+ * @param player PlayerState
+ * @param dot "poison" | "burn" | "bleed"
+ * @returns true = 免疫（跳过 DOT 应用 / tick），false = 正常
+ */
+export function isDotImmuneByElementMaster(player: PlayerState, dot: "poison" | "burn" | "bleed"): boolean {
+  if (player.weaponEnchant !== "ench_element_master") return false;
+  const lv = getEnchantParam(player, 0);  // 1 / 2 / 3
+  if (dot === "poison") return lv >= 1;
+  if (dot === "burn")   return lv >= 2;
+  if (dot === "bleed")  return lv >= 3;
+  return false;
+}
+
+/**
+ * v0.8.2 净化漩涡（♣ T3）— 检查本回合是否在"新 DOT 免疫窗口"内
+ *
+ * 触发条件：玩家单次主动弃手牌 ≥4 张 → 给玩家挂 purge_vortex_dot_immune (duration 1)
+ * 检测：新增 DOT debuff 时检查此 status，存在则跳过应用（**只挡新增，已有的正常 tick**）
+ */
+export function isNewDotImmuneByPurgeVortex(player: PlayerState): boolean {
+  return !!player.statuses.find(s => s.id === "purge_vortex_dot_immune");
+}
+
+/**
+ * v0.8.2 吸血统一入口 — 包括饕餮溢出转护盾
+ *
+ * 任何吸血点（武器 onAttack 吸血 / 猎食者吸血 / 血契 / 血裂刃 / p_vampire）都应该走这里，
+ * 而不是直接 `player.vita = min(maxHp, vita + heal)`。
+ *
+ * 流程：
+ *   1. 计算实际吸到的血量（不超过 maxHp）
+ *   2. 计算溢出量 = intendedHeal - 实际吸到
+ *   3. 如果装了 ♥ T2 饕餮 → 溢出按 N HP : 1 护盾 转化（cap M）
+ *
+ * @param c BattleContext
+ * @param amount 想吸血的量
+ * @param source 日志前缀（"吸血" / "猎食者" / "血裂刃" 等）
+ */
+export function applyLifesteal(c: BattleContext, amount: number, source: string): void {
+  if (amount <= 0) return;
+  const before = c.player.vita;
+  c.player.vita = Math.min(c.player.vitaMax, c.player.vita + amount);
+  const actualHeal = c.player.vita - before;
+  if (actualHeal > 0) c.log(`${source}：回 ${actualHeal} HP。`, "player");
+
+  // 饕餮：溢出转护盾
+  if (c.player.weaponEnchant === "ench_glutton") {
+    const overflow = amount - actualHeal;
+    if (overflow > 0) {
+      const ratio = getEnchantParam(c.player, 0); // 5 / 3 / 2 HP per 1 护盾
+      const cap = getEnchantParam(c.player, 1);   // 2 / 3 / 5 护盾上限
+      const shieldGain = Math.floor(overflow / ratio);
+      if (shieldGain > 0) {
+        const ex = c.player.statuses.find(s => s.id === "shield_block");
+        const curStacks = ex?.stacks ?? 0;
+        const add = Math.min(shieldGain, Math.max(0, cap - curStacks));
+        if (add > 0) {
+          if (ex) ex.stacks = curStacks + add;
+          else c.player.statuses.push({ id: "shield_block", name: "护盾", stacks: add, duration: -1 });
+          c.log(`♥ 饕餮：溢出 ${overflow} HP → +${add} 护盾（cap ${cap}）。`, "player");
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -255,8 +337,24 @@ export function triggerEnemyKillHooks(c: BattleContext, target: EnemyState): voi
     }
   }
 
-  // 3. ★ TODO v0.8.2 ♥T1 猎食者：c.player.huntStacks += 1 (cap N)
-  // 4. ★ TODO v0.8.2 ♥T3 血涂：c.player.vitaMax += floor(target.maxHp × N%)
+  // 3. v0.8.2 ♥ T1 猎食者之心：击杀 +1 huntStack（cap N，跨战斗保留）
+  if (c.player.weaponEnchant === "ench_hunter_heart") {
+    const cap = getEnchantParam(c.player, 2);  // 2 / 3 / 3
+    const cur = c.player.huntStacks ?? 0;
+    if (cur < cap) {
+      c.player.huntStacks = cur + 1;
+      c.log(`♥ 猎食者：击杀 ${target.name} → 猎杀 stack ${c.player.huntStacks}/${cap}。`, "player");
+    }
+  }
+
+  // 4. v0.8.2 ♥ T3 血涂：击杀 → +N% × target.maxHp 给 player.vitaMax（本场战斗内累积，新战斗清零）
+  if (c.player.weaponEnchant === "ench_blood_anoint") {
+    const pct = getEnchantParam(c.player, 0) / 100;  // 5 / 8 / 10 → 0.05 / 0.08 / 0.10
+    const gain = Math.max(1, Math.floor(target.maxHp * pct));
+    c.player.vitaMax += gain;
+    c.player.bloodAnointBonus = (c.player.bloodAnointBonus ?? 0) + gain;
+    c.log(`♥ 血涂：击杀 ${target.name} → +${gain} maxHP（本场累计 +${c.player.bloodAnointBonus}）。`, "player");
+  }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -356,12 +454,8 @@ const BLOOD_BLADE: CardDef = {
       stat: "吸35% 击杀+20%",
       onAttack: (ctx: BattleContext, d: number) => {
         const heal = Math.floor(d * 0.35);
-        if (heal > 0) {
-          ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + heal);
-          ctx.log(`血裂刃吸血 ${heal}。`, "player");
-        }
+        if (heal > 0) applyLifesteal(ctx, heal, "血裂刃吸血");
         // v0.8.2 Round 2-A：击杀回血 +20% maxHP 已迁移到 triggerEnemyKillHooks
-        // （在 damageEnemy 内 alive 翻转时统一触发）
         return d;
       },
     });
@@ -462,12 +556,8 @@ const EVERLAST_FANG: CardDef = {
       stat: "吸 60% 击杀+20%",
       onAttack: (ctx: BattleContext, d: number) => {
         const heal = Math.floor(d * 0.60);
-        if (heal > 0) {
-          ctx.player.vita = Math.min(ctx.player.vitaMax, ctx.player.vita + heal);
-          ctx.log(`永生之牙吸血 ${heal}。`, "player");
-        }
+        if (heal > 0) applyLifesteal(ctx, heal, "永生之牙吸血");
         // v0.8.2 Round 2-A：击杀回血 +20% maxHP 已迁移到 triggerEnemyKillHooks
-        // （在 damageEnemy 内 alive 翻转时统一触发）
         return d;
       },
     });

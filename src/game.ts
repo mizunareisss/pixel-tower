@@ -16,7 +16,7 @@ import type {
   EnchantId,
   Suit,
 } from "./types.ts";
-import { ENCHANT_RECIPES, ENCHANT_NAMES, SUIT_SYMBOLS } from "./types.ts";
+import { ENCHANT_RECIPES, ENCHANT_NAMES, SUIT_SYMBOLS, getEnchantParam } from "./types.ts";
 import {
   STARTING_VITA,
   STARTING_HAND,
@@ -881,6 +881,73 @@ export function discardHandCards(state: GameState, uids: string[]): boolean {
   state.player.discard.push(...discarded);
   const names = discarded.map(c => CARD_DB[c.defId].name).join("、");
   pushLog(state, `主动弃手牌 ${discarded.length} 张：${names}。`, "player");
+
+  // ─── v0.8.2 主动弃牌附魔 hooks ─────────────────────────────
+  const enchant = state.player.weaponEnchant;
+  const log = logFn(state);
+
+  // ♣ T1 咒环：每张被弃的"攻击牌"独立 roll N% 摸 1（爆牌不算 — 这是主动弃所以算）
+  if (enchant === "ench_curse_ring") {
+    const pct = getEnchantParam(state.player, 0);  // 20 / 30 / 50
+    let drawCnt = 0;
+    for (const c of discarded) {
+      if (CARD_DB[c.defId]?.category === "attack" && Math.random() * 100 < pct) {
+        drawCnt++;
+      }
+    }
+    if (drawCnt > 0) {
+      drawCards(state.player, drawCnt, log);
+      log(`♣ 咒环：触发 ${drawCnt} 次，额外摸 ${drawCnt} 张。`, "player");
+    }
+  }
+
+  // ♣ T3 净化漩涡：单次弃 ≥4 张 → 临时护盾 + 本回合新增 DOT 免疫
+  if (enchant === "ench_purge_vortex") {
+    const threshold = getEnchantParam(state.player, 0);  // 4
+    const shieldStacks = getEnchantParam(state.player, 1);  // 3 / 4 / 5
+    if (discarded.length >= threshold) {
+      const ex = state.player.statuses.find(s => s.id === "shield_block");
+      if (ex) ex.stacks += shieldStacks;
+      else state.player.statuses.push({ id: "shield_block", name: "护盾", stacks: shieldStacks, duration: -1 });
+      // 本回合新增 DOT 免疫 status
+      const im = state.player.statuses.find(s => s.id === "purge_vortex_dot_immune");
+      if (im) im.duration = Math.max(im.duration, 1);
+      else state.player.statuses.push({ id: "purge_vortex_dot_immune", name: "净化漩涡（新 DOT 免疫）", stacks: 1, duration: 1 });
+      log(`♣ 净化漩涡：+${shieldStacks} 护盾，本回合新增中毒/燃烧/出血无效。`, "player");
+    }
+  }
+
+  // ♠ T3 斩首：单次弃 ≥N 张 → 挂 decap_charge（下次攻击 hits=1 + ×M）
+  if (enchant === "ench_decap") {
+    const threshold = getEnchantParam(state.player, 0);  // 5 / 4 / 3
+    if (discarded.length >= threshold) {
+      if (!state.player.statuses.find(s => s.id === "decap_charge")) {
+        state.player.statuses.push({ id: "decap_charge", name: "斩首蓄势", stacks: 1, duration: -1 });
+        log(`♠ 斩首激活：下次攻击 hits=1 但 ×${(getEnchantParam(state.player, 1) / 100).toFixed(1)}。`, "player");
+      }
+    }
+  }
+
+  // ♦ T3 阴影分身：单次弃 ≥3 张 → 挂 shadow_clone_active 持续 N 回合 + 一次性自易伤
+  if (enchant === "ench_shadow_clone") {
+    if (discarded.length >= 3) {
+      const vulnLayers = getEnchantParam(state.player, 0);  // 3 / 2 / 1
+      const duration = getEnchantParam(state.player, 1);    // 1 / 2 / 3
+      if (!state.player.statuses.find(s => s.id === "shadow_clone_active")) {
+        state.player.statuses.push({ id: "shadow_clone_active", name: "阴影分身", stacks: 1, duration });
+        // 一次性挂自易伤（持续时间与分身一致）
+        const v = state.player.statuses.find(s => s.id === "vulnerable");
+        if (v) {
+          v.stacks += vulnLayers;
+          v.duration = Math.max(v.duration, duration);
+        } else {
+          state.player.statuses.push({ id: "vulnerable", name: "易伤", stacks: vulnLayers, duration });
+        }
+        log(`♦ 阴影分身激活：${duration} 回合内攻击 hits +2，自挂 ${vulnLayers} 层易伤（${duration} 回合）。`, "player");
+      }
+    }
+  }
+
   return before > state.player.hand.length;
 }
 
