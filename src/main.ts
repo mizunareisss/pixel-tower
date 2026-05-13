@@ -43,12 +43,13 @@ import {
   acceptEliteDrop,
   discardEliteDrop,
   enterMapNode,
+  MERCHANT_SELLS_PER_VISIT,
 } from "./game.ts";
 import { CARD_DB, STARTING_DECK_IDS } from "./cards.ts";
 import { ABILITY_DESCS } from "./enemies.ts";
 import { getCurrentDodgeChance, getSuitAffinity, suitTier, getActiveSpecialty, getDisplayedSpecialty, getTiedSpecialties, getEnemyCritChance, getEnemyDodgeChance } from "./battle.ts";
 import {
-  EVENT_META, MERCHANT_PRICES, MERCHANT_SELL_PRICES, GAMBLER_OPTIONS, SHRINE_OPTIONS, CHEST_TRAP_DESCS,
+  EVENT_META, MERCHANT_PRICES, MERCHANT_SELL_PRICES, MERCHANT_SELL_RACES, GAMBLER_OPTIONS, SHRINE_OPTIONS, CHEST_TRAP_DESCS,
 } from "./events.ts";
 import type { EventId } from "./events.ts";
 import { NODE_TYPE_META, getReachableNodes } from "./map.ts";
@@ -2466,7 +2467,12 @@ function renderMerchant(parent: HTMLElement) {
 }
 
 // 选种族弹窗
-function showRacePicker(title: string, onPick: (race: import("./types.ts").EnemyRace) => void) {
+// v0.8.2 race picker 支持限定白名单（卖卡只能选普通碎片：兽/人/死）
+function showRacePicker(
+  title: string,
+  onPick: (race: import("./types.ts").EnemyRace) => void,
+  whitelist?: readonly import("./types.ts").EnemyRace[],
+) {
   document.getElementById("race-picker-overlay")?.remove();
   const overlay = document.createElement("div");
   overlay.id = "race-picker-overlay";
@@ -2479,7 +2485,8 @@ function showRacePicker(title: string, onPick: (race: import("./types.ts").Enemy
     </div>
   `;
   const grid = overlay.querySelector(".race-picker-grid")!;
-  for (const r of RACES) {
+  const races = whitelist ?? RACES;
+  for (const r of races) {
     const have = state.player.fragments[r] ?? 0;
     const btn = document.createElement("button");
     btn.className = "race-pick-btn";
@@ -2626,7 +2633,8 @@ function showFragmentTradeModal() {
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
 }
 
-// 卖卡 modal：卡牌 grid 风格（仿手牌），每次拜访最多卖 2 张
+// 卖卡 modal：卡牌 grid 风格（仿手牌）
+// v0.8.2 commit D：3 张/visit + 只能换普通碎片（兽/人/死）
 function showSellCardModal() {
   document.getElementById("sell-overlay")?.remove();
   const allCards = [...state.player.deck, ...state.player.hand, ...state.player.discard];
@@ -2641,7 +2649,7 @@ function showSellCardModal() {
     return;
   }
   const sold = state.merchantSellsThisVisit ?? 0;
-  const maxSells = 2;
+  const maxSells = MERCHANT_SELLS_PER_VISIT;
   if (sold >= maxSells) {
     showConfirm({ title: "已达上限", body: `本次拜访已卖 ${maxSells} 张，无法继续。下次拜访再来。`, confirmLabel: "知道了", onConfirm: () => {} });
     return;
@@ -2686,7 +2694,8 @@ function showSellCardModal() {
     <div class="ic-modal sell-modal">
       <div class="ic-title">💰 卖卡换碎片 <span class="sell-count">${sold}/${maxSells}</span></div>
       <div class="mxpay-tip">点击卡片卖给商人。每次拜访最多卖 ${maxSells} 张。<br>
-        档位：common 1 / rare 2 / super_rare 4 / epic 7 碎片，玩家自选种族。</div>
+        档位：common 1 / rare 2 / super_rare 4 / epic 7 碎片，<b>仅可换普通碎片（兽/人/死）</b>。<br>
+        <span style="color:var(--gray);font-size:10px">稀有碎片（巨/暗）需击杀对应种族敌人。</span></div>
       <div class="sell-cards-grid">${cardItems}</div>
       <div class="ic-actions"><button class="ic-cancel">关闭</button></div>
     </div>
@@ -2699,7 +2708,7 @@ function showSellCardModal() {
       const def = CARD_DB[inst.defId];
       const rarity = def.rarity ?? "common";
       const price = MERCHANT_SELL_PRICES[rarity];
-      showRacePicker(`「${def.name}」卖 ${price} 碎片 — 选要哪个种族的`, race => {
+      showRacePicker(`「${def.name}」卖 ${price} 碎片 — 选普通碎片种族`, race => {
         if (merchantSellCard(state, uid, race)) {
           overlay.remove();
           // 卖完后如果还能卖，重开 modal；否则刷新 render
@@ -2709,7 +2718,7 @@ function showSellCardModal() {
             render();
           }
         }
-      });
+      }, MERCHANT_SELL_RACES);
     });
   });
   overlay.querySelector(".ic-cancel")!.addEventListener("click", () => { overlay.remove(); render(); });

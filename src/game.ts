@@ -765,7 +765,8 @@ export function merchantTradeFragmentsMixed(
 }
 
 // 商人卖卡
-export const MERCHANT_SELLS_PER_VISIT = 2;
+// v0.8.2 commit D：2 → 3 张/visit，配合 T1 单普通×3 配方一次拜访即可备齐入门附魔
+export const MERCHANT_SELLS_PER_VISIT = 3;
 export function merchantSellCard(state: GameState, cardUid: string, gainRace: EnemyRace): boolean {
   if (state.phase !== "floor_event" || state.activeEventId !== "merchant") return false;
   const sold = state.merchantSellsThisVisit ?? 0;

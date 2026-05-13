@@ -69,12 +69,25 @@ export const MERCHANT_SELL_PRICES: Record<CardRarity, number> = {
   epic: 7,
 };
 
+// v0.8.2 卖卡限定的种族 — 只能换普通碎片（兽/人/死）
+// 设计意图：稀有碎片（巨/暗）必须靠 elite/boss/普通战刷出的稀有怪掉，
+// 不允许通过卖卡通货膨胀绕过。
+export const MERCHANT_SELL_RACES: readonly EnemyRace[] = ["beast", "humanoid", "undead"];
+
+export function isSellRace(race: EnemyRace): boolean {
+  return MERCHANT_SELL_RACES.includes(race);
+}
+
 // 玩家卖卡：从牌库（含手牌/弃牌堆）移除一张卡，获得指定种族的碎片
 export function trySellCard(
   state: GameState,
   cardUid: string,
   gainRace: EnemyRace,
 ): { ok: boolean; reason?: string; gained?: number } {
+  // v0.8.2 限定：卖卡只能换普通碎片（兽/人/死）
+  if (!isSellRace(gainRace)) {
+    return { ok: false, reason: `卖卡只能换普通碎片（兽/人/死）。稀有碎片（巨/暗）需从敌人掉落。` };
+  }
   // 在 deck / hand / discard 里找
   const deckIdx = state.player.deck.findIndex(c => c.uid === cardUid);
   const handIdx = state.player.hand.findIndex(c => c.uid === cardUid);
