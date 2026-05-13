@@ -16,7 +16,7 @@ import type {
   EnchantId,
   Suit,
 } from "./types.ts";
-import { ENCHANT_RECIPES, ENCHANT_NAMES, SUIT_SYMBOLS, getEnchantParam } from "./types.ts";
+import { ENCHANT_RECIPES, ENCHANT_NAMES, SUIT_SYMBOLS, getEnchantParam, getEnchantMaxLevel } from "./types.ts";
 import {
   STARTING_VITA,
   STARTING_HAND,
@@ -647,14 +647,15 @@ export function applyEnchant(state: GameState, enchantId: EnchantId): boolean {
   if (state.phase !== "forge") return false;
   const recipe = ENCHANT_RECIPES[enchantId];
   if (!recipe) return false;
-  // 5 档升级 / 替换判定
-  // - 当前已装这个附魔且 Lv < 5：升级（消耗等额配方），Lv+1
-  // - 当前已装这个附魔且 Lv = 5：拒绝（满级）
+  // 升级 / 替换判定（v0.8.2 maxLv 从 ENCHANT_RECIPES.maxLevel 读，legacy 5 / 新附魔 3）
+  // - 当前已装这个附魔且 Lv < maxLv：升级（消耗等额配方），Lv+1
+  // - 当前已装这个附魔且 Lv = maxLv：拒绝（满级）
   // - 其它：替换（Lv 重置为 1）
   const isSameEnchant = state.player.weaponEnchant === enchantId;
   const curLevel = state.player.weaponEnchantLevel ?? 1;
-  if (isSameEnchant && curLevel >= 5) {
-    pushLog(state, `${ENCHANT_NAMES[enchantId]} 已满级（Lv 5），无法继续升级。`, "system");
+  const maxLv = getEnchantMaxLevel(enchantId);
+  if (isSameEnchant && curLevel >= maxLv) {
+    pushLog(state, `${ENCHANT_NAMES[enchantId]} 已满级（Lv ${maxLv}），无法继续升级。`, "system");
     return false;
   }
 
@@ -683,7 +684,7 @@ export function applyEnchant(state: GameState, enchantId: EnchantId): boolean {
 
   // 更新附魔 + Lv
   if (isSameEnchant) {
-    state.player.weaponEnchantLevel = Math.min(5, curLevel + 1);
+    state.player.weaponEnchantLevel = Math.min(maxLv, curLevel + 1);
   } else {
     state.player.weaponEnchant = enchantId;
     state.player.weaponEnchantLevel = 1;
