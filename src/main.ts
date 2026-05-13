@@ -55,7 +55,7 @@ import { NODE_TYPE_META, getReachableNodes } from "./map.ts";
 import { SUIT_SYMBOLS, SUITS, isRedSuit, FIGHTS_PER_FLOOR, STATUS_META, RACES, FRAGMENT_NAMES, FRAGMENT_ICONS,
   ENCHANTS, ENCHANT_NAMES, ENCHANT_RECIPES, RACE_NAMES, isRareRace,
   ENCHANT_MAX_LEVEL, getEnchantDescAt,
-  SUIT_TIER_NAMES, SUIT_TIER_DESCS, SUIT_THEMES } from "./types.ts";
+  SUIT_TIER_NAMES, SUIT_TIER_DESCS, SUIT_THEMES, APP_VERSION } from "./types.ts";
 import type { EnemyRace, Suit, EnchantId } from "./types.ts";
 import type { GameState, CardInstance, EnemyState, StatusEffect } from "./types.ts";
 
@@ -3836,6 +3836,12 @@ function openHamburger() {
 
   const menu = document.createElement("div");
   menu.id = "hamburger-menu";
+
+  // 版本号显示（不可点击）
+  const verItem = document.createElement("div");
+  verItem.className = "hmenu-version";
+  verItem.innerHTML = `塔牌 · Suitspire <span class="hmenu-vtag">v${APP_VERSION}</span>`;
+  menu.appendChild(verItem);
 
   const guideItem = document.createElement("button");
   guideItem.className = "hmenu-item";

@@ -592,6 +592,28 @@ section {
 .hmenu-item:active { background: rgba(255,255,255,0.12); transform: none; }
 .hmenu-item.danger { color: var(--red); }
 
+.hmenu-version {
+  padding: 10px 16px 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  user-select: text;
+  font-family: -apple-system, "PingFang SC", sans-serif;
+}
+.hmenu-vtag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: rgba(200, 104, 255, 0.18);
+  border: 1px solid rgba(200, 104, 255, 0.35);
+  border-radius: 8px;
+  color: #c868ff;
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  font-size: 10px;
+  font-weight: 600;
+}
+
 /* ═══════════════════════════════════════
    ACTION BAR
 ═══════════════════════════════════════ */
