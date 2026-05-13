@@ -204,26 +204,29 @@ export function generateFloorMap(floor: number): FloorMap {
     layerNodes.push(layerArr);
   }
 
-  // 1.5. 保证每关至少有 1 个铁匠铺（floor >= 2）
-  // 之前 forge 权重 7 → 经常一整关都不出，玩家 build 节奏被打乱
-  // 改为：若本次生成完后 counts.forge === 0，挑一个 battle 节点改成 forge
-  if (floor >= 2 && counts.forge === 0) {
-    // 候选：所有中间层的 battle 节点（不动 start / boss / elite）
-    const battleCands: MapNode[] = [];
+  // 1.5. v0.8.2：F2 起每层强制至少 1 个铁匠铺 + 1 个商店
+  // 旧版只有 forge 保底，shop 仍会缺，玩家 F1-F5 期间常常凑不齐普通碎片
+  // 用 helper 把缺的 battle 节点改成对应类型
+  const ensureNode = (target: MapNodeType) => {
+    if (counts[target] > 0) return;
+    const cands: MapNode[] = [];
     for (let layer = 1; layer < totalLayers - 1; layer++) {
       for (const n of layerNodes[layer]) {
-        if (n.type === "battle") battleCands.push(n);
+        if (n.type === "battle") cands.push(n);
       }
     }
-    if (battleCands.length > 0) {
-      const pick = battleCands[Math.floor(Math.random() * battleCands.length)];
-      pick.type = "forge";
-      counts.battle = Math.max(0, counts.battle - 1);
-      counts.forge++;
-      // 清掉旧的 battle payload（preRollPayload 不会冲突，因为 forge 不需要 payload）
-      pick.enemies = undefined;
-      pick.eventId = undefined;
-    }
+    if (cands.length === 0) return;
+    const pick = cands[Math.floor(Math.random() * cands.length)];
+    pick.type = target;
+    counts.battle = Math.max(0, counts.battle - 1);
+    counts[target]++;
+    // 清掉旧的 battle payload（forge / shop 不需要）
+    pick.enemies = undefined;
+    pick.eventId = undefined;
+  };
+  if (floor >= 2) {
+    ensureNode("forge");
+    ensureNode("shop");
   }
 
   // 2. 计算坐标（normalized 0-1）
