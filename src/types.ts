@@ -193,6 +193,19 @@ export const STATUS_META: Record<string, StatusMeta> = {
   // ── 玩家「下次攻击命中附加 debuff」标记 ────────────────────
   next_atk_apply_poison: { name: "箭毒预备", desc: "下次攻击命中时给目标 +stacks 中毒。\n来源：道具 it_poison_dart「箭毒蛙」。", kind: "buff" },
   next_atk_apply_bleed:  { name: "抗凝血预备", desc: "下次攻击命中时给目标 +stacks 出血（持续 2 回合）。\n来源：道具 it_anticoag「抗凝血」。", kind: "buff" },
+
+  // ── v0.8.2 新附魔触发的 status ────────────────────────────
+  night_walk:        { name: "夜行", desc: "战斗起始 N 回合内（按附魔 Lv：1/2/3）所有攻击 hits +1。\n来源：附魔 ench_night_walk「夜行」（♦ T1，开局自动挂）。", kind: "buff" },
+  shadow_clone_active: { name: "阴影分身", desc: "持续 1-3 回合（按附魔 Lv）：所有攻击 hits +2。激活时一次性给玩家挂 +3/+2/+1 层易伤（持续时间一致）。\n来源：附魔 ench_shadow_clone「阴影分身」（♦ T3，单次主动弃 ≥3 张激活）。", kind: "buff" },
+  combo_unlock:      { name: "无影连斩", desc: "本场战斗内永久 hits +1（已通过连击解锁，每场仅 1 次）。\n来源：附魔 ench_endless_combo「无影连斩」（♠ T2，连续命中 N 次后解锁，N 按附魔 Lv：5/3/2）。", kind: "buff" },
+  decap_charge:      { name: "斩首蓄势", desc: "下次攻击强制 hits=1，但伤害 ×N（N 按附魔 Lv：2.0/2.5/3.0），一次性消耗。\n来源：附魔 ench_decap「斩首」（♠ T3，单次主动弃 ≥N 张激活）。", kind: "buff" },
+  purge_vortex_dot_immune: { name: "净化漩涡", desc: "本回合内新增的中毒/燃烧/出血对你无效（已存在的正常 tick）。\n来源：附魔 ench_purge_vortex「净化漩涡」（♣ T3，单次主动弃 ≥4 张激活）。", kind: "buff" },
+
+  // ── v0.8.2 附魔字段的伪 status（玩家 UI 可见，非真 status，由 main.ts 注入） ──
+  _enchant_hunt:         { name: "猎杀印记", desc: "下次攻击自动消耗 1 stack，伤害 ×N（按猎食者 Lv：1.4/1.5/1.7）。stacks 跨战斗保留。\n来源：附魔 ench_hunter_heart「猎食者之心」（♥ T1，击杀敌人 +1，cap 2/3/3）。", kind: "buff" },
+  _enchant_war_banner:   { name: "血染战旗", desc: "武器 baseDmg 已永久 +stacks（本场战斗，新战斗清零）。每损 N% maxHP 触发一次 +1。\n来源：附魔 ench_war_banner「血染战旗」（♠ T1）。", kind: "buff" },
+  _enchant_combo:        { name: "连击进度", desc: "本场连续命中 stacks 次。达到触发数（按附魔 Lv：5/3/2）后永久 hits +1。出技能/道具/未命中会重置。\n来源：附魔 ench_endless_combo「无影连斩」（♠ T2，未解锁前的进度）。", kind: "neutral" },
+  _enchant_blood_anoint: { name: "血涂积累", desc: "本场战斗累计已给玩家 +stacks 最大 HP（每击杀敌人 +N% × target.maxHp，N 按 Lv：5/8/10）。新战斗清零。\n来源：附魔 ench_blood_anoint「血涂」（♥ T3）。", kind: "buff" },
   // ── 吸血盾 / 反伤甲 ──
   draining_charge:   { name: "吸血盾蓄势", desc: "已累积 stacks 点延迟回血，下回合开始时全部回给玩家。\n来源：装备「吸血盾」受击触发。", kind: "buff" },
   thorn_chain:       { name: "反伤连击", desc: "本回合已累计受击 stacks 次（用于反伤甲计算每 hit +10% 反伤）。每回合开始清零。\n来源：装备「反伤甲」受击触发。", kind: "neutral" },
@@ -536,6 +549,81 @@ export function getEnchantDescAt(id: EnchantId, level: number): string {
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// v0.8.2 附魔图鉴表格元数据（精简版描述，给图鉴 / 简化 UI 用）
+// ─────────────────────────────────────────────────────────
+// 跟 getEnchantDescAt（完整描述）相对应，但只显示"机制摘要 + 每档变化的数字"。
+// 完整长描述用在 状态栏 tooltip / 铁匠铺装备详情，简洁版用在图鉴表格。
+
+export interface EnchantTableMeta {
+  summary: string;       // 一句话机制（带 💳 标记弃牌触发）
+  levels: [string, string, string];  // Lv 1/2/3 简短参数描述
+}
+
+export const ENCHANT_TABLE_META: Partial<Record<EnchantId, EnchantTableMeta>> = {
+  // ♠ 莽夫
+  ench_war_banner: {
+    summary: "每损 N% maxHP（自损或受击）→ 武器 baseDmg 永久 +1（本场，cap +M）",
+    levels: ["10% / cap +3", "8% / cap +5", "6% / cap +7"],
+  },
+  ench_endless_combo: {
+    summary: "连续命中 N 次 → 永久 hits +1（本场仅 1 次；出技能/未命中重置）",
+    levels: ["5 次", "3 次", "2 次"],
+  },
+  ench_decap: {
+    summary: "💳 单次主动弃 ≥N 张 → 下次攻击 hits=1，伤害 ×M",
+    levels: ["≥5 张 / ×2.0", "≥4 张 / ×2.5", "≥3 张 / ×3.0"],
+  },
+  // ♦ 暗影
+  ench_night_walk: {
+    summary: "开局 N 回合内所有攻击 hits +1",
+    levels: ["1 回合", "2 回合", "3 回合"],
+  },
+  ench_chain: {
+    summary: "玩家身上每 1 种 debuff（毒/血/弱/易/燃）→ 所有攻击 +N%",
+    levels: ["+4% / 种", "+6% / 种", "+8% / 种"],
+  },
+  ench_shadow_clone: {
+    summary: "💳 单次主动弃 ≥3 张 → 持续 N 回合 hits +2 + 自挂 M 层易伤",
+    levels: ["+3 易伤 / 1 回", "+2 易伤 / 2 回", "+1 易伤 / 3 回"],
+  },
+  // ♥ 红心
+  ench_hunter_heart: {
+    summary: "攻击吸血 N%；击杀 +1 猎杀 stack（cap K，跨战斗），下次攻击 ×M",
+    levels: ["8% / ×1.4 / cap 2", "10% / ×1.5 / cap 3", "12% / ×1.7 / cap 3"],
+  },
+  ench_glutton: {
+    summary: "吸血溢出按 N HP : 1 转临时护盾（cap M）",
+    levels: ["5 HP → 1, cap 2", "3 HP → 1, cap 3", "2 HP → 1, cap 5"],
+  },
+  ench_blood_anoint: {
+    summary: "击杀 → 永久 +N% × target.maxHp 给玩家 maxHP（本场，新战斗清零）",
+    levels: ["+5%", "+8%", "+10%"],
+  },
+  // ♣ 法术
+  ench_curse_ring: {
+    summary: "出 1 张技能牌 / 💳 主动弃 1 张攻击牌 → N% 摸 1",
+    levels: ["20%", "30%", "50%"],
+  },
+  ench_curse_shift: {
+    summary: "每张技能命中 → N% 把玩家身上 1 个随机 debuff 转给敌人",
+    levels: ["30%", "45%", "60%"],
+  },
+  ench_purge_vortex: {
+    summary: "💳 单次主动弃 ≥4 张 → +N 层护盾，本回合新增 DOT 无效",
+    levels: ["+3 护盾", "+4 护盾", "+5 护盾"],
+  },
+  // 大师
+  ench_element_master: {
+    summary: "玩家 DOT 递进免疫",
+    levels: ["免中毒", "+ 免燃烧", "+ 免出血（全免）"],
+  },
+  ench_suit_master: {
+    summary: "攻击牌花色相性 — 异色乘数调整（同色 +20% 不变）",
+    levels: ["异色 -10%", "异色 0%", "异色 +20%（扩散）"],
+  },
+};
+
 // 稀少种族集合（用于 UI 标记 + 配方校验）
 export const RARE_RACES: EnemyRace[] = ["giant", "dark"];
 export function isRareRace(race: EnemyRace): boolean {
@@ -809,6 +897,8 @@ export interface BattleState {
   floor: number;                // 当前楼层（calcAttackDamage 里的 sharp 附魔需要）
   pendingDodgeFx?: number;      // 待播放的闪避动效次数（main.ts 渲染时消费）
   pendingBlockFx?: number;      // 待播放的完全格挡动效次数（盾牌闪光）
+  // v0.8.2 玩家多 hit 飘字：playAttack 每次 hit 后 push 一条，main.ts 逐 hit 间隔播 slash + 飘字
+  pendingPlayerHits?: { targetIdx: number; dmg: number; isCrit: boolean; isDodge: boolean }[];
 
   // 战斗开始时的骰子先手机制：roll 1d6，单数玩家先手 / 双数敌人先手
   // diceRoll 由 game.ts startNodeBattle 设置；main.ts 渲染时显示骰子动画

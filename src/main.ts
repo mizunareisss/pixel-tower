@@ -3,6 +3,7 @@ import { getCardIcon } from "./icons.ts";
 import {
   playSlashHit, playSkillBurst, playDebuffApply, playBuffApply,
   playHealSparkle, playAoeWave, playPlayerHit, playEquip, playDodgeMiss, playShieldBlock,
+  playDamageFloat,
 } from "./animations.ts";
 import {
   newGame,
@@ -55,7 +56,7 @@ import type { EventId } from "./events.ts";
 import { NODE_TYPE_META, getReachableNodes } from "./map.ts";
 import { SUIT_SYMBOLS, SUITS, isRedSuit, FIGHTS_PER_FLOOR, STATUS_META, RACES, FRAGMENT_NAMES, FRAGMENT_ICONS,
   ENCHANTS_TRADITION, ENCHANTS_MASTER, ENCHANTS_ALL_NEW,
-  ENCHANT_NAMES, ENCHANT_RECIPES, RACE_NAMES, isRareRace,
+  ENCHANT_NAMES, ENCHANT_RECIPES, ENCHANT_TABLE_META, RACE_NAMES, isRareRace,
   getEnchantMaxLevel, getEnchantCategory,
   getEnchantDescAt,
   SUIT_TIER_NAMES, SUIT_TIER_DESCS, SUIT_THEMES, APP_VERSION } from "./types.ts";
@@ -410,6 +411,34 @@ function playBattleExitAnimation() {
 }
 
 // ─────────────────────────────────────────────────────────
+// v0.8.2 附魔字段伪 status — 让 huntStacks / warBannerBonus / combo /
+// bloodAnointBonus 这些 PlayerState 字段在状态栏可见
+// ─────────────────────────────────────────────────────────
+
+function buildVirtualEnchantStatuses(player: import("./types.ts").PlayerState): import("./types.ts").StatusEffect[] {
+  const out: import("./types.ts").StatusEffect[] = [];
+  // 猎食者印记（跨战斗）— 仅当装着该附魔且有 stack
+  if (player.weaponEnchant === "ench_hunter_heart" && (player.huntStacks ?? 0) > 0) {
+    out.push({ id: "_enchant_hunt", name: "猎杀印记", stacks: player.huntStacks!, duration: -1 });
+  }
+  // 战旗本场累积
+  if (player.weaponEnchant === "ench_war_banner" && (player.warBannerBonus ?? 0) > 0) {
+    out.push({ id: "_enchant_war_banner", name: "血染战旗", stacks: player.warBannerBonus!, duration: -1 });
+  }
+  // 连斩进度（仅装着且未解锁且有进度时显示；解锁后已通过 combo_unlock status 显示）
+  if (player.weaponEnchant === "ench_endless_combo"
+      && !player.comboUnlocked
+      && (player.combo ?? 0) > 0) {
+    out.push({ id: "_enchant_combo", name: "连击进度", stacks: player.combo!, duration: -1 });
+  }
+  // 血涂本场累积
+  if (player.weaponEnchant === "ench_blood_anoint" && (player.bloodAnointBonus ?? 0) > 0) {
+    out.push({ id: "_enchant_blood_anoint", name: "血涂积累", stacks: player.bloodAnointBonus!, duration: -1 });
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────
 // 玩家状态芯片点击详情
 // ─────────────────────────────────────────────────────────
 
@@ -499,11 +528,12 @@ function showCharacterDetail(): void {
         `;
       }).join("");
 
-  // 状态（buff / debuff / neutral 分组）
+  // 状态（buff / debuff / neutral 分组）+ v0.8.2 附魔伪 status
+  const allStatuses = [...state.player.statuses, ...buildVirtualEnchantStatuses(state.player)];
   const buffs: typeof state.player.statuses = [];
   const debuffs: typeof state.player.statuses = [];
   const neutral: typeof state.player.statuses = [];
-  for (const s of state.player.statuses) {
+  for (const s of allStatuses) {
     const meta = STATUS_META[s.id];
     if (meta?.kind === "buff") buffs.push(s);
     else if (meta?.kind === "debuff") debuffs.push(s);
@@ -532,7 +562,7 @@ function showCharacterDetail(): void {
     ${renderStatusBlock(buffs, "✨ 增益", "buff")}
     ${renderStatusBlock(debuffs, "💀 减益", "debuff")}
     ${renderStatusBlock(neutral, "· 中性", "neutral")}
-    ${state.player.statuses.length === 0 ? `<div class="cd-item cd-empty">暂无状态</div>` : ""}
+    ${allStatuses.length === 0 ? `<div class="cd-item cd-empty">暂无状态</div>` : ""}
   `;
 
   overlay.innerHTML = `
@@ -937,7 +967,9 @@ function renderBattle() {
     "enc_runic_immune", "enc_dot_immune", "time_stop",
   ]);
   const ps = $("pcard-statuses");
-  const visibleStatuses = state.player.statuses.filter(s => !HIDDEN_STATUSES.has(s.id));
+  // v0.8.2 注入附魔字段伪 status（猎杀印记 / 战旗 / 连击进度 / 血涂积累）
+  const allStatusesForBar = [...state.player.statuses, ...buildVirtualEnchantStatuses(state.player)];
+  const visibleStatuses = allStatusesForBar.filter(s => !HIDDEN_STATUSES.has(s.id));
   if (visibleStatuses.length === 0) {
     ps.innerHTML = '<span class="status-empty">—</span>';
   } else {
@@ -3655,7 +3687,25 @@ function triggerCardAnimation(def: import("./types.ts").CardDef, targetIdx: numb
     const playerArea = document.querySelector("#player-card") as HTMLElement | null;
 
     if (def.category === "attack") {
-      if (targetEl) playSlashHit(targetEl);
+      // v0.8.2 多 hit 逐个播：消费 state.battle.pendingPlayerHits，每 hit 间隔 180ms
+      const hits = state.battle?.pendingPlayerHits ?? [];
+      if (hits.length === 0) {
+        if (targetEl) playSlashHit(targetEl);
+      } else {
+        hits.forEach((h, i) => {
+          setTimeout(() => {
+            const el = document.querySelector(`.enemy-card[data-idx="${h.targetIdx}"]`) as HTMLElement | null;
+            if (!el) return;
+            if (h.isDodge) {
+              playDodgeMiss(el);
+            } else {
+              playSlashHit(el);
+              playDamageFloat(el, h.dmg, h.isCrit, i);
+            }
+          }, i * 180);
+        });
+      }
+      if (state.battle) state.battle.pendingPlayerHits = [];
     } else if (def.category === "skill") {
       if (def.target === "all") {
         if (enemiesRow) playAoeWave(enemiesRow, "purple");
@@ -4042,11 +4092,15 @@ function openCodex() {
           .map(([rc, n]) => `${FRAGMENT_ICONS[rc as EnemyRace]}×${n}`)
           .join(" + ");
         const maxLv = getEnchantMaxLevel(eid);
+        const meta = ENCHANT_TABLE_META[eid];
         const cols = Array.from({ length: 3 }, (_, i) => {
           const lv = i + 1;
           if (lv > maxLv) return `<td class="codex-ench-cell codex-ench-cell-na">—</td>`;
-          return `<td class="codex-ench-cell"><span class="codex-ench-lv">Lv ${lv}</span>${escapeHTML(getEnchantDescAt(eid, lv))}</td>`;
+          // 优先用精简表格元数据；fallback 走完整描述
+          const text = meta ? meta.levels[i] : getEnchantDescAt(eid, lv);
+          return `<td class="codex-ench-cell"><span class="codex-ench-lv">Lv ${lv}</span>${escapeHTML(text)}</td>`;
         }).join("");
+        const summary = meta?.summary ?? "";
         return `
           <tr>
             <td class="codex-ench-name">
@@ -4054,6 +4108,7 @@ function openCodex() {
                 <span class="codex-ench-name-text">${escapeHTML(ENCHANT_NAMES[eid])}</span>
                 <span class="codex-ench-tier ${tierBadgeClass}">${tierLabel}</span>
               </div>
+              ${summary ? `<div class="codex-ench-summary">${escapeHTML(summary)}</div>` : ""}
               <div class="codex-ench-cost">${costStr}</div>
             </td>
             ${cols}

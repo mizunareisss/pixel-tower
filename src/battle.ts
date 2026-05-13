@@ -1069,26 +1069,33 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
   if (hitsBase > 1 && !decapCharge) log(`${weaponDef?.name} hits ×${hitsBase}。`, "player");
 
   const weaponId = state.player.weapons[0]?.defId;
+  // v0.8.2 初始化 hit 记录数组（main.ts 用来逐 hit 播 slash + 飘字）
+  state.pendingPlayerHits = [];
   for (let i = 0; i < hits; i++) {
     if (!target.alive) break;
+    const curTargetIdx = state.enemies.indexOf(target);
     // 敌人闪避（per-hit）：精英 cap 9% / boss cap 15%；出血 -5%/层 cap -50%
     // 闪避不消耗玩家 buff（calcAttackDamage 不调用，sharpened / charge 留给下一 hit）
     const enemyDodge = getEnemyDodgeChance(target);
     if (enemyDodge > 0 && Math.random() * 100 < enemyDodge) {
       log(`✗ ${target.name} 闪避（${enemyDodge}%）！`, "enemy");
+      state.pendingPlayerHits.push({ targetIdx: curTargetIdx, dmg: 0, isCrit: false, isDodge: true });
       // v0.8.2 ♠ T2 无影连斩：未命中 → 连击中断重置
       state.player.combo = 0;
       continue;
     }
     let dmg = calcAttackDamage(state, baseSuit, log);
     // ♦ 灵敏 keyword：♦ 攻击 10% 概率暴击 ×2（独立 per-hit roll）
+    let isCrit = false;
     const dSuitNow = getActiveSpecialty(state);
     if (dSuitNow === "diamond" && suitTier(state, "diamond") >= 1 && baseSuit === "diamond" && Math.random() < 0.10) {
       dmg *= 2;
+      isCrit = true;
       log(`♦ 灵敏 keyword：暴击 ×2（10%）！`, "player");
     }
     dmg = Math.floor(dmg);
     log(`▶ 攻击 ${SUIT_SYMBOLS[def.attackSuit!]} → ${target.name} -${dmg}。`, "player");
+    state.pendingPlayerHits.push({ targetIdx: curTargetIdx, dmg, isCrit, isDodge: false });
     // v0.8.2 Round 2-A：传 ctx 让 damageEnemy 在 alive 翻转时自动 emit "敌人死亡"
     // 事件，触发武器击杀回血 / 附魔 onKill / 未来 ♥T1 猎食者 / ♥T3 血涂
     damageEnemy(target, dmg, log, undefined, getCtx(state, log));

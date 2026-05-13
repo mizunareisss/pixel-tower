@@ -84,3 +84,14 @@ export function playShieldBlock(targetEl: HTMLElement): void {
 export function playEquip(targetEl: HTMLElement): void {
   spawn(targetEl, "fx fx-burst fx-yellow", 400);
 }
+
+// ── 伤害数字飘字：从目标位置浮起，随 hit 编号水平偏移避免重叠 ───
+// 暴击用大字号 + 黄色
+export function playDamageFloat(targetEl: HTMLElement, dmg: number, isCrit: boolean = false, offsetIdx: number = 0): void {
+  spawn(targetEl, `fx fx-dmg-float${isCrit ? " fx-dmg-crit" : ""}`, 900, el => {
+    el.textContent = isCrit ? `${dmg}!` : String(dmg);
+    // 多 hit 时水平偏移 ±N px 让数字错开
+    const offset = (offsetIdx - 1) * 22;
+    el.style.left = `calc(50% + ${offset}px)`;
+  });
+}
