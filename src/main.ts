@@ -437,14 +437,22 @@ function showCharacterDetail(): void {
           <span class="cd-suit${isRed ? " red" : ""}">${sym}</span>
         </div>
         <div class="cd-item-desc">${escapeHTML(eff?.stat ?? eff?.desc ?? def.desc)}</div>
-        ${enchant ? `
-          <div class="cd-item-sub">
+        ${enchant ? (() => {
+          const curLv = state.player.weaponEnchantLevel ?? 1;
+          const maxLv = getEnchantMaxLevel(enchant);
+          const lvRows = Array.from({ length: maxLv }, (_, i) => i + 1).map(lv => {
+            const isCur = lv === curLv;
+            return `<div class="cd-item-desc enchant-lv-row${isCur ? " current" : ""}" style="font-size:11px;${isCur ? "color:var(--yellow);font-weight:700" : "color:var(--gray)"};margin:3px 0;padding:3px 6px;${isCur ? "background:rgba(200,104,255,0.12);border-left:2px solid var(--yellow)" : ""}">
+              <b>Lv ${lv}${isCur ? "（当前）" : ""}：</b>${escapeHTML(getEnchantDescAt(enchant, lv))}
+            </div>`;
+          }).join("");
+          return `<div class="cd-item-sub">
             <span class="cd-sub-label">⚒ 附魔</span>
             <b>${escapeHTML(ENCHANT_NAMES[enchant])}</b>
-            <span class="forge-lv-badge">Lv ${state.player.weaponEnchantLevel ?? 1}/${getEnchantMaxLevel(enchant)}</span>
-            <div class="cd-item-desc">${escapeHTML(getEnchantDescAt(enchant, state.player.weaponEnchantLevel ?? 1))}</div>
-          </div>
-        ` : ""}
+            <span class="forge-lv-badge">Lv ${curLv}/${maxLv}</span>
+            ${lvRows}
+          </div>`;
+        })() : ""}
       </div>
     `;
   })();
@@ -578,10 +586,20 @@ function showChipDetail(type: "weapon" | "armor" | "perk") {
       content = `
         <p class="status-info-desc">${escapeHTML(def.desc)}</p>
         <div class="status-info-stats"><span><b>当前效果：</b>${escapeHTML(eff?.stat ?? eff?.desc ?? "")}</span></div>
-        ${enchant ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #333">
-          <p class="status-info-desc" style="color:var(--yellow);font-weight:900">⚒ 附魔：${escapeHTML(ENCHANT_NAMES[enchant])} <span class="forge-lv-badge">Lv ${state.player.weaponEnchantLevel ?? 1}/${getEnchantMaxLevel(enchant)}</span></p>
-          <p class="status-info-desc" style="font-size:11px;color:var(--gray)">${escapeHTML(getEnchantDescAt(enchant, state.player.weaponEnchantLevel ?? 1))}</p>
-        </div>` : ""}
+        ${enchant ? (() => {
+          const curLv = state.player.weaponEnchantLevel ?? 1;
+          const maxLv = getEnchantMaxLevel(enchant);
+          const lvRows = Array.from({ length: maxLv }, (_, i) => i + 1).map(lv => {
+            const isCur = lv === curLv;
+            return `<div class="enchant-lv-row${isCur ? " current" : ""}" style="font-size:11px;${isCur ? "color:var(--yellow);font-weight:700" : "color:var(--gray)"};margin:3px 0;padding:3px 6px;${isCur ? "background:rgba(200,104,255,0.12);border-left:2px solid var(--yellow)" : ""}">
+              <b>Lv ${lv}${isCur ? "（当前）" : ""}：</b>${escapeHTML(getEnchantDescAt(enchant, lv))}
+            </div>`;
+          }).join("");
+          return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #333">
+            <p class="status-info-desc" style="color:var(--yellow);font-weight:900">⚒ 附魔：${escapeHTML(ENCHANT_NAMES[enchant])} <span class="forge-lv-badge">Lv ${curLv}/${maxLv}</span></p>
+            ${lvRows}
+          </div>`;
+        })() : ""}
       `;
     }
   } else if (type === "armor") {

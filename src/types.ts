@@ -512,16 +512,16 @@ export function getEnchantDescAt(id: EnchantId, level: number): string {
     // ─── v0.8.2 流派 12 ───────────────────────────────────
     case "ench_war_banner":    return `每损 ${p[0]}% 最大 HP（自损或受击），武器 baseDmg 永久 +1（本场战斗，cap +${p[1]}）。`;
     case "ench_endless_combo": return `本场战斗连续命中 ${p[0]} 次攻击后（被打断 = 出技能/道具/未命中），永久解锁 hits +1（每场仅 1 次）。`;
-    case "ench_decap":         return `单次主动弃手牌 ≥${p[0]} 张时激活「斩首」：下次攻击强制 hits=1 但伤害 ×${(p[1]/100).toFixed(1)}。`;
+    case "ench_decap":         return `💳【主动弃牌】单次弃 ≥${p[0]} 张时激活「斩首」：下次攻击强制 hits=1 但伤害 ×${(p[1]/100).toFixed(1)}。`;
     case "ench_night_walk":    return `战斗开局进入「夜行」：前 ${p[0]} 回合所有攻击 hits +1。`;
     case "ench_chain":         return `玩家身上每 1 种 debuff（毒/血/弱/易/燃），所有攻击 +${p[0]}%（按"种"计，不按层）。`;
-    case "ench_shadow_clone":  return `单次主动弃手牌 ≥3 张时激活「分身」：本攻击 hits +2，持续 ${p[1]} 回合；激活时一次性给玩家 +${p[0]} 层易伤（持续 ${p[1]} 回合）。`;
+    case "ench_shadow_clone":  return `💳【主动弃牌】单次弃 ≥3 张时激活「分身」：本攻击 hits +2，持续 ${p[1]} 回合；激活时一次性给玩家 +${p[0]} 层易伤（持续 ${p[1]} 回合）。`;
     case "ench_hunter_heart":  return `攻击命中吸血 ${p[0]}%；击杀敌人后攒 1 个"猎杀" stack（cap ${p[2]}，可跨战斗），下次攻击自动消耗 1 stack 并 ×${(p[1]/100).toFixed(2)}。`;
     case "ench_glutton":       return `玩家吸血时，超过 maxHP 的溢出部分按 ${p[0]} HP : 1 护盾 转化为临时护盾（cap ${p[1]}）。`;
     case "ench_blood_anoint":  return `玩家击杀敌人时，该敌人最大 HP × ${p[0]}% 永久 +为玩家 maxHP（本场战斗，新战斗清零）。`;
-    case "ench_curse_ring":    return `每出 1 张技能牌 / 每主动弃 1 张攻击牌（爆牌不算），${p[0]}% 概率额外摸 1 张。`;
+    case "ench_curse_ring":    return `💳 每出 1 张技能牌 / 每【主动弃牌】1 张攻击牌（爆牌不算），${p[0]}% 概率额外摸 1 张。`;
     case "ench_curse_shift":   return `每出 1 张技能牌命中时，${p[0]}% 概率把玩家身上一个随机 debuff 转移给敌人（层数 + 持续时间一并转移）。`;
-    case "ench_purge_vortex":  return `单次主动弃手牌 ≥${p[0]} 张时：生成 ${p[1]} 层临时护盾 + 本回合内新增的中毒/燃烧/出血效果无效（已存在的正常结算）。`;
+    case "ench_purge_vortex":  return `💳【主动弃牌】单次弃 ≥${p[0]} 张时：生成 ${p[1]} 层临时护盾 + 本回合内新增的中毒/燃烧/出血效果无效（已存在的正常结算）。`;
     // ─── v0.8.2 大师 2 ──────────────────────────────────────
     case "ench_element_master": {
       const list = ["中毒", "中毒 + 燃烧", "中毒 + 燃烧 + 出血"];
