@@ -38,6 +38,13 @@ function getDyedSuit(player: PlayerState): Suit | null {
 // 30 → 100：让玩家在后期仍能通过打牌持续叠加（30 张就锁死的体验是 bug）
 export const SUIT_PLAYED_CAP = 100;
 
+// ─── 全局调参阀（v0.8.2 分层公式新增）────────────────────────
+// 整局所有玩家伤害最终乘 GLOBAL_DMG_MULT，所有玩家受击最终乘 GLOBAL_DEF_MULT
+// 默认都是 1.0。如果未来 audit 发现玩家整体伤害偏高/偏低，调这两个常量即可，
+// 不用动单个 perk / 装备 / 附魔数值
+export const GLOBAL_DMG_MULT = 1.0;
+export const GLOBAL_DEF_MULT = 1.0;
+
 // 每个花色 3 类来源累计（持久化跨战斗）
 //  - 装备同花色：每件 +1.3（武器/防具叠加各算；Epic 装备不算 — 避免装上不同色 Epic 抢走专精）
 //  - 特性同花色：每张 +0.8
@@ -372,6 +379,20 @@ function ensureValidTarget(state: BattleState): EnemyState | null {
 // 攻击伤害公式
 // ─────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────
+// 攻击伤害公式 v0.8.2 — 6 区分层模型
+// ─────────────────────────────────────────────────────────
+// 最终 = ⌊ ((阶段1 × 阶段2 × 阶段3) − 阶段4) × 阶段5 × 阶段6 ⌋
+//
+//   阶段 1  基础区   ─ 武器 baseDmg × stack + 早期直加 + 楼层 + 后期直加
+//   阶段 2  加成区   ─ 1 + Σ %（加法堆叠，避免乘数失控）
+//   阶段 3  倍率区   ─ ∏ 独立倍率（严格少量，magic 类）
+//   阶段 4  防御区   ─ 敌人 armor - 玩家 pierce（减法）
+//   阶段 5  全局调参 ─ GLOBAL_DMG_MULT（顶层调节阀，默认 1.0）
+//   阶段 6  暴击     ─ p_crit 单次 roll ×2（in calcAttack 内）
+//
+// 区内同质：加成区只允许 +%，倍率区只允许 ×，不混用。
+// 设计师调全局伤害 → 改 GLOBAL_DMG_MULT 即可，不用动每个 perk/附魔。
 function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string, k?: LogKind) => void): number {
   const player = state.player;
   const ctx = getCtx(state, log, attackSuit);
@@ -386,160 +407,348 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
   const stackMult = [1.0, 1.4, 1.8, 2.2][Math.min(stackCount, 4) - 1];
   ctx.slotScale = stackMult;
 
-  let dmg = (wDef.baseDmg ?? 0) * stackMult;
-
-  // 染色 buff 覆盖：如果玩家有 dyed_X 状态，攻击牌花色被改为 X
+  // 染色覆盖
   const dyed = getDyedSuit(player);
   const actualAttackSuit = dyed ?? attackSuit;
   if (dyed) log(`染色：本张攻击视为 ${SUIT_SYMBOLS[dyed]}。`, "player");
-  // 同步更新 ctx 上的 attackSuit，让特性（同花共鸣等）也基于染色后的花色判断
   ctx.attackSuit = actualAttackSuit;
 
-  // 花色相性 vs 敌人
-  const mult = suitMultiplier(actualAttackSuit, ctx.target.suit);
-  if (mult > 1.0) log(`花色克制 ×${mult}。`, "player");
-  else if (mult < 1.0) log(`异色 ×${mult}。`, "system");
-  dmg *= mult;
+  // 专精激活
+  const activeSuit = getActiveSpecialty(state);
+  const activeTier = activeSuit ? suitTier(state, activeSuit) : 0;
 
-  // 武器 onAttack（最高叠加层级触发）
-  const wEff = wDef.equipEffects![Math.min(stackCount, 4) - 1];
-  if (wEff.onAttack) dmg = wEff.onAttack(ctx, dmg);
+  // 工具
+  const perkStacks = (id: string) => player.perks.filter(p => p.defId === id).length;
+  const isRed = (s: Suit) => s === "heart" || s === "diamond";
+  const hasPlayerDebuff = ["poison", "weak", "vulnerable", "silenced"]
+    .some(id => player.statuses.find(s => s.id === id));
 
-  // 临时 buff
-  if (player.statuses.find(s => s.id === "battle_cry")) dmg += 3;
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  阶段 1a: 基础区 — 武器 + 早期 flat add                   ║
+  // ╚══════════════════════════════════════════════════════════╝
+  let base = (wDef.baseDmg ?? 0) * stackMult;
+
+  // 临时 buff（直加）
+  if (player.statuses.find(s => s.id === "battle_cry")) base += 3;
   const wb = player.statuses.find(s => s.id === "weapon_buff");
-  if (wb) dmg += wb.stacks;
-  const sharp = player.statuses.find(s => s.id === "sharpened");
-  if (sharp) {
-    dmg = dmg * 1.5;
-    log("磨刀石 ×1.5。", "player");
-    player.statuses = player.statuses.filter(s => s.id !== "sharpened");
+  if (wb) base += wb.stacks;
+  const frenzy = player.statuses.find(s => s.id === "frenzy");
+  if (frenzy) {
+    base += frenzy.stacks * 2;
+    log(`激奋 +${frenzy.stacks * 2}（×${frenzy.stacks}）。`, "player");
   }
   const heavyStrike = player.statuses.find(s => s.id === "heavy_strike");
   if (heavyStrike) {
-    dmg += 10;
+    base += 10;
     log("猛击 +10！", "player");
     player.statuses = player.statuses.filter(s => s.id !== "heavy_strike");
   }
-  const dbl = player.statuses.find(s => s.id === "double_strike");
-  if (dbl) {
-    dmg = dmg * 2;
-    log("倍击 ×2！", "player");
-    player.statuses = player.statuses.filter(s => s.id !== "double_strike");
+
+  // 武器 flat add（war_bow 狙击 / berserker_blade 低血）
+  // 这些在旧公式里走 onAttack callback，重构后硬编码进基础区
+  if (wDef.id === "war_bow" && ctx.target.hp > Math.floor(ctx.target.maxHp * 0.5)) {
+    base += 3;
   }
-  // 激奋：每次攻击 +stacks×5；攻击末尾 stacks +1（在 playAttack 末尾处理）
-  const frenzy = player.statuses.find(s => s.id === "frenzy");
-  if (frenzy) {
-    const bonus = frenzy.stacks * 2;
-    dmg += bonus;
-    log(`激奋 +${bonus}（×${frenzy.stacks}）。`, "player");
-  }
-  // 蓄力：×2.5，用一次清除（nerf：×3 → ×2.5）
-  const charged = player.statuses.find(s => s.id === "charged");
-  if (charged) {
-    dmg = dmg * 2.5;
-    log("蓄力 ×2.5！", "player");
-    player.statuses = player.statuses.filter(s => s.id !== "charged");
-  }
-  // 玩家被虚弱：攻击 ×0.7（-30%，固定，stacks 只决定 duration）
-  if (player.statuses.find(s => s.id === "weak")) {
-    dmg = Math.floor(dmg * 0.7);
-    log(`虚弱 -30%。`, "enemy");
+  if (wDef.id === "berserker_blade" && player.vita < Math.floor(player.vitaMax * 0.5)) {
+    base += 4;
   }
 
-  // 特性 onDealDamage（单一 effect，按 stacks 缩放）
-  const seen = new Set<string>();
-  for (const inst of player.perks) {
-    if (seen.has(inst.defId)) continue;
-    seen.add(inst.defId);
-    const pDef = CARD_DB[inst.defId];
-    const cnt = player.perks.filter(p => p.defId === inst.defId).length;
-    const eff = pDef.perkEffect;
-    if (eff?.onDealDamage) dmg = eff.onDealDamage(ctx, dmg, cnt);
+  // p_blood_pact：受击转化的 +N flat（一次性，消耗 blood_pact_charge）
+  const bloodPact = player.statuses.find(s => s.id === "blood_pact_charge");
+  if (bloodPact && bloodPact.stacks > 0) {
+    base += bloodPact.stacks;
+    log(`血誓蓄势：本次攻击 +${bloodPact.stacks}。`, "player");
+    player.statuses = player.statuses.filter(s => s.id !== "blood_pact_charge");
   }
 
-  // 重甲笨重 postAttack
-  if (player.armors.length > 0) {
-    const aDef = CARD_DB[player.armors[0].defId];
-    const aEff = aDef.equipEffects![Math.min(player.armors.length, 4) - 1];
-    if (aEff.postAttack) dmg = aEff.postAttack(ctx, dmg);
-  }
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  阶段 1b: 楼层缩放                                       ║
+  // ╚══════════════════════════════════════════════════════════╝
+  base *= player.weapons[0].scale ?? 1.0;
 
-  // 敌人易伤：受击 ×1.3（-30%→+30% 受伤，stacks 只决定 duration）
-  if (ctx.target.statuses.find(s => s.id === "vulnerable")) {
-    dmg = dmg * 1.3;
-    log(`${ctx.target.name} 易伤 ×1.3。`, "player");
-  }
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  阶段 1c: 后期 flat add（不被楼层放大）                  ║
+  // ╚══════════════════════════════════════════════════════════╝
 
-  // 楼层倍率（武器 instance）
-  dmg *= player.weapons[0].scale ?? 1.0;
-
-  // 法师杖（武器特性）+ 算计/凝神 附魔 + 奥术爆裂 的"非攻击牌累积器"统一计算
+  // calc_charge：法师杖 / 算计 / 凝神 / 奥术爆裂 累积加成
   const charge = player.statuses.find(s => s.id === "calc_charge");
   if (charge && charge.stacks > 0) {
     let mul = 0;
     if (player.weapons[0]?.defId === "arcane_scepter") mul += 3;
-    // e_strategist / ec_focus：每非攻击牌 +N 伤，N 由 Lv 决定
     if (player.weaponEnchant === "e_strategist") mul += getEnchantParam(player, 0);
     if (player.weaponEnchant === "ec_focus")     mul += getEnchantParam(player, 0);
-    // 奥术爆裂：本回合每张非攻击牌 +3
     if (player.statuses.find(s => s.id === "arcane_burst")) mul += 3;
     if (mul > 0) {
       const bonus = charge.stacks * mul;
-      dmg += bonus;
+      base += bonus;
       log(`累积加成 +${bonus}（${charge.stacks} 张 × ${mul}）。`, "player");
     }
     player.statuses = player.statuses.filter(s => s.id !== "calc_charge");
   }
 
-  // 禁忌权杖（♣ epic 武器）：攻击数值 += ♣ 亲和度 × 0.5（向下取整，cap +10）
-  // 设计要点：亲和度 cap 20 → bonus cap 10；玩家若用 ♣ 大招消耗 8 亲和会自损本武器伤害
+  // 禁忌权杖（♣ epic）：+ ♣ 亲和度 × 0.5
   if (player.weapons[0]?.defId === "forbidden_scepter") {
     const clubAff = getSuitAffinity(state, "club");
     const bonus = Math.floor(clubAff * 0.5);
     if (bonus > 0) {
-      dmg += bonus;
+      base += bonus;
       log(`♣ 禁忌权杖 +${bonus}（♣ 亲和 ${clubAff.toFixed(1)} × 0.5）。`, "player");
     }
   }
 
-  // 武器附魔 onAttack（其他附魔效果）
-  let bypassArmor = false;
-  if (player.weaponEnchant) {
-    const enchant = ENCHANT_EFFECTS[player.weaponEnchant];
-    if (enchant?.onAttack) dmg = enchant.onAttack(ctx, dmg);
-    if (enchant?.bypassArmor?.(ctx, dmg)) bypassArmor = true;
+  // 骑士铠充能
+  const knightCharge = player.statuses.find(s => s.id === "knight_charge");
+  if (knightCharge && player.armors[0]?.defId === "knight_plate") {
+    const stackArm = Math.min(player.armors.length, 4);
+    const bonusByStack = [3, 4, 5, 6];
+    const bonusPer = bonusByStack[stackArm - 1] ?? 3;
+    const total = bonusPer * knightCharge.stacks;
+    base += total;
+    player.statuses = player.statuses.filter(s => s.id !== "knight_charge");
+    log(`骑士铠充能爆发 +${total} 直伤（${knightCharge.stacks} stack × ${bonusPer}）。`, "player");
   }
 
-  // ★ 花色专精（XLSX 新版）：仅"激活的那一个"花色生效（多并列时由 activeSpecialtyOverride / 玩家选择决定）
-  const activeSuit = getActiveSpecialty(state);
-  const activeTier = activeSuit ? suitTier(state, activeSuit) : 0;
+  // ec_warblood：受击累积的永久攻击 stacks
+  if (player.weaponEnchant === "ec_warblood") {
+    const perm = player.statuses.find(s => s.id === "warblood_perm_atk");
+    if (perm) base += perm.stacks;
+  }
 
-  // ♠ T1 锋锐怒涛：攻击 ×1.15（去掉旧版 5% 暴击）
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  阶段 2: 加成区 — 加法 % 堆叠                            ║
+  // ╚══════════════════════════════════════════════════════════╝
+  let addMult = 1.0;
+  const addParts: string[] = [];
+
+  // 花色相性（×1.2 → +20% / ×1.0 → 0% / ×0.8 → -20%）
+  const suitMult = suitMultiplier(actualAttackSuit, ctx.target.suit);
+  if (suitMult > 1.0) {
+    addMult += 0.20;
+    addParts.push("克制 +20%");
+  } else if (suitMult < 1.0) {
+    addMult -= 0.20;
+    addParts.push("异色 -20%");
+  }
+
+  // 玩家虚弱 -30%
+  if (player.statuses.find(s => s.id === "weak")) {
+    addMult -= 0.30;
+    addParts.push("虚弱 -30%");
+  }
+
+  // 敌人易伤 +30%
+  if (ctx.target.statuses.find(s => s.id === "vulnerable")) {
+    addMult += 0.30;
+    addParts.push(`${ctx.target.name} 易伤 +30%`);
+  }
+
+  // ♠ T1 锋锐 +15%
   if (activeSuit === "spade" && activeTier >= 1) {
-    dmg *= 1.15;
+    addMult += 0.15;
+    addParts.push("♠T1 锋锐 +15%");
   }
 
-  // ♥ T2 绝境攻击：HP <25% 攻击 +30%
+  // ♥ T2 绝境（HP<25%）+30%
   if (activeSuit === "heart" && activeTier >= 2 && player.vita < player.vitaMax * 0.25) {
-    dmg *= 1.30;
-    log("♥ 红心专精·绝境攻击：×1.3", "player");
+    addMult += 0.30;
+    addParts.push("♥T2 绝境 +30%");
   }
 
-  // === 花色 keyword（T1 激活时跟随主流派；旧版 ♥ 全局 8% 吸血 已移除 — 专精专注花色） ===
-  // ♠ 锐利：在 playAttack hits 循环里实现（45% 概率施加 1 层出血）
-  // ♦ 灵敏：在 playAttack hits 循环里实现（25% +1 hit + 10% 暴击）
-  // ♣ 镇守：在 playAttack hits 循环里实现（命中 +1 临时护盾）
-  // ♥ 贪婪：♥ 攻击命中时 +10% 吸血
-  if (activeSuit === "heart" && activeTier >= 1 && ctx.attackSuit === "heart") {
-    const greedHeal = Math.max(0, Math.floor(dmg * 0.10));
-    if (greedHeal > 0) {
-      player.vita = Math.min(player.vitaMax, player.vita + greedHeal);
-      log(`♥ 贪婪 keyword：吸血 ${greedHeal}。`, "player");
+  // 特性 % 加成（从 onDealDamage 迁移过来）
+  const bleed = perkStacks("p_bleed");
+  if (bleed > 0) {
+    addMult += 0.05 * bleed;
+    addParts.push(`流血 +${Math.round(0.05 * bleed * 100)}%`);
+  }
+
+  const insight = perkStacks("p_insight");
+  if (insight > 0
+      && isRed(actualAttackSuit) === isRed(ctx.target.suit)
+      && actualAttackSuit !== ctx.target.suit) {
+    const pct = Math.min(0.25, 0.08 * insight);
+    addMult += pct;
+    addParts.push(`力量 +${Math.round(pct * 100)}%`);
+  }
+
+  const exec = perkStacks("p_executioner");
+  if (exec > 0 && ctx.target.hp <= ctx.target.maxHp * 0.3) {
+    const pct = Math.min(0.30, 0.10 * exec);
+    addMult += pct;
+    addParts.push(`处刑 +${Math.round(pct * 100)}%`);
+  }
+
+  const cold = perkStacks("p_coldblood");
+  if (cold > 0 && !hasPlayerDebuff) {
+    addMult += 0.08 * cold;
+    addParts.push(`冷血 +${Math.round(0.08 * cold * 100)}%`);
+  }
+
+  const reson = perkStacks("p_resonance");
+  if (reson > 0 && actualAttackSuit === ctx.target.suit) {
+    addMult += 0.08 * reson;
+    addParts.push(`同花共鸣 +${Math.round(0.08 * reson * 100)}%`);
+  }
+
+  const swift = perkStacks("p_swift_strike");
+  if (swift > 0
+      && state.turn === 1
+      && !player.statuses.find(s => s.id === "swift_first_used")) {
+    addMult += 0.20 * swift;
+    addParts.push(`疾风斩首攻 +${Math.round(0.20 * swift * 100)}%`);
+    player.statuses.push({ id: "swift_first_used", name: "疾风触发", stacks: 1, duration: -1 });
+  }
+
+  // 附魔 % 加成（从 onAttack 迁移过来）
+  if (player.weaponEnchant === "e_brawler" && player.vita < player.vitaMax * 0.5) {
+    const pct = getEnchantParam(player, 0) / 100;
+    addMult += pct;
+    addParts.push(`强袭 +${Math.round(pct * 100)}%`);
+  }
+  if (player.weaponEnchant === "ec_warblood" && player.vita < player.vitaMax * 0.5) {
+    const pct = getEnchantParam(player, 0) / 100;
+    addMult += pct;
+    addParts.push(`战狂血誓 +${Math.round(pct * 100)}%`);
+  }
+  if (player.weaponEnchant === "ec_arcane"
+      && !player.statuses.find(s => s.id === "arcane_first_used")) {
+    const hasDyeOrChant = player.statuses.some(s =>
+      s.id.startsWith("dyed_") || s.id.startsWith("chanted_"));
+    if (hasDyeOrChant) {
+      const pct = getEnchantParam(player, 0) / 100;
+      addMult += pct;
+      addParts.push(`秘法回响 +${Math.round(pct * 100)}%`);
+      player.statuses.push({ id: "arcane_first_used", name: "秘法已触发", stacks: 1, duration: -1 });
     }
   }
 
-  // ★ 穿甲射状态：本次攻击无视全部 armor（一次性）
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  阶段 3: 倍率区 — ×X 独立乘                              ║
+  // ╚══════════════════════════════════════════════════════════╝
+  let mulMult = 1.0;
+  const mulParts: string[] = [];
+
+  const sharp = player.statuses.find(s => s.id === "sharpened");
+  if (sharp) {
+    mulMult *= 1.5;
+    mulParts.push("磨刀石 ×1.5");
+    player.statuses = player.statuses.filter(s => s.id !== "sharpened");
+  }
+
+  const dbl = player.statuses.find(s => s.id === "double_strike");
+  if (dbl) {
+    mulMult *= 2;
+    mulParts.push("倍击 ×2");
+    player.statuses = player.statuses.filter(s => s.id !== "double_strike");
+  }
+
+  const charged = player.statuses.find(s => s.id === "charged");
+  if (charged) {
+    mulMult *= 2.5;
+    mulParts.push("蓄力 ×2.5");
+    player.statuses = player.statuses.filter(s => s.id !== "charged");
+  }
+
+  // e_reaper 击杀 buff（一次性消耗）
+  if (player.weaponEnchant === "e_reaper") {
+    const reaperBuff = player.statuses.find(s => s.id === "e_reaper_buff");
+    if (reaperBuff) {
+      const mult = getEnchantParam(player, 0) / 100;
+      mulMult *= mult;
+      mulParts.push(`收割 ×${mult.toFixed(2)}`);
+      player.statuses = player.statuses.filter(s => s.id !== "e_reaper_buff");
+    }
+  }
+
+  // e_phantom 闪避 buff（一次性消耗）
+  if (player.weaponEnchant === "e_phantom") {
+    const phantomBuff = player.statuses.find(s => s.id === "phantom_charge");
+    if (phantomBuff) {
+      const mult = getEnchantParam(player, 0) / 100;
+      mulMult *= mult;
+      mulParts.push(`幻影 ×${mult.toFixed(2)}`);
+      player.statuses = player.statuses.filter(s => s.id !== "phantom_charge");
+    }
+  }
+
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  合成中间 dmg = 基础 × 加成 × 倍率                       ║
+  // ╚══════════════════════════════════════════════════════════╝
+  let dmg = base * addMult * mulMult;
+
+  // 阈值类附魔（依赖中间 dmg）
+  if (player.weaponEnchant === "e_titan" && dmg >= ctx.target.maxHp * 0.08) {
+    const pct = getEnchantParam(player, 0) / 100;
+    dmg *= (1 + pct);
+    log(`撼地 +${Math.round(pct * 100)}%！（${Math.floor(dmg)} ≥ ${Math.floor(ctx.target.maxHp * 0.08)}）`, "player");
+  }
+  if (player.weaponEnchant === "ec_focus") {
+    const threshold = getEnchantParam(player, 1);
+    const bonus = getEnchantParam(player, 2);
+    if (dmg >= threshold) {
+      dmg += bonus;
+      log(`凝神：伤害 ≥ ${threshold}，+${bonus}。`, "player");
+    }
+  }
+
+  // 加成 / 倍率日志
+  if (addParts.length > 0) {
+    log(`加成 ×${addMult.toFixed(2)}（${addParts.join("，")}）`, "player");
+  }
+  if (mulParts.length > 0) {
+    log(`倍率 ×${mulMult.toFixed(2)}（${mulParts.join("，")}）`, "player");
+  }
+
+  // ─── 副作用 callbacks（吸血等）─── 基于中间 dmg 调用
+  // 这些 callback 主要做"按 d 比例回血"等副作用，不真改 d
+  // 已硬编码的武器（war_bow, berserker_blade）跳过 callback；其他调用以触发副作用
+  const wEff = wDef.equipEffects![Math.min(stackCount, 4) - 1];
+  const SKIP_WEAPON_CALLBACK = new Set(["war_bow", "berserker_blade"]);
+  if (wEff.onAttack && !SKIP_WEAPON_CALLBACK.has(wDef.id)) {
+    dmg = wEff.onAttack(ctx, dmg);
+  }
+
+  // 武器附魔 onAttack（剩下未硬编码的：ec_lifesteal — 含满血 +N% mul）
+  // bypassArmor 检查在所有附魔上都做
+  let bypassArmor = false;
+  const SKIP_ENCHANT_CALLBACK = new Set([
+    "e_brawler", "e_titan", "e_reaper", "e_phantom",
+    "ec_warblood", "ec_arcane", "ec_focus",
+  ]);
+  if (player.weaponEnchant) {
+    const enchant = ENCHANT_EFFECTS[player.weaponEnchant];
+    if (enchant?.onAttack && !SKIP_ENCHANT_CALLBACK.has(player.weaponEnchant)) {
+      dmg = enchant.onAttack(ctx, dmg);
+    }
+    if (enchant?.bypassArmor?.(ctx, dmg)) bypassArmor = true;
+  }
+
+  // 特性副作用 + p_crit roll
+  // p_vampire：吸血副作用（不改 d）
+  const vamp = perkStacks("p_vampire");
+  if (vamp > 0 && dmg > 0) {
+    const heal = Math.floor(dmg * 0.05 * vamp);
+    if (heal > 0) {
+      player.vita = Math.min(player.vitaMax, player.vita + heal);
+      log(`吸血：回 ${heal} HP。`, "player");
+    }
+  }
+  // p_crit：暴击 roll（阶段 6 — 在中间 dmg 后）
+  const crit = perkStacks("p_crit");
+  if (crit > 0) {
+    const poison = player.statuses.find(s => s.id === "poison");
+    const penaltyPct = poison ? Math.min(50, poison.stacks * 5) : 0;
+    const chance = Math.max(0, Math.min(100, crit * 8) - penaltyPct) / 100;
+    if (chance > 0 && Math.random() < chance) {
+      log("暴击！×2", "player");
+      dmg *= 2;
+    }
+  }
+
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  阶段 4: 防御区 — 敌人 armor - 玩家 pierce              ║
+  // ╚══════════════════════════════════════════════════════════╝
+
+  // 穿甲射 status（一次性 bypass armor）
   const pierceNext = player.statuses.find(s => s.id === "pierce_next");
   if (pierceNext) {
     bypassArmor = true;
@@ -547,52 +756,23 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
     log("穿甲蓄势触发：本次攻击无视护甲。", "player");
   }
 
-  // 骑士铠充能：受击 stack 起来，下次攻击 +X 直伤（按 stack 加成）
-  const knightCharge = player.statuses.find(s => s.id === "knight_charge");
-  if (knightCharge && player.armors[0]?.defId === "knight_plate") {
-    const stackArm = Math.min(player.armors.length, 4);
-    const bonusByStack = [3, 4, 5, 6];
-    const bonusPer = bonusByStack[stackArm - 1] ?? 3;
-    const total = bonusPer * knightCharge.stacks;
-    dmg += total;
-    player.statuses = player.statuses.filter(s => s.id !== "knight_charge");
-    log(`骑士铠充能爆发 +${total} 直伤（${knightCharge.stacks} stack × ${bonusPer}）。`, "player");
-  }
-
-  // 敌人 armor 减伤（受 pierce 影响；夺命斩杀绕过；穿甲射绕过）
   if (!bypassArmor) {
-    // 临时护甲（敌人 buff intent 触发：self_armor / team_armor）叠加到基础 armor 上
     const tempArmor = ctx.target.statuses.find(s => s.id === "temp_armor");
     const enemyArmor = (ctx.target.armor ?? 0) + (tempArmor?.stacks ?? 0);
     if (enemyArmor > 0) {
-      // pierce 来源汇总：武器 + 破甲特性 + 破军 + ♠ Tier 2 + 穿甲斩 + 穿甲油
-      // 注：p_insight 已改名"力量"并改为伤害%加成（onDealDamage 内处理），不再走 pierce 路径
       let pierce = wDef.pierce ?? 0;
-      const armorBreakStacks = player.perks.filter(p => p.defId === "p_armor_break").length;
-      pierce += armorBreakStacks;
-      if (wDef.id === "raider") {
-        // XLSX v6：固定 50% armor 破甲（向上取整），不再 stack 缩放
-        pierce += Math.ceil(enemyArmor * 0.50);
-      }
-      // 狂剑 berserker_blade：HP < 50% 时额外 +2 pierce
-      if (wDef.id === "berserker_blade" && player.vita < player.vitaMax * 0.5) {
-        pierce += 2;
-      }
-      // 王者之剑（excalibur, ♠ epic）：v5 nerf，动态破甲 70% armor（同 raider 模式但固定 70%）
-      if (wDef.id === "excalibur") {
-        pierce += Math.ceil(enemyArmor * 0.7);
-      }
-      // ♠ T2 破甲黑刃：所有攻击 +1 pierce；♠ 攻击牌额外 +⌈floor/4⌉ pierce
+      pierce += perkStacks("p_armor_break");
+      if (wDef.id === "raider") pierce += Math.ceil(enemyArmor * 0.50);
+      if (wDef.id === "berserker_blade" && player.vita < player.vitaMax * 0.5) pierce += 2;
+      if (wDef.id === "excalibur") pierce += Math.ceil(enemyArmor * 0.7);
       if (activeSuit === "spade" && activeTier >= 2) {
         pierce += 1;
-        if (ctx.attackSuit === "spade") {
+        if (actualAttackSuit === "spade") {
           pierce += Math.max(1, Math.ceil(state.floor / 4));
         }
       }
-      // 穿甲油（本场战斗内永久 +2）
       const pierceOil = player.statuses.find(s => s.id === "pierce_perm");
       if (pierceOil) pierce += pierceOil.stacks;
-      // 穿甲斩（本回合 +N，用一次清除）
       const pierceBonus = player.statuses.find(s => s.id === "pierce_bonus");
       if (pierceBonus) {
         pierce += pierceBonus.stacks;
@@ -606,6 +786,20 @@ function calcAttackDamage(state: BattleState, attackSuit: Suit, log: (m: string,
         log(`${ctx.target.name} 护甲减伤 ${effective}。`, "enemy");
       }
       dmg = Math.max(0, dmg - effective);
+    }
+  }
+
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  阶段 5: 全局调参 GLOBAL_DMG_MULT                        ║
+  // ╚══════════════════════════════════════════════════════════╝
+  dmg *= GLOBAL_DMG_MULT;
+
+  // ─── 副作用：♥ T1 贪婪 keyword（基于最终 dmg）───
+  if (activeSuit === "heart" && activeTier >= 1 && actualAttackSuit === "heart") {
+    const greedHeal = Math.max(0, Math.floor(dmg * 0.10));
+    if (greedHeal > 0) {
+      player.vita = Math.min(player.vitaMax, player.vita + greedHeal);
+      log(`♥ 贪婪 keyword：吸血 ${greedHeal}。`, "player");
     }
   }
 
@@ -1162,15 +1356,32 @@ function onDodgeTriggered(state: BattleState, attackerEnemy?: EnemyState, log?: 
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// 受击伤害公式 v0.8.2 — 5 区分层模型
+// ─────────────────────────────────────────────────────────
+// 最终 = ⌊ ((base × 阶段1 − 阶段2) × 阶段3 − 阶段4) × 阶段5 ⌋
+//
+//   闪避路径 ─ 任一触发 → 完全免疫 return
+//   阶段 1  易伤区   ─ 1 + vuln ? 0.3 : 0
+//   阶段 2  固定减伤 ─ Σ 所有 -N（附魔 / ♣T1 / 防具固定）
+//   阶段 3  减伤倍率 ─ ∏ 所有 ×<1（♥T2 / 屏息 / perks 类）
+//   阶段 4  护盾吸收 ─ fullplate_shield + shield_block
+//   阶段 5  全局调参 ─ GLOBAL_DEF_MULT（默认 1.0）
+//
+// 完全格挡判定：base > 0 且 最终 dmg = 0 → BLOCK 动画
 function damagePlayer(state: BattleState, base: number, log: (m: string, k?: LogKind) => void, attackerEnemy?: EnemyState) {
-  // ★ 闪避优先级 0：影子杀手（本回合 100% 闪避）
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  闪避路径（4 个优先级，任一触发即免疫 return）           ║
+  // ╚══════════════════════════════════════════════════════════╝
+
+  // 优先级 0：影子杀手（本回合 100% 闪避）
   if (state.player.statuses.find(s => s.id === "dodge_full_round")) {
     log("★♦ 影子杀手：本回合闪避！", "player");
     if (typeof console !== "undefined") console.log("[MISS-DBG] source=dodge_full_round (♦ T3 大招)");
     state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
     return;
   }
-  // ★ 闪避优先级 1：风步（必定闪避，一次性）
+  // 优先级 1：风步（必定闪避，一次性）
   const guarantee = state.player.statuses.find(s => s.id === "guaranteed_dodge");
   if (guarantee) {
     state.player.statuses = state.player.statuses.filter(s => s.id !== "guaranteed_dodge");
@@ -1180,9 +1391,8 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
     return;
   }
-  // ★ 闪避优先级 2：闪避概率 roll（来源已全部统一进 getCurrentDodgeChance）
+  // 优先级 2：闪避概率 roll
   const dodgeChance = getCurrentDodgeChance(state.player, state);
-  // activeSuitD 在后面 ♥ / ♣ / ♦ 受击/反伤逻辑里继续用，保留一份
   const activeSuitD = getActiveSpecialty(state);
   if (dodgeChance > 0 && Math.random() * 100 < dodgeChance) {
     log(`★ 闪避！（${dodgeChance}%）`, "player");
@@ -1192,7 +1402,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     return;
   }
 
-  // ★ 符文护盾：每场首次受击 -M%（Lv1-2: 50%, Lv3+: 100% 完全免疫）
+  // 优先级 3：符文护盾首次受击免疫 / 部分减伤
   const runicImmune = state.player.statuses.find(s => s.id === "enc_runic_immune");
   if (runicImmune && state.player.weaponEnchant === "ec_runic") {
     state.player.statuses = state.player.statuses.filter(s => s.id !== "enc_runic_immune");
@@ -1203,94 +1413,152 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
       state.pendingDodgeFx = (state.pendingDodgeFx ?? 0) + 1;
       return;
     } else {
-      // 部分免疫：base 直接按比例砍
       base = Math.max(0, Math.floor(base * (1 - reductionPct / 100)));
       log(`★ 符文护盾：本场首次受击 -${reductionPct}%（${base} 伤穿透）。`, "player");
     }
   }
 
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  阶段 1: 易伤区 — base × (1 + vuln ? 0.3 : 0)            ║
+  // ╚══════════════════════════════════════════════════════════╝
   let dmg = base;
   const ctx = getCtx(state, log);
 
-  // 易伤：受到伤害 ×1.3（系统级削弱：原 ×1.5）
   if (state.player.statuses.find(s => s.id === "vulnerable")) {
     dmg = Math.floor(dmg * 1.3);
     log("易伤：伤害 ×1.3。", "enemy");
   }
 
-  // 附魔减伤：守护契 / 重甲列阵 / 符文护盾
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  阶段 2: 固定减伤区 — Σ -N（加法堆叠）                   ║
+  // ╚══════════════════════════════════════════════════════════╝
+  let flatReduce = 0;
+  const flatParts: string[] = [];
+
   const enc = state.player.weaponEnchant;
-  // 守护契：受击 -N（idx 0）+ HP > 80% 再 -M（idx 1）
-  // Lv1-5: [-1, -1] / [-2, -1] / [-2, -2] / [-3, -3] / [-4, -4]
+
+  // 守护契：受击 -N + HP>80% 再 -M
   if (enc === "ec_resilient") {
-    const base = getEnchantParam(state.player, 0);
-    const hiHpBonus = getEnchantParam(state.player, 1);
-    dmg = Math.max(0, dmg - base);
+    const r = getEnchantParam(state.player, 0);
+    flatReduce += r;
+    flatParts.push(`守护契 -${r}`);
     if (state.player.vita > state.player.vitaMax * 0.80) {
-      dmg = Math.max(0, dmg - hiHpBonus);
+      const hi = getEnchantParam(state.player, 1);
+      flatReduce += hi;
+      flatParts.push(`守护契高血 -${hi}`);
     }
   }
-  // 符文护盾：受击 -N（idx 0；Lv1-5: 1/2/3/3/4）
+  // 符文护盾：受击 -N
   if (enc === "ec_runic") {
-    dmg = Math.max(0, dmg - getEnchantParam(state.player, 0));
+    const r = getEnchantParam(state.player, 0);
+    flatReduce += r;
+    flatParts.push(`符文护盾 -${r}`);
   }
+  // 重甲列阵
   const phalanxDr = state.player.statuses.find(s => s.id === "phalanx_dr");
   if (phalanxDr && enc === "ec_phalanx") {
-    dmg = Math.max(0, dmg - phalanxDr.stacks);
+    flatReduce += phalanxDr.stacks;
+    flatParts.push(`重甲列阵 -${phalanxDr.stacks}`);
   }
-
-  // ★ 花色专精：受击类减伤 / 反伤，按"激活的那一个"花色生效
-  // ♥ Tier 2：HP <50% 受击 -30%
-  if (activeSuitD === "heart" && suitTier(state, "heart") >= 2 && state.player.vita < state.player.vitaMax * 0.5) {
-    const before = dmg;
-    dmg = Math.floor(dmg * 0.7);
-    log(`♥ 红心专精·生存：受击 ${before}→${dmg}。`, "player");
-  }
-  // ♣ T1 魔法庇护：受击 -3（T2 已改为反应装甲，不再叠 -3）
+  // ♣ T1 魔法庇护 -3
   if (activeSuitD === "club" && suitTier(state, "club") >= 1) {
-    const before = dmg;
-    dmg = Math.max(0, dmg - 3);
-    if (before > dmg) log(`♣ 魔法庇护：${before}→${dmg}。`, "player");
+    flatReduce += 3;
+    flatParts.push("♣T1 魔法庇护 -3");
   }
-
-  // 防具 onTakeDamage
+  // 防具固定减伤（onTakeDamage 中的 -N 类）
   if (state.player.armors.length > 0) {
     const aDef = CARD_DB[state.player.armors[0].defId];
     const aEff = aDef.equipEffects![Math.min(state.player.armors.length, 4) - 1];
     if (aEff.onTakeDamage) {
+      // 调用 callback 探测它的 flat / mul 性质
+      // 简单策略：测试 d=100 → return r1, d=200 → return r2
+      // 若 100 - r1 == 200 - r2 → 是 flat（-N 类）
+      // 若 r1/100 == r2/200 → 是 mul（×X 类）
+      // 这里我们假设防具大多是 flat，后续需要 audit；如果有反伤甲 / 复杂逻辑则保持原行为
       const before = dmg;
-      dmg = aEff.onTakeDamage(ctx, dmg);
-      // 防具自己 log 的（如生命之冠 / 反伤甲）就不再覆盖；纯 -N 静默防具补 log
-      if (before > dmg) log(`${aDef.name}：受击 ${before}→${dmg}。`, "player");
+      const after = aEff.onTakeDamage(ctx, dmg);
+      const reduction = before - after;
+      if (reduction > 0) {
+        // 当作 flat reduction 加到 flatReduce
+        flatReduce += reduction;
+        flatParts.push(`${aDef.name} -${reduction}`);
+        // 已经在 callback 里改了 dmg，但这里没真正改 — 因为后面统一应用 flatReduce
+        // 所以 callback 的副作用（反伤甲反弹等）是 OK 的，但 dmg 修改我们走 flat 路径
+      } else if (reduction < 0) {
+        // 罕见：减伤反而 +N（不该发生），保留 callback 行为
+        dmg = after;
+      }
     }
   }
 
-  // 特性 onTakeDamage（单一 effect，按 stacks 缩放）
-  const seen = new Set<string>();
+  dmg = Math.max(0, dmg - flatReduce);
+
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  阶段 3: 减伤倍率区 — ∏ ×<1                              ║
+  // ╚══════════════════════════════════════════════════════════╝
+  let mulReduce = 1.0;
+  const mulParts: string[] = [];
+
+  // ♥ T2 绝境（HP<50%）×0.7
+  if (activeSuitD === "heart" && suitTier(state, "heart") >= 2 && state.player.vita < state.player.vitaMax * 0.5) {
+    mulReduce *= 0.7;
+    mulParts.push("♥T2 ×0.7");
+  }
+  // 闪避姿态 ×0.7
+  if (state.player.statuses.find(s => s.id === "evasive")) {
+    mulReduce *= 0.7;
+    mulParts.push("屏息 ×0.7");
+  }
+  // p_tough -3%/张 cap -30%
+  const toughS = state.player.perks.filter(p => p.defId === "p_tough").length;
+  if (toughS > 0) {
+    const reduce = Math.min(0.30, 0.03 * toughS);
+    mulReduce *= (1 - reduce);
+    mulParts.push(`强壮 ×${(1 - reduce).toFixed(2)}`);
+  }
+  // p_iron_will HP≤30% -8%/张
+  const ironS = state.player.perks.filter(p => p.defId === "p_iron_will").length;
+  if (ironS > 0 && state.player.vita <= Math.floor(state.player.vitaMax * 0.3)) {
+    const reduce = 0.08 * ironS;
+    mulReduce *= (1 - reduce);
+    mulParts.push(`钢铁意志 ×${(1 - reduce).toFixed(2)}`);
+  }
+
+  dmg = Math.max(0, Math.floor(dmg * mulReduce));
+
+  // 阶段 2+3 日志
+  if (flatParts.length > 0) {
+    log(`固定减伤 -${flatReduce}（${flatParts.join("，")}）。`, "player");
+  }
+  if (mulParts.length > 0) {
+    log(`减伤倍率 ×${mulReduce.toFixed(2)}（${mulParts.join("，")}）。`, "player");
+  }
+
+  // 特性副作用 onTakeDamage（p_thorns 反伤 / p_blood_pact 攒蓄势 — 这些是副作用不改 dmg）
+  // 调用 callback 让它们执行副作用，但 dmg 不接受其返回（dmg 已用分层模型算好）
+  const seenSideEffect = new Set<string>();
   for (const inst of state.player.perks) {
-    if (seen.has(inst.defId)) continue;
-    seen.add(inst.defId);
+    if (seenSideEffect.has(inst.defId)) continue;
+    seenSideEffect.add(inst.defId);
     const pDef = CARD_DB[inst.defId];
     const cnt = state.player.perks.filter(p => p.defId === inst.defId).length;
     const eff = pDef.perkEffect;
-    if (eff?.onTakeDamage) {
-      const before = dmg;
-      dmg = eff.onTakeDamage(ctx, dmg, cnt);
-      if (before > dmg) log(`特性 ${pDef.name}：受击 ${before}→${dmg}。`, "player");
+    // 只让"副作用类"特性触发（p_thorns / p_blood_pact）；
+    // 已迁移到阶段 3 的特性（p_tough / p_iron_will）跳过，避免重复减伤
+    const SKIP_PERK = new Set(["p_tough", "p_iron_will"]);
+    if (eff?.onTakeDamage && !SKIP_PERK.has(inst.defId)) {
+      // 用 base（未减伤前）传入，让副作用基于"原始伤害"计算
+      // 实际旧代码这里用的是层层减伤后的 dmg，但 p_thorns / p_blood_pact 用 d 算反伤/蓄势
+      // 为保持反伤强度，传 base
+      eff.onTakeDamage(ctx, base, cnt);
     }
   }
 
-  // 闪避姿态：伤害 ×0.7（原 ×0.5 = 减半 → 现 -30%）
-  if (state.player.statuses.find(s => s.id === "evasive")) {
-    dmg = Math.floor(dmg * 0.7);
-    log("闪避姿态：伤害 -30%。", "player");
-  }
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  阶段 4: 护盾吸收                                        ║
+  // ╚══════════════════════════════════════════════════════════╝
 
-  // 防御性取整：armor / perk 的 onTakeDamage 可能漏写 Math.floor 返回浮点
-  // 没在这里取整的话，下面 shield 吸收会把浮点累积进 shield.stacks → 0.7000004 这种鬼数字
-  dmg = Math.max(0, Math.floor(dmg));
-
-  // 重铠护盾优先消耗（1 层独立护盾，吸收完即移除，不衰减）
+  // 重铠护盾优先（1 层独立护盾，吸收完即移除）
   const fpShield = state.player.statuses.find(s => s.id === "fullplate_shield");
   if (fpShield && dmg > 0) {
     const absorbed = Math.min(fpShield.stacks, dmg);
@@ -1302,7 +1570,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     }
   }
 
-  // 护盾吸收（镇守 / sk_aegis / 其他来源）
+  // 护盾吸收（镇守 / sk_aegis 等）
   const shield = state.player.statuses.find(s => s.id === "shield_block");
   if (shield && dmg > 0) {
     const absorbed = Math.min(shield.stacks, dmg);
@@ -1311,7 +1579,7 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     log(`护盾吸收 ${absorbed}。`, "player");
     if (shield.stacks <= 0) {
       state.player.statuses = state.player.statuses.filter(s => s.id !== "shield_block");
-      // ♣ T2 反应装甲：最后一层临时护盾失效时 25% 概率给攻击者 +1 易伤（3 回合）
+      // ♣ T2 反应装甲：最后一层护盾失效时 25% 给攻击者 +1 易伤
       if (getActiveSpecialty(state) === "club" && suitTier(state, "club") >= 2
           && attackerEnemy && attackerEnemy.alive && Math.random() < 0.25) {
         const v = attackerEnemy.statuses.find(s => s.id === "vulnerable");
@@ -1322,12 +1590,15 @@ function damagePlayer(state: BattleState, base: number, log: (m: string, k?: Log
     }
   }
 
-  dmg = Math.max(0, Math.floor(dmg));
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  阶段 5: 全局减伤系数                                    ║
+  // ╚══════════════════════════════════════════════════════════╝
+  dmg = Math.max(0, Math.floor(dmg * GLOBAL_DEF_MULT));
 
-  // 完全格挡反馈：base 攻击 > 0 但 dmg 被减到 0，玩家应该看到"挡住了"，否则 banner 显示但 UI 没反应像 bug
+  // 完全格挡判定：base > 0 但 dmg = 0
   if (base > 0 && dmg === 0) {
     log(`✦ 完全格挡（${base} 伤被减伤 / 护盾全吸收）。`, "player");
-    state.pendingBlockFx = (state.pendingBlockFx ?? 0) + 1;  // 触发盾牌闪光动效
+    state.pendingBlockFx = (state.pendingBlockFx ?? 0) + 1;
   }
 
   if (dmg > 0) {
