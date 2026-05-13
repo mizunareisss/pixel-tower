@@ -382,7 +382,8 @@ export function newBattle(player: PlayerState, enemies: EnemyState[], floor: num
     enemies,
     targetIndex: enemies.findIndex(e => e.alive),
     attackedThisTurn: false,
-    bowAttackStreak: 0,
+    bowAttacksThisTurn: 0,
+    bowOverheatStreak: 0,
     floor,
   };
 }
@@ -982,6 +983,7 @@ function playAttack(state: BattleState, card: CardInstance, def: CardDef, log: (
   if (!target) return false;
 
   state.attackedThisTurn = true;
+  if (hasRepeatingBow) state.bowAttacksThisTurn = (state.bowAttacksThisTurn ?? 0) + 1;
 
   // 花色追踪：本攻击牌的实际花色
   // 优先级：持咒/染色 > attackSuitOverride（铁匠铺染色） > def.attackSuit
@@ -2383,22 +2385,28 @@ function startNewPlayerTurn(state: BattleState, log: (m: string, k?: LogKind) =>
   state.turn++;
   state.player.turnsElapsed++;
 
-  // 连弩连击追踪：本回合出了攻击则 streak+1，否则归零；达到 2 后本回合开始前弃置
+  // v0.8.2 连弩新机制：
+  //   连续 2 回合都出 ≥2 张攻击 → 第 3 回合「枪管过热」整回合无法攻击
+  //   第 4 回合自动恢复（no_attack status 持续 1 回合到期）
+  //   某回合只出 1 张攻击 → 重置 streak（不算入冷却条件）
   if (state.player.weapons[0]?.defId === "repeating_bow") {
-    if (state.attackedThisTurn) {
-      state.bowAttackStreak = (state.bowAttackStreak ?? 0) + 1;
+    const heavyTurn = (state.bowAttacksThisTurn ?? 0) >= 2;  // 本回合出过 ≥2 张才算"重火力回合"
+    if (heavyTurn) {
+      state.bowOverheatStreak = (state.bowOverheatStreak ?? 0) + 1;
     } else {
-      state.bowAttackStreak = 0;
+      state.bowOverheatStreak = 0;
     }
-    if ((state.bowAttackStreak ?? 0) >= 2) {
-      const discarded = state.player.weapons.splice(0);
-      state.player.discard.push(...discarded);
-      state.bowAttackStreak = 0;
-      log("连弩：连续 2 回合攻击，已自动弃置！", "system");
+    if ((state.bowOverheatStreak ?? 0) >= 2) {
+      // 触发过热：下回合（即将开始的回合）整回合无法攻击
+      state.player.statuses.push({ id: "no_attack", name: "枪管过热", stacks: 1, duration: 1 });
+      state.bowOverheatStreak = 0;
+      log("🔥 连弩枪管过热！本回合无法出攻击牌（下回合恢复）。", "system");
     }
   } else {
-    state.bowAttackStreak = 0;
+    state.bowOverheatStreak = 0;
   }
+  // 重置本回合攻击计数（下回合新统计）
+  state.bowAttacksThisTurn = 0;
 
   state.attackedThisTurn = false;
   log(`── 回合 ${state.turn}（你的回合）──`, "system");

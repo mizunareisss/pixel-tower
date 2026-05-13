@@ -892,7 +892,11 @@ export interface BattleState {
   enemies: EnemyState[];
   targetIndex: number;          // 当前选中的敌人 index（攻击/技能默认目标）
   attackedThisTurn: boolean;    // 本回合是否已经打出攻击牌（每回合最多 1 张，连弩除外）
-  bowAttackStreak: number;      // 连弩连续出攻击牌的回合数（满 2 后下回合弃置）
+  // v0.8.2 连弩新机制：
+  //   bowAttacksThisTurn: 本回合连弩已出的攻击数（每回合开始清零）
+  //   bowOverheatStreak:  连续"本回合出 ≥2 张攻击"的回合数；满 2 后下回合挂 no_attack（冷却）
+  bowAttacksThisTurn: number;
+  bowOverheatStreak: number;
   pendingSuitPick?: string;     // 等待玩家手选花色的动作 ("dye" | "resonance")
   floor: number;                // 当前楼层（calcAttackDamage 里的 sharp 附魔需要）
   pendingDodgeFx?: number;      // 待播放的闪避动效次数（main.ts 渲染时消费）

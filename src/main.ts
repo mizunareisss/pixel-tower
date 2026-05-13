@@ -1190,7 +1190,7 @@ function buildDebugDump(): string {
     lines.push(`── 战斗 (Battle) ──`);
     lines.push(`Phase: ${b.phase} | Turn: ${b.turn} | Target Index: ${b.targetIndex} | Floor: ${b.floor}`);
     lines.push(`Attacked This Turn: ${b.attackedThisTurn ?? false}`);
-    lines.push(`Bow Streak: ${b.bowAttackStreak ?? 0}`);
+    lines.push(`Bow: ${b.bowAttacksThisTurn ?? 0} atk this turn / overheat streak ${b.bowOverheatStreak ?? 0}`);
     if (b.diceRoll != null) lines.push(`Dice Roll: ${b.diceRoll} | Enemy First: ${b.enemyFirst ?? false}`);
     lines.push("");
 

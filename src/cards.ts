@@ -858,15 +858,15 @@ const ARCANE_SCEPTER: CardDef = {
   ],
 };
 
-// 连弩：每回合可出多张攻击牌。连续两回合都出了一张以上的攻击，下一回合无法攻击，再下一回合恢复
+// 连弩：每回合可出多张攻击牌。连续 2 回合出超过 1 张攻击 → 第 3 回合「枪管过热」整回合无法攻击，第 4 回合恢复
 const REPEATING_BOW: CardDef = {
   id: "repeating_bow",
   name: "连弩",
   category: "equipment",
-  desc: "装备：基础伤害 4，每回合可出多张攻击牌。连续两回合都出了一张以上的攻击时，下一回合无法出攻击牌，再下一回合恢复。",
+  desc: "装备：基础伤害 4，每回合可出多张攻击牌。连续 2 回合都出过 ≥2 张攻击时，下一回合整回合无法出攻击牌（枪管过热），再下一回合恢复。单回合只出 1 张不算过热。",
   equipKind: "weapon",
   equipSuit: "diamond",
-  baseDmg: 4,  // v0.8.2 数值微调：3 → 4
+  baseDmg: 4,
   equipEffects: [
     { desc: "基础 4，可连续攻击。", stat: "4 伤 连击" },
     { desc: "叠加 ×1.4，可连续攻击。", stat: "5.6 伤 连击" },
