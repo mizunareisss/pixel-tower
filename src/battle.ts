@@ -1648,7 +1648,14 @@ function executeBuffIntent(
       break;
     }
     case "double_debuffs": {
-      // F12 限定：玩家身上所有 debuff stacks ×2
+      // F12 限定：玩家身上所有 debuff stacks ×2（整场战斗限 1 次）
+      // 修复：之前没有"已触发"标记，F12 boss AP=4 + evolving AI 可反复抽到，
+      //   实测最坏 3 次翻倍 → poison/bleed 累积扣血 40+ HP/回合（团灭）
+      if (!enemy.aiState) enemy.aiState = {};
+      if (enemy.aiState.terminalUsed) {
+        log(`${prefix}${enemy.name} 终末降临，但秘术已耗尽（本场限 1 次）。`, "system");
+        break;
+      }
       const debuffIds = new Set(["poison", "burn", "bleed", "weak", "vulnerable"]);
       let doubled = 0;
       for (const s of state.player.statuses) {
@@ -1662,6 +1669,7 @@ function executeBuffIntent(
       } else {
         log(`${prefix}${enemy.name} 终末降临，但你身上没有 debuff，效果落空。`, "system");
       }
+      enemy.aiState.terminalUsed = true;
       break;
     }
   }

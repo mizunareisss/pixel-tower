@@ -5,7 +5,7 @@
 // ─── 版本号 ────────────────────────────────────────────────
 // 显示在汉堡菜单顶部 + 对应同版本号的 GAME_MECHANICS_vX.Y.Z.md
 // 发新版时同步 bump 这个常量 + 重命名机制文档
-export const APP_VERSION = "0.8.0";
+export const APP_VERSION = "0.8.1";
 
 export type Suit = "spade" | "diamond" | "heart" | "club";
 export const SUIT_SYMBOLS: Record<Suit, string> = {
@@ -270,21 +270,9 @@ export const ENCHANT_NAMES: Record<EnchantId, string> = {
   ec_runic:     "符文护盾",
 };
 
-export const ENCHANT_DESCS: Record<EnchantId, string> = {
-  e_brawler:    "HP < 50% 时，攻击 +12%。",
-  e_strategist: "每出 1 张非攻击牌，下张攻击 +2 伤（同回合累积，攻击后清零）。",
-  e_reaper:     "击杀敌人后，下次攻击伤害 ×1.5（一次性）。",
-  e_titan:      "单次伤害 ≥ 敌人最大 HP 8% 时，本次伤害额外 +25%。",
-  e_phantom:    "完全闪避后下次攻击 ×2，攻击命中后给目标 +3 易伤层。",
-  ec_warblood:  "HP < 50% 时攻击 +20%；本场战斗内每损 10% maxHP 永久攻击 +1（cap +5）。",
-  ec_phalanx:   "本回合攻击牌每打 1 张受击 -1（cap -3）；本回合未受伤则下回合开局护盾 +5。",
-  ec_swift:     "闪避概率额外 +10%；闪避后本回合内闪避再 +5%（cap +30%）；闪避后给当前目标 +1 易伤。",
-  ec_focus:     "每张非攻击牌使下张攻击 +1 伤；攻击伤害 ≥ 12 时额外 +5。",
-  ec_lifesteal: "攻击吸血额外 +8%；HP 满时攻击 +10%。",
-  ec_resilient: "受击 -2；HP > 80% 时受击再 -2；每回合开始 +1 HP。",
-  ec_arcane:    "每出 1 张非攻击牌额外摸 1 张（每回合 cap 3）；持咒/染色 buff 在场时首次攻击 +30%。",
-  ec_runic:     "受击 -3；每场战斗第 1 次受击免疫；DOT 免疫需 Lv5 解锁。",
-};
+// 注：旧的 ENCHANT_DESCS（固定描述）已删除（v0.8.1）。
+//   实战 UI 全部走 getEnchantDescAt(id, level) 读 ENCHANT_LEVEL_PARAMS，按当前 Lv 出 level-aware 描述。
+//   保留双源易让后续 reviewer 误以为 UI 拉错描述。
 
 // 附魔配方
 export interface EnchantRecipe {
@@ -622,6 +610,7 @@ export interface EnemyState {
     lastPlayerBuffs?: number; // 上回合玩家上的 buff 数（报复者用）
     turnCount?: number;      // 战斗回合计数（构筑者用，前 N 回合堆 buff）
     flavorShownPhases?: number[]; // 已显示过 flavor log 的 phase（避免重复）
+    terminalUsed?: boolean;  // F12 终末降临 double_debuffs 是否已触发（一次性，整场战斗限 1 次）
   };
 }
 

@@ -1,10 +1,10 @@
 # 塔牌 · Suitspire — 完整游戏机制文档
 
-**版本**：v0.8.0
-**对应代码**：`src/types.ts` 中 `APP_VERSION = "0.8.0"`
+**版本**：v0.8.1
+**对应代码**：`src/types.ts` 中 `APP_VERSION = "0.8.1"`
 **最后更新**：2026-05-13
 
-> 本文档是 v0.8.0 版本所有游戏机制 / 系统 / 公式 / 数值的权威参考。
+> 本文档是 v0.8.1 版本所有游戏机制 / 系统 / 公式 / 数值的权威参考。
 > 卡牌 / 附魔的详细数值表见 [`BALANCE_SHEET.md`](./BALANCE_SHEET.md)（由 `scripts/dump-balance.ts` 自动生成）。
 > 每次发新版本时同步：①bump `APP_VERSION` ②重命名本文件为 `GAME_MECHANICS_v<新版本>.md` ③更新内容反映改动。
 
@@ -668,6 +668,23 @@ type MapNodeType = "start" | "battle" | "elite" | "boss" | "event" | "forge" | "
 ---
 
 ## 16. 版本变更日志
+
+### v0.8.1（2026-05-13）audit bug fix
+
+基于 [`MECHANICS_REVIEW_v0.8.0.md`](./MECHANICS_REVIEW_v0.8.0.md) 的 review 修两个真实代码 bug：
+
+- **F12 终末降临 `double_debuffs` 加一次性标记**：之前 `executeBuffIntent` 没有 used 标记，
+  F12 boss AP=4 + evolving AI 能反复抽到这招 → 玩家 debuff 被翻倍 2-3 次 → 最坏 40 HP/回合 团灭。
+  现在 `enemy.aiState.terminalUsed` 首次触发置 true，后续直接跳过。
+- **删除 `ENCHANT_DESCS` 死代码**：types.ts:273 旧固定描述，UI 实际全用 `getEnchantDescAt`（level-aware）。
+  保留两份描述容易让 reviewer 误以为 UI 拉错描述，干脆删干净，让 `getEnchantDescAt` 成为唯一描述源。
+
+**已知但本版未改**（design decision，等定方向）：
+
+- §14 perk 文档 6 张机制描述 + 4 张 defaultSuit 仍与代码不一致（见 review §1）。
+- 闪避来源超 cap 75% 后沉没（见 review §5）。
+- ♣ T1 -3 在乘除链末端，F12 高伤场景效用低（见 review §6）。
+- 暴击两套触发位置（p_crit vs ♦ T1 灵敏），目前数学等价但耦合脆弱（见 review §3）。
 
 ### v0.8.0（2026-05-13）首版机制文档
 
